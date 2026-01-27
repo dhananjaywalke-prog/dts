@@ -1,0 +1,1402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TimeWise - Timesheet System</title>
+    <!-- ============================================
+    TimeWise Web App
+    Version: 1.5
+    Last Updated: 26-Jan-2026
+    ============================================
+    CHANGE LOG:
+    v1.0 - Initial version
+    v1.1 - Fixed formatTimestampDisplay() to display string as-is
+    v1.2 - Enhanced formatTimestampDisplay() to handle ISO format
+    v1.3 - Added loading indicators for all actions
+    v1.4 - Comprehensive validations (19 total)
+    v1.5 - Holidays feature:
+           - Load holidays data at login
+           - Blue color for holiday dates on calendar
+           - Warning when deleting holiday entry
+           - Holiday indicator in calendar legend
+    ============================================ -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Loading Overlay Styles */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4F46E5;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        .loading-text {
+            color: white;
+            margin-top: 15px;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* Button spinner */
+        .btn-spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top: 2px solid white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        /* Disabled button style */
+        button:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+        /* Validation styles */
+        .field-error {
+            border-color: #EF4444 !important;
+        }
+        .field-success {
+            border-color: #10B981 !important;
+        }
+        .error-text {
+            color: #EF4444;
+            font-size: 12px;
+            margin-top: 4px;
+        }
+        /* Session timeout modal */
+        .timeout-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+        }
+        .timeout-modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            text-align: center;
+            max-width: 400px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+        }
+        /* Holiday calendar style (NEW in v1.5) */
+        .bg-blue-holiday {
+            background-color: #3B82F6 !important;
+            color: white !important;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Loading Overlay (hidden by default) -->
+    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="text-center">
+            <div class="loading-spinner mx-auto"></div>
+            <p id="loadingText" class="loading-text">Processing...</p>
+        </div>
+    </div>
+
+    <!-- Session Timeout Warning Modal (hidden by default) -->
+    <div id="timeoutModal" class="timeout-modal" style="display: none;">
+        <div class="timeout-modal-content">
+            <div class="text-5xl mb-4">⏰</div>
+            <h2 class="text-xl font-bold text-gray-800 mb-2">Session Expiring Soon!</h2>
+            <p class="text-gray-600 mb-4">Your session will expire in <span id="timeoutCountdown" class="font-bold text-red-600">2:00</span> minutes due to inactivity.</p>
+            <p class="text-sm text-gray-500 mb-4">Any unsaved data will be lost.</p>
+            <button onclick="extendSession()" class="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 font-semibold">
+                Continue Working
+            </button>
+        </div>
+    </div>
+
+    <div id="app"></div>
+
+    <script>
+        // ============================================
+        // CONFIGURATION
+        // ============================================
+        const API_URL = 'https://script.google.com/macros/s/AKfycbwDUtXFqFRygwVRBdBzg7EsMN2tFVImbhGPov3cVnfBy-CI368IIM6jDmtJOLsxcLglBA/exec';
+        
+        // Session timeout settings (in milliseconds)
+        const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+        const SESSION_WARNING = 2 * 60 * 1000;  // 2 minutes before timeout
+        
+        // ============================================
+        // STATE VARIABLES
+        // ============================================
+        let isLoggedIn = false;
+        let employeeEmail = '';
+        let employeeData = null;
+        let selectedDate = new Date();
+        let timesheetData = [];
+        let clients = [];
+        let tasks = [];
+        let expenseTypes = [];
+        let holidays = []; // NEW in v1.5 - Holidays data
+        let isProcessing = false;
+        let hasUnsavedChanges = false;
+        
+        // Session timeout variables
+        let sessionTimer = null;
+        let warningTimer = null;
+        let countdownInterval = null;
+        let countdownSeconds = 120;
+
+        // ============================================
+        // SESSION TIMEOUT FUNCTIONS (#33)
+        // ============================================
+        function resetSessionTimer() {
+            // Clear existing timers
+            if (sessionTimer) clearTimeout(sessionTimer);
+            if (warningTimer) clearTimeout(warningTimer);
+            if (countdownInterval) clearInterval(countdownInterval);
+            
+            // Hide timeout modal if visible
+            document.getElementById('timeoutModal').style.display = 'none';
+            
+            if (!isLoggedIn) return;
+            
+            // Set warning timer (28 minutes)
+            warningTimer = setTimeout(() => {
+                showTimeoutWarning();
+            }, SESSION_TIMEOUT - SESSION_WARNING);
+            
+            // Set logout timer (30 minutes)
+            sessionTimer = setTimeout(() => {
+                sessionLogout();
+            }, SESSION_TIMEOUT);
+        }
+        
+        function showTimeoutWarning() {
+            countdownSeconds = 120; // 2 minutes
+            document.getElementById('timeoutModal').style.display = 'flex';
+            updateCountdown();
+            
+            countdownInterval = setInterval(() => {
+                countdownSeconds--;
+                updateCountdown();
+                if (countdownSeconds <= 0) {
+                    clearInterval(countdownInterval);
+                }
+            }, 1000);
+        }
+        
+        function updateCountdown() {
+            const minutes = Math.floor(countdownSeconds / 60);
+            const seconds = countdownSeconds % 60;
+            document.getElementById('timeoutCountdown').textContent = 
+                `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }
+        
+        function extendSession() {
+            resetSessionTimer();
+        }
+        
+        function sessionLogout() {
+            clearInterval(countdownInterval);
+            document.getElementById('timeoutModal').style.display = 'none';
+            alert('Your session has expired due to inactivity. Please login again.');
+            handleLogout(true); // Force logout without confirmation
+        }
+        
+        // Activity listeners for session reset
+        function setupActivityListeners() {
+            ['click', 'keypress', 'scroll', 'mousemove'].forEach(event => {
+                document.addEventListener(event, () => {
+                    if (isLoggedIn && document.getElementById('timeoutModal').style.display === 'none') {
+                        resetSessionTimer();
+                    }
+                }, { passive: true });
+            });
+        }
+
+        // ============================================
+        // LOADING INDICATOR FUNCTIONS
+        // ============================================
+        function showLoading(message = 'Processing...') {
+            document.getElementById('loadingText').textContent = message;
+            document.getElementById('loadingOverlay').style.display = 'flex';
+            isProcessing = true;
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingOverlay').style.display = 'none';
+            isProcessing = false;
+        }
+
+        // ============================================
+        // HELPER FUNCTIONS
+        // ============================================
+        function getTodayIST() {
+            const now = new Date();
+            const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+            const istOffset = 5.5 * 60 * 60 * 1000;
+            const istTime = new Date(utc + istOffset);
+            istTime.setHours(0, 0, 0, 0);
+            return istTime;
+        }
+
+        const today = getTodayIST();
+
+        function formatDate(date) {
+            const d = new Date(date);
+            d.setHours(0, 0, 0, 0);
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+
+        function formatDateDisplay(date) {
+            const d = new Date(date);
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const day = String(d.getDate()).padStart(2, '0');
+            const month = months[d.getMonth()];
+            const year = d.getFullYear();
+            return `${day}-${month}-${year}`;
+        }
+
+        function formatTimestampDisplay(timestamp) {
+            if (!timestamp) return '';
+            
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            
+            if (typeof timestamp === 'string' && /^\d{2}-[A-Za-z]{3}-\d{4} \d{2}:\d{2}:\d{2}$/.test(timestamp)) {
+                return timestamp;
+            }
+            
+            if (typeof timestamp === 'string' && /^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}:\d{2}$/.test(timestamp)) {
+                const parts = timestamp.split(' ');
+                const dateParts = parts[0].split('/');
+                const day = dateParts[0];
+                const monthNum = parseInt(dateParts[1]) - 1;
+                const year = dateParts[2];
+                return `${day}-${months[monthNum]}-${year} ${parts[1]}`;
+            }
+            
+            if (typeof timestamp === 'string' && timestamp.includes('T')) {
+                try {
+                    const isoMatch = timestamp.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
+                    if (isoMatch) {
+                        const year = isoMatch[1];
+                        const monthNum = parseInt(isoMatch[2]) - 1;
+                        const day = isoMatch[3];
+                        const hours = isoMatch[4];
+                        const minutes = isoMatch[5];
+                        const seconds = isoMatch[6];
+                        return `${day}-${months[monthNum]}-${year} ${hours}:${minutes}:${seconds}`;
+                    }
+                } catch (e) {
+                    console.error('Error parsing ISO timestamp:', e);
+                }
+            }
+            
+            return timestamp.toString();
+        }
+        
+        // Get days difference between two dates
+        function getDaysDiff(date1, date2) {
+            const d1 = new Date(date1);
+            const d2 = new Date(date2);
+            d1.setHours(0, 0, 0, 0);
+            d2.setHours(0, 0, 0, 0);
+            return Math.floor((d2 - d1) / (1000 * 60 * 60 * 24));
+        }
+
+        // ============================================
+        // HOLIDAYS FUNCTIONS (NEW in v1.5)
+        // ============================================
+        
+        // Check if a date is a holiday for current user
+        function isHolidayForUser(date) {
+            const dateStr = formatDate(date);
+            const holidaysForDate = holidays.filter(h => formatDate(h.Date) === dateStr);
+            if (holidaysForDate.length === 0) return false;
+            return holidaysForDate.some(h => 
+                h['Employee Email'] === 'All' || 
+                h['Employee Email'] === employeeEmail
+            );
+        }
+        
+        // Get holiday info for a date
+        function getHolidayInfo(date) {
+            const dateStr = formatDate(date);
+            const holidaysForDate = holidays.filter(h => formatDate(h.Date) === dateStr);
+            const userHoliday = holidaysForDate.find(h => h['Employee Email'] === employeeEmail);
+            if (userHoliday) return userHoliday;
+            const allHoliday = holidaysForDate.find(h => h['Employee Email'] === 'All');
+            if (allHoliday) return allHoliday;
+            return null;
+        }
+        
+        // Check if an entry is from a holiday (for delete warning)
+        function isHolidayEntry(entry) {
+            const holidayInfo = getHolidayInfo(entry.Date);
+            if (!holidayInfo) return false;
+            return entry.Client === holidayInfo.Client && entry.Task === holidayInfo.Task;
+        }
+
+        // ============================================
+        // API CALL FUNCTION
+        // ============================================
+        async function callAPI(action, data = {}) {
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ action, ...data })
+                });
+                
+                const result = await response.json();
+                if (!result.success) {
+                    throw new Error(result.error || 'API call failed');
+                }
+                return result.data;
+            } catch (error) {
+                console.error('API Error:', error);
+                throw error;
+            }
+        }
+
+        // ============================================
+        // DATE CHECK FUNCTIONS
+        // ============================================
+        function isWithinTenure(date) {
+            if (!employeeData) return false;
+            const d = new Date(date);
+            d.setHours(0, 0, 0, 0);
+            
+            if (employeeData['Joining Date']) {
+                const joinDate = new Date(employeeData['Joining Date']);
+                joinDate.setHours(0, 0, 0, 0);
+                if (d < joinDate) return false;
+            }
+            
+            if (employeeData['Leaving Date']) {
+                const leaveDate = new Date(employeeData['Leaving Date']);
+                leaveDate.setHours(0, 0, 0, 0);
+                if (d > leaveDate) return false;
+            }
+            
+            return true;
+        }
+
+        function isEditable(date) {
+            const d = new Date(date);
+            d.setHours(0, 0, 0, 0);
+            const diff = Math.floor((today - d) / (1000 * 60 * 60 * 24));
+            return diff >= 0 && diff <= 7 && isWithinTenure(date);
+        }
+
+        function isViewable(date) {
+            const d = new Date(date);
+            d.setHours(0, 0, 0, 0);
+            const diff = Math.floor((today - d) / (1000 * 60 * 60 * 24));
+            return diff >= 0 && diff <= 31 && isWithinTenure(date);
+        }
+
+        function isFutureDate(date) {
+            const d = new Date(date);
+            d.setHours(0, 0, 0, 0);
+            return d > today;
+        }
+
+        // UPDATED in v1.5 - Added holiday color (blue)
+        function getDateColor(date) {
+            const dateStr = formatDate(date);
+            const entries = timesheetData.filter(e => formatDate(e.Date) === dateStr);
+            const total = entries.reduce((sum, e) => sum + parseFloat(e.Hours || 0), 0);
+            
+            // If entries exist, show green/yellow based on hours
+            if (total >= 6) return 'bg-green-500';
+            if (total > 0) return 'bg-yellow-500';
+            
+            // If no entries but is a holiday, show blue
+            if (isHolidayForUser(date)) return 'bg-blue-holiday';
+            
+            return '';
+        }
+
+        // ============================================
+        // VALIDATION FUNCTIONS
+        // ============================================
+        
+        // #38 - Trim whitespace
+        function trimInput(value) {
+            return value ? value.toString().trim() : '';
+        }
+        
+        // #14 - Hours in 0.25 intervals
+        function isValidHoursInterval(hours) {
+            const num = parseFloat(hours);
+            if (isNaN(num)) return false;
+            // Check if it's a multiple of 0.25
+            return (num * 4) % 1 === 0;
+        }
+        
+        // #15 - Total daily hours ≤ 24
+        function getTotalDailyHours(excludeRowId = null) {
+            const dateStr = formatDate(selectedDate);
+            return timesheetData
+                .filter(e => formatDate(e.Date) === dateStr && e['Row ID'] !== excludeRowId)
+                .reduce((sum, e) => sum + parseFloat(e.Hours || 0), 0);
+        }
+        
+        // #21 - Check duplicate client+task+date
+        function isDuplicateEntry(client, task, excludeRowId = null) {
+            const dateStr = formatDate(selectedDate);
+            return timesheetData.some(e => 
+                formatDate(e.Date) === dateStr && 
+                e.Client === client && 
+                e.Task === task &&
+                e['Row ID'] !== excludeRowId
+            );
+        }
+        
+        // #22 - Check if client is active
+        function isClientActive(clientName) {
+            const client = clients.find(c => c['Client Full Name'] === clientName);
+            return client && client['Client Status'] === 'Active';
+        }
+        
+        // #23 - Check if task is active
+        function isTaskActive(taskName) {
+            const task = tasks.find(t => t['Work Name'] === taskName);
+            return task && task['Work Status'] === 'Active';
+        }
+        
+        // #24 - Description max 500 chars
+        function isDescriptionLengthValid(desc) {
+            return desc.length <= 500;
+        }
+        
+        // #25 - No special characters or digits only
+        function hasValidCharacters(desc) {
+            // Check if description contains at least some letters (not just digits and special chars)
+            const hasLetters = /[a-zA-Z]/.test(desc);
+            return hasLetters;
+        }
+        
+        // #26 - Must contain at least 5 words
+        function hasMinimumWords(desc) {
+            const words = desc.split(/\s+/).filter(word => word.length > 0);
+            return words.length >= 5;
+        }
+        
+        // #27 - Block same description in last 7 days
+        function isDuplicateDescription(desc, excludeRowId = null) {
+            const sevenDaysAgo = new Date(today);
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+            
+            return timesheetData.some(e => {
+                const entryDate = new Date(e.Date);
+                return entryDate >= sevenDaysAgo && 
+                       e.Description === desc && 
+                       e['Row ID'] !== excludeRowId;
+            });
+        }
+        
+        // #29 - Expense amount whole numbers only
+        function isWholeNumber(amount) {
+            const num = parseFloat(amount);
+            return !isNaN(num) && num === Math.floor(num);
+        }
+        
+        // Combined validation for description (existing + new)
+        function validateDescription(desc) {
+            desc = trimInput(desc);
+            
+            if (!desc || desc.length < 10) {
+                return { valid: false, msg: 'Description must be at least 10 characters.' };
+            }
+            
+            if (!isDescriptionLengthValid(desc)) {
+                return { valid: false, msg: 'Description cannot exceed 500 characters.' };
+            }
+            
+            if (!hasValidCharacters(desc)) {
+                return { valid: false, msg: 'Description must contain letters, not just numbers or special characters.' };
+            }
+            
+            if (!hasMinimumWords(desc)) {
+                return { valid: false, msg: 'Description must contain at least 5 words.' };
+            }
+            
+            const generic = ['work', 'task', 'job'].some(p => desc.toLowerCase().startsWith(p + ' '));
+            if (generic) {
+                return { valid: false, msg: 'Description seems too generic. Please add specific details.' };
+            }
+            
+            return { valid: true, msg: '' };
+        }
+        
+        // #40 - Real-time validation
+        function validateForm() {
+            const client = document.getElementById('clientSelect')?.value || '';
+            const task = document.getElementById('taskSelect')?.value || '';
+            const hours = document.getElementById('hoursInput')?.value || '';
+            const description = trimInput(document.getElementById('descInput')?.value || '');
+            const expenseType = document.getElementById('expenseSelect')?.value || '';
+            const amount = document.getElementById('amountInput')?.value || '0';
+            const editingRowId = document.getElementById('editingRowId')?.value || null;
+            
+            let errors = [];
+            let warnings = [];
+            
+            // Client validation
+            if (!client) {
+                errors.push({ field: 'clientSelect', msg: 'Please select a client.' });
+            } else if (!isClientActive(client)) {
+                errors.push({ field: 'clientSelect', msg: 'Selected client is inactive.' });
+            }
+            
+            // Task validation
+            if (!task) {
+                errors.push({ field: 'taskSelect', msg: 'Please select a task.' });
+            } else if (!isTaskActive(task)) {
+                errors.push({ field: 'taskSelect', msg: 'Selected task is inactive.' });
+            }
+            
+            // #21 - Duplicate check
+            if (client && task && isDuplicateEntry(client, task, editingRowId)) {
+                errors.push({ field: 'taskSelect', msg: 'You already have an entry for this client and task today.' });
+            }
+            
+            // Hours validation
+            if (!hours) {
+                errors.push({ field: 'hoursInput', msg: 'Please enter hours.' });
+            } else {
+                const hoursNum = parseFloat(hours);
+                
+                if (isNaN(hoursNum) || hoursNum <= 0) {
+                    errors.push({ field: 'hoursInput', msg: 'Hours must be greater than 0.' });
+                } else if (hoursNum > 24) {
+                    errors.push({ field: 'hoursInput', msg: 'Hours cannot exceed 24.' });
+                } else if (!isValidHoursInterval(hours)) {
+                    errors.push({ field: 'hoursInput', msg: 'Hours must be in 0.25 intervals (e.g., 0.25, 0.5, 1.75).' });
+                } else {
+                    // #15 - Total daily hours check
+                    const existingHours = getTotalDailyHours(editingRowId);
+                    if (existingHours + hoursNum > 24) {
+                        errors.push({ field: 'hoursInput', msg: `Total daily hours would exceed 24. You have ${existingHours} hrs logged. Max you can add: ${24 - existingHours} hrs.` });
+                    }
+                    
+                    // #17 - Warn if > 6 hours
+                    if (hoursNum > 6) {
+                        warnings.push('⚠️ You are logging more than 6 hours for a single task. Please confirm this is correct.');
+                    }
+                    
+                    // #16 - Warn if daily total < 6
+                    if (existingHours + hoursNum < 6) {
+                        warnings.push(`ℹ️ Your total for today will be ${existingHours + hoursNum} hours (less than 6 hours).`);
+                    }
+                }
+            }
+            
+            // Description validation
+            if (!description) {
+                errors.push({ field: 'descInput', msg: 'Please enter a description.' });
+            } else {
+                const descValidation = validateDescription(description);
+                if (!descValidation.valid) {
+                    errors.push({ field: 'descInput', msg: descValidation.msg });
+                } else if (isDuplicateDescription(description, editingRowId)) {
+                    errors.push({ field: 'descInput', msg: 'You have used this exact description in the last 7 days. Please be more specific about the tasks performed.' });
+                }
+            }
+            
+            // Expense validation
+            if (expenseType && expenseType !== 'Not Applicable') {
+                const amountNum = parseFloat(amount);
+                if (isNaN(amountNum) || amountNum <= 0) {
+                    errors.push({ field: 'amountInput', msg: 'Please enter a valid expense amount.' });
+                } else if (!isWholeNumber(amount)) {
+                    errors.push({ field: 'amountInput', msg: 'Expense amount must be a whole number (no decimals).' });
+                }
+            }
+            
+            // #20 - Warn if > 3 days old
+            const daysDiff = getDaysDiff(selectedDate, today);
+            if (daysDiff > 3) {
+                warnings.push(`⚠️ You are filling timesheet for ${daysDiff} days ago. Please ensure timely submissions.`);
+            }
+            
+            return { errors, warnings, isValid: errors.length === 0 };
+        }
+        
+        // Update form validation display
+        function updateFormValidation() {
+            const { errors, warnings, isValid } = validateForm();
+            const submitBtn = document.getElementById('submitBtn');
+            const validationDiv = document.getElementById('validationMessages');
+            
+            // Reset all field styles
+            ['clientSelect', 'taskSelect', 'hoursInput', 'descInput', 'amountInput'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.classList.remove('field-error', 'field-success');
+                    const errorEl = document.getElementById(id + 'Error');
+                    if (errorEl) errorEl.remove();
+                }
+            });
+            
+            // Mark fields with errors
+            errors.forEach(err => {
+                const el = document.getElementById(err.field);
+                if (el) {
+                    el.classList.add('field-error');
+                    // Add error message below field
+                    let errorEl = document.getElementById(err.field + 'Error');
+                    if (!errorEl) {
+                        errorEl = document.createElement('p');
+                        errorEl.id = err.field + 'Error';
+                        errorEl.className = 'error-text';
+                        el.parentNode.appendChild(errorEl);
+                    }
+                    errorEl.textContent = err.msg;
+                }
+            });
+            
+            // Mark valid fields with values
+            ['clientSelect', 'taskSelect', 'hoursInput', 'descInput'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el && el.value && !errors.some(e => e.field === id)) {
+                    el.classList.add('field-success');
+                }
+            });
+            
+            // Show warnings
+            if (validationDiv) {
+                validationDiv.innerHTML = warnings.map(w => 
+                    `<p class="text-yellow-700 text-sm bg-yellow-50 p-2 rounded mb-1">${w}</p>`
+                ).join('');
+            }
+            
+            // #39 - Enable/disable submit button
+            if (submitBtn) {
+                submitBtn.disabled = !isValid || isProcessing;
+            }
+            
+            // Track unsaved changes
+            const hasValues = document.getElementById('clientSelect')?.value || 
+                             document.getElementById('taskSelect')?.value ||
+                             document.getElementById('hoursInput')?.value ||
+                             document.getElementById('descInput')?.value;
+            hasUnsavedChanges = !!hasValues;
+            
+            return { errors, warnings, isValid };
+        }
+
+        // ============================================
+        // LOGIN HANDLER
+        // ============================================
+        async function handleLogin() {
+            const input = document.getElementById('emailInput');
+            const statusDiv = document.getElementById('loginStatus');
+            const loginBtn = document.getElementById('loginBtn');
+            employeeEmail = trimInput(input.value);
+            
+            if (!employeeEmail || !employeeEmail.includes('@')) {
+                statusDiv.innerHTML = '<p class="text-red-600 text-sm mt-2">Please enter a valid email</p>';
+                return;
+            }
+
+            if (API_URL === 'YOUR_GOOGLE_APPS_SCRIPT_URL_HERE') {
+                statusDiv.innerHTML = '<p class="text-red-600 text-sm mt-2">⚠️ Please configure API_URL in the code first!</p>';
+                return;
+            }
+
+            loginBtn.disabled = true;
+            loginBtn.innerHTML = '<span class="btn-spinner"></span>Logging in...';
+            statusDiv.innerHTML = '<p class="text-blue-600 text-sm mt-2">⏳ Loading your data...</p>';
+
+            try {
+                // UPDATED in v1.5 - Added getHolidays call
+                const [clientsData, tasksData, expensesData, empData, timesheetsData, holidaysData] = await Promise.all([
+                    callAPI('getClients'),
+                    callAPI('getTasks'),
+                    callAPI('getExpenses'),
+                    callAPI('getEmployee', { email: employeeEmail }),
+                    callAPI('getTimesheets', { email: employeeEmail }),
+                    callAPI('getHolidays')
+                ]);
+                
+                clients = clientsData;
+                tasks = tasksData;
+                expenseTypes = expensesData;
+                employeeData = empData;
+                timesheetData = timesheetsData;
+                holidays = holidaysData; // NEW in v1.5
+                
+                isLoggedIn = true;
+                hasUnsavedChanges = false;
+                resetSessionTimer(); // Start session timer
+                render();
+            } catch (error) {
+                console.error('Login error:', error);
+                loginBtn.disabled = false;
+                loginBtn.innerHTML = 'Login';
+                statusDiv.innerHTML = `<p class="text-red-600 text-sm mt-2">❌ Error: ${error.message}</p>`;
+            }
+        }
+
+        // ============================================
+        // EXPENSE TYPE HANDLER
+        // ============================================
+        function handleExpenseTypeChange() {
+            const expenseType = document.getElementById('expenseSelect').value;
+            const amountInput = document.getElementById('amountInput');
+            
+            if (!expenseType || expenseType === 'Not Applicable') {
+                amountInput.value = '0';
+                amountInput.disabled = true;
+            } else {
+                amountInput.disabled = false;
+                if (amountInput.value === '0') {
+                    amountInput.value = '';
+                }
+            }
+            updateFormValidation();
+        }
+
+        // ============================================
+        // ADD TIMESHEET
+        // ============================================
+        async function handleAdd() {
+            if (isProcessing) return;
+            
+            const { errors, warnings, isValid } = validateForm();
+            
+            if (!isValid) {
+                document.getElementById('submitStatus').innerHTML = 
+                    '<p class="text-red-600 text-sm">❌ Please fix the errors above before submitting.</p>';
+                return;
+            }
+            
+            // Show warnings and ask for confirmation
+            if (warnings.length > 0) {
+                const warningMessages = warnings.join('\n');
+                if (!confirm(`${warningMessages}\n\nDo you want to continue?`)) {
+                    return;
+                }
+            }
+            
+            const client = trimInput(document.getElementById('clientSelect').value);
+            const task = trimInput(document.getElementById('taskSelect').value);
+            const hours = document.getElementById('hoursInput').value;
+            const description = trimInput(document.getElementById('descInput').value);
+            const expenseType = document.getElementById('expenseSelect').value;
+            const amount = document.getElementById('amountInput').value;
+            const statusDiv = document.getElementById('submitStatus');
+            const submitBtn = document.getElementById('submitBtn');
+
+            isProcessing = true;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="btn-spinner"></span>Saving...';
+            statusDiv.innerHTML = '<p class="text-blue-600 text-sm">⏳ Saving entry...</p>';
+
+            try {
+                await callAPI('addTimesheet', {
+                    timesheet: {
+                        employeeEmail: employeeEmail,
+                        date: formatDate(selectedDate),
+                        client: client,
+                        task: task,
+                        hours: hours,
+                        description: description,
+                        expenseType: expenseType || 'Not Applicable',
+                        expenseAmount: amount || '0'
+                    }
+                });
+                
+                statusDiv.innerHTML = '<p class="text-green-600 text-sm">✅ Entry saved successfully!</p>';
+                
+                timesheetData = await callAPI('getTimesheets', { email: employeeEmail });
+                
+                // Clear form
+                document.getElementById('clientSelect').value = '';
+                document.getElementById('taskSelect').value = '';
+                document.getElementById('hoursInput').value = '';
+                document.getElementById('descInput').value = '';
+                document.getElementById('expenseSelect').value = '';
+                document.getElementById('amountInput').value = '0';
+                document.getElementById('amountInput').disabled = true;
+                hasUnsavedChanges = false;
+                
+                setTimeout(() => {
+                    isProcessing = false;
+                    render();
+                }, 1000);
+                
+            } catch (error) {
+                isProcessing = false;
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = 'Submit Entry';
+                statusDiv.innerHTML = `<p class="text-red-600 text-sm">❌ Error: ${error.message}</p>`;
+            }
+        }
+
+        // ============================================
+        // DELETE TIMESHEET - UPDATED in v1.5
+        // ============================================
+        async function deleteEntry(rowId) {
+            if (isProcessing) return;
+            
+            // Find the entry to check if it's a holiday entry
+            const entry = timesheetData.find(e => e['Row ID'] === rowId);
+            
+            // UPDATED in v1.5 - Warning for holiday entries
+            let confirmMessage = 'Are you sure you want to delete this entry?';
+            if (entry && isHolidayEntry(entry)) {
+                const holidayInfo = getHolidayInfo(entry.Date);
+                confirmMessage = `⚠️ This appears to be a holiday entry (${holidayInfo?.Description || 'Holiday'}).\n\nAre you sure you want to delete it?`;
+            }
+            
+            if (!confirm(confirmMessage)) return;
+
+            showLoading('Deleting entry...');
+
+            try {
+                await callAPI('deleteTimesheet', { rowId });
+                timesheetData = await callAPI('getTimesheets', { email: employeeEmail });
+                hideLoading();
+                render();
+            } catch (error) {
+                hideLoading();
+                alert('Error deleting: ' + error.message);
+            }
+        }
+
+        // ============================================
+        // EDIT TIMESHEET
+        // ============================================
+        function editEntry(entry) {
+            // #35 - Warn if editing old entry
+            const entryDate = new Date(entry.Date);
+            const daysDiff = getDaysDiff(entryDate, today);
+            
+            if (daysDiff > 3) {
+                if (!confirm(`⚠️ You are editing an entry from ${daysDiff} days ago.\n\nDo you want to continue?`)) {
+                    return;
+                }
+            }
+            
+            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+            
+            document.getElementById('clientSelect').value = entry.Client;
+            document.getElementById('taskSelect').value = entry.Task;
+            document.getElementById('hoursInput').value = entry.Hours;
+            document.getElementById('descInput').value = entry.Description;
+            document.getElementById('expenseSelect').value = entry['Expense Type'] || '';
+            document.getElementById('amountInput').value = entry['Expense Amount'] || '0';
+            
+            handleExpenseTypeChange();
+            
+            document.getElementById('editingRowId').value = entry['Row ID'];
+            
+            const submitBtn = document.getElementById('submitBtn');
+            if (submitBtn) {
+                submitBtn.textContent = 'Update Entry';
+                submitBtn.onclick = handleUpdate;
+            }
+            
+            const cancelBtn = document.getElementById('cancelEditBtn');
+            if (cancelBtn) cancelBtn.classList.remove('hidden');
+            
+            document.getElementById('submitStatus').innerHTML = 
+                '<p class="text-blue-600 text-sm">📝 Editing entry - make changes and click Update</p>';
+            
+            updateFormValidation();
+        }
+
+        // ============================================
+        // CANCEL EDIT
+        // ============================================
+        function cancelEdit() {
+            document.getElementById('clientSelect').value = '';
+            document.getElementById('taskSelect').value = '';
+            document.getElementById('hoursInput').value = '';
+            document.getElementById('descInput').value = '';
+            document.getElementById('expenseSelect').value = '';
+            document.getElementById('amountInput').value = '0';
+            document.getElementById('amountInput').disabled = true;
+            document.getElementById('editingRowId').value = '';
+            
+            const submitBtn = document.getElementById('submitBtn');
+            if (submitBtn) {
+                submitBtn.textContent = 'Submit Entry';
+                submitBtn.onclick = handleAdd;
+            }
+            
+            const cancelBtn = document.getElementById('cancelEditBtn');
+            if (cancelBtn) cancelBtn.classList.add('hidden');
+            
+            document.getElementById('submitStatus').innerHTML = '';
+            document.getElementById('validationMessages').innerHTML = '';
+            hasUnsavedChanges = false;
+            
+            // Reset validation styles
+            ['clientSelect', 'taskSelect', 'hoursInput', 'descInput', 'amountInput'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.classList.remove('field-error', 'field-success');
+                    const errorEl = document.getElementById(id + 'Error');
+                    if (errorEl) errorEl.remove();
+                }
+            });
+        }
+
+        // ============================================
+        // UPDATE TIMESHEET
+        // ============================================
+        async function handleUpdate() {
+            if (isProcessing) return;
+            
+            const { errors, warnings, isValid } = validateForm();
+            
+            if (!isValid) {
+                document.getElementById('submitStatus').innerHTML = 
+                    '<p class="text-red-600 text-sm">❌ Please fix the errors above before updating.</p>';
+                return;
+            }
+            
+            if (warnings.length > 0) {
+                const warningMessages = warnings.join('\n');
+                if (!confirm(`${warningMessages}\n\nDo you want to continue?`)) {
+                    return;
+                }
+            }
+            
+            const client = trimInput(document.getElementById('clientSelect').value);
+            const task = trimInput(document.getElementById('taskSelect').value);
+            const hours = document.getElementById('hoursInput').value;
+            const description = trimInput(document.getElementById('descInput').value);
+            const expenseType = document.getElementById('expenseSelect').value;
+            const amount = document.getElementById('amountInput').value;
+            const rowId = document.getElementById('editingRowId').value;
+            const statusDiv = document.getElementById('submitStatus');
+            const submitBtn = document.getElementById('submitBtn');
+
+            isProcessing = true;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="btn-spinner"></span>Updating...';
+            statusDiv.innerHTML = '<p class="text-blue-600 text-sm">⏳ Updating entry...</p>';
+
+            try {
+                await callAPI('updateTimesheet', {
+                    timesheet: {
+                        rowId: rowId,
+                        employeeEmail: employeeEmail,
+                        date: formatDate(selectedDate),
+                        client: client,
+                        task: task,
+                        hours: hours,
+                        description: description,
+                        expenseType: expenseType || 'Not Applicable',
+                        expenseAmount: amount || '0'
+                    }
+                });
+                
+                statusDiv.innerHTML = '<p class="text-green-600 text-sm">✅ Entry updated successfully!</p>';
+                
+                timesheetData = await callAPI('getTimesheets', { email: employeeEmail });
+                
+                cancelEdit();
+                hasUnsavedChanges = false;
+                
+                setTimeout(() => {
+                    isProcessing = false;
+                    render();
+                }, 1000);
+                
+            } catch (error) {
+                isProcessing = false;
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = 'Update Entry';
+                statusDiv.innerHTML = `<p class="text-red-600 text-sm">❌ Error: ${error.message}</p>`;
+            }
+        }
+
+        // ============================================
+        // LOGOUT
+        // ============================================
+        function handleLogout(force = false) {
+            // #41 - Confirm if unsaved changes
+            if (!force && hasUnsavedChanges) {
+                if (!confirm('You have unsaved changes. Are you sure you want to logout?')) {
+                    return;
+                }
+            }
+            
+            // Clear timers
+            if (sessionTimer) clearTimeout(sessionTimer);
+            if (warningTimer) clearTimeout(warningTimer);
+            if (countdownInterval) clearInterval(countdownInterval);
+            
+            isLoggedIn = false;
+            employeeEmail = '';
+            employeeData = null;
+            timesheetData = [];
+            holidays = []; // Clear holidays on logout
+            hasUnsavedChanges = false;
+            render();
+        }
+
+        // ============================================
+        // CALENDAR FUNCTIONS
+        // ============================================
+        function generateCalendarMonths() {
+            const months = [];
+            const curMonth = today.getMonth();
+            const curYear = today.getFullYear();
+            
+            const ago31 = new Date(today);
+            ago31.setDate(today.getDate() - 31);
+            const prevMonth = ago31.getMonth();
+            const prevYear = ago31.getFullYear();
+            
+            if (prevMonth !== curMonth || prevYear !== curYear) {
+                months.push({ month: prevMonth, year: prevYear });
+            }
+            months.push({ month: curMonth, year: curYear });
+            return months;
+        }
+
+        function generateCalendar(month, year) {
+            const first = new Date(year, month, 1);
+            const last = new Date(year, month + 1, 0);
+            const days = [];
+            for (let i = 0; i < first.getDay(); i++) days.push(null);
+            for (let i = 1; i <= last.getDate(); i++) days.push(i);
+            return days;
+        }
+
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+        // ============================================
+        // RENDER FUNCTIONS
+        // ============================================
+        function renderLogin() {
+            return `
+                <div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+                    <div class="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
+                        <div class="text-center mb-6">
+                            <div class="text-6xl mb-4">⏰</div>
+                            <h1 class="text-3xl font-bold text-gray-800">TimeWise</h1>
+                            <p class="text-gray-600 mt-2">Employee Timesheet System</p>
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-gray-700 font-semibold mb-2">Email Address</label>
+                            <input type="email" id="emailInput" placeholder="your.email@company.com"
+                                class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" 
+                                onkeypress="if(event.key === 'Enter') handleLogin()" />
+                        </div>
+                        <button id="loginBtn" onclick="handleLogin()"
+                            class="w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 font-semibold transition-colors">
+                            Login
+                        </button>
+                        <div id="loginStatus"></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderApp() {
+            const months = generateCalendarMonths();
+            const entries = timesheetData.filter(e => formatDate(e.Date) === formatDate(selectedDate));
+            const totalHours = entries.reduce((sum, e) => sum + parseFloat(e.Hours || 0), 0);
+            
+            // Filter active clients and tasks for dropdowns
+            const activeClients = clients.filter(c => c['Client Status'] === 'Active');
+            const activeTasks = tasks.filter(t => t['Work Status'] === 'Active');
+            
+            // Get holiday info for selected date (NEW in v1.5)
+            const selectedDateHoliday = getHolidayInfo(selectedDate);
+
+            return `
+                <div class="min-h-screen bg-gray-50 p-4">
+                    <div class="max-w-7xl mx-auto">
+                        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                            <div class="flex justify-between items-start mb-4">
+                                <h1 class="text-2xl font-bold text-indigo-600">TimeWise Timesheet</h1>
+                                <button onclick="handleLogout()" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 font-semibold transition-colors">
+                                    Logout
+                                </button>
+                            </div>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+                                <div class="space-y-2">
+                                    <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wide border-b pb-1">Personal Details</h3>
+                                    <div class="space-y-1">
+                                        <div>
+                                            <p class="text-base font-bold text-gray-900">${employeeData['Employee Name'] || 'N/A'}</p>
+                                            <p class="text-sm text-gray-600">${employeeData['Designation'] || 'Not Specified'}</p>
+                                        </div>
+                                        <p class="text-sm text-gray-700"><span class="font-semibold">ID:</span> ${employeeData['Employee ID'] || 'N/A'}</p>
+                                        <p class="text-sm text-gray-700"><span class="font-semibold">Contact:</span> ${employeeData['Employee Contact'] || 'N/A'}</p>
+                                    </div>
+                                </div>
+                                
+                                <div class="space-y-2">
+                                    <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wide border-b pb-1">Employment Status</h3>
+                                    <div class="space-y-1">
+                                        <p class="text-sm">
+                                            <span class="font-semibold text-gray-700">Status:</span> 
+                                            <span class="${employeeData['Employee Status'] === 'Active' ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}">
+                                                ${employeeData['Employee Status'] || 'N/A'}
+                                            </span>
+                                        </p>
+                                        <p class="text-sm text-gray-700">
+                                            <span class="font-semibold">Joined:</span> ${employeeData['Joining Date'] ? formatDateDisplay(employeeData['Joining Date']) : 'N/A'}
+                                        </p>
+                                        <p class="text-sm text-gray-700">
+                                            <span class="font-semibold">Leaving:</span> ${employeeData['Leaving Date'] ? formatDateDisplay(employeeData['Leaving Date']) : 'Currently Employed'}
+                                        </p>
+                                    </div>
+                                </div>
+                                
+                                <div class="space-y-2">
+                                    <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wide border-b pb-1">Professional Info</h3>
+                                    <div class="space-y-1">
+                                        <p class="text-sm text-gray-700"><span class="font-semibold">Team:</span> ${employeeData['Team Allocation'] || 'Not Assigned'}</p>
+                                        <p class="text-sm text-gray-700"><span class="font-semibold">PAN:</span> ${employeeData['Employee PAN'] || 'N/A'}</p>
+                                        <p class="text-sm text-gray-700"><span class="font-semibold">Professional ID:</span> ${employeeData['Professional ID'] || 'N/A'}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <div class="lg:col-span-1">
+                                <div class="bg-white rounded-lg shadow-md p-4 space-y-4">
+                                    ${months.map(({ month, year }) => {
+                                        const days = generateCalendar(month, year);
+                                        return `
+                                            <div>
+                                                <h2 class="text-xl font-bold mb-4 flex items-center">
+                                                    📅 ${monthNames[month]} ${year}
+                                                </h2>
+                                                <div class="grid grid-cols-7 gap-1 text-center">
+                                                    ${['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => `<div class="font-semibold text-sm py-2">${d}</div>`).join('')}
+                                                    ${days.map((day, i) => {
+                                                        if (!day) return '<div></div>';
+                                                        const date = new Date(year, month, day);
+                                                        date.setHours(0, 0, 0, 0);
+                                                        const isToday = formatDate(date) === formatDate(today);
+                                                        const selected = formatDate(date) === formatDate(selectedDate);
+                                                        const past31 = !isViewable(date) && date < today;
+                                                        const future = isFutureDate(date);
+                                                        const outside = !isWithinTenure(date);
+                                                        const canClick = !past31 && !future && !outside;
+                                                        const color = getDateColor(date);
+                                                        
+                                                        return `
+                                                            <button onclick="if(hasUnsavedChanges && !confirm('You have unsaved changes. Continue?')) return; selectedDate = new Date(${year}, ${month}, ${day}); render();"
+                                                                ${!canClick ? 'disabled' : ''}
+                                                                class="py-2 rounded text-sm transition-colors ${
+                                                                    !canClick ? 'bg-gray-200 text-gray-400 cursor-not-allowed' :
+                                                                    isToday ? 'ring-2 ring-indigo-500 font-bold' :
+                                                                    selected ? 'bg-indigo-100 font-bold' : 'hover:bg-gray-100'
+                                                                } ${color} ${color ? 'text-white font-semibold' : ''}">
+                                                                ${day}
+                                                            </button>
+                                                        `;
+                                                    }).join('')}
+                                                </div>
+                                            </div>
+                                        `;
+                                    }).join('')}
+                                    <!-- UPDATED in v1.5 - Added holiday indicator to legend -->
+                                    <div class="pt-4 border-t space-y-2 text-sm">
+                                        <div class="flex items-center">
+                                            <div class="w-4 h-4 bg-green-500 rounded mr-2"></div>≥6 hours logged
+                                        </div>
+                                        <div class="flex items-center">
+                                            <div class="w-4 h-4 bg-yellow-500 rounded mr-2"></div>&lt;6 hours logged
+                                        </div>
+                                        <div class="flex items-center">
+                                            <div class="w-4 h-4 bg-blue-500 rounded mr-2"></div>Holiday (no entry yet)
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="lg:col-span-2 space-y-6">
+                                <!-- Holiday Banner (NEW in v1.5) -->
+                                ${selectedDateHoliday && entries.length === 0 ? `
+                                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                        <p class="text-blue-800">📅 <strong>${selectedDateHoliday.Description}</strong> - This is a scheduled holiday/event. Entry will be auto-populated at 6 AM if not already filled.</p>
+                                    </div>
+                                ` : ''}
+                                
+                                ${entries.length > 0 ? `
+                                    <div class="bg-white rounded-lg shadow-md p-6">
+                                        <div class="flex justify-between items-center mb-4">
+                                            <h2 class="text-xl font-bold">Entries - ${formatDateDisplay(selectedDate)}</h2>
+                                            <span class="text-sm font-semibold px-3 py-1 rounded-full ${totalHours >= 6 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}">
+                                                Total: ${totalHours} hrs
+                                            </span>
+                                        </div>
+                                        <div class="space-y-3">
+                                            ${entries.map(e => `
+                                                <div class="border rounded-lg p-4 hover:shadow-sm transition-shadow">
+                                                    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                                                        <div><strong>Client:</strong> ${e.Client}</div>
+                                                        <div><strong>Task:</strong> ${e.Task}</div>
+                                                        <div><strong>Hours:</strong> ${e.Hours}</div>
+                                                        <div><strong>Expense:</strong> ₹${e['Expense Amount'] || 0}</div>
+                                                    </div>
+                                                    <div class="mt-2 text-sm"><strong>Description:</strong> ${e.Description}</div>
+                                                    <div class="mt-1 text-xs text-gray-500"><strong>Submitted:</strong> ${formatTimestampDisplay(e.Timestamp)}</div>
+                                                    ${isEditable(e.Date) ? `
+                                                        <div class="mt-3 flex gap-2">
+                                                            <button onclick='editEntry(${JSON.stringify(e).replace(/'/g, "\\'")})' 
+                                                                class="text-blue-600 hover:text-blue-800 text-sm font-semibold transition-colors">
+                                                                ✏️ Edit
+                                                            </button>
+                                                            <button onclick="deleteEntry('${e['Row ID']}')"
+                                                                class="text-red-600 hover:text-red-800 text-sm font-semibold transition-colors">
+                                                                🗑️ Delete
+                                                            </button>
+                                                        </div>
+                                                    ` : ''}
+                                                </div>
+                                            `).join('')}
+                                        </div>
+                                    </div>
+                                ` : `
+                                    <div class="bg-white rounded-lg shadow-md p-6">
+                                        <h2 class="text-xl font-bold mb-4">Entries - ${formatDateDisplay(selectedDate)}</h2>
+                                        <p class="text-gray-500 text-center py-4">No entries for this date</p>
+                                    </div>
+                                `}
+
+                                ${isEditable(selectedDate) ? `
+                                    <div class="bg-white rounded-lg shadow-md p-6">
+                                        <h2 class="text-xl font-bold mb-4">Add Entry - ${formatDateDisplay(selectedDate)}</h2>
+                                        <input type="hidden" id="editingRowId" value="" />
+                                        
+                                        <!-- Validation Messages -->
+                                        <div id="validationMessages" class="mb-4"></div>
+                                        
+                                        <div class="space-y-4">
+                                            <div>
+                                                <label class="block text-sm font-semibold mb-1">Client * <span class="text-xs text-gray-500">(Only active clients shown)</span></label>
+                                                <select id="clientSelect" onchange="updateFormValidation()" class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                                                    <option value="">Select Client</option>
+                                                    ${activeClients.map(c => `<option value="${c['Client Full Name']}">${c['Client Full Name']}</option>`).join('')}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-semibold mb-1">Task * <span class="text-xs text-gray-500">(Only active tasks shown)</span></label>
+                                                <select id="taskSelect" onchange="updateFormValidation()" class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                                                    <option value="">Select Task</option>
+                                                    ${activeTasks.map(t => `<option value="${t['Work Name']}">${t['Work Name']}</option>`).join('')}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-semibold mb-1">Hours * <span class="text-xs text-gray-500">(0.25 intervals: 0.25, 0.5, 0.75, 1, ...)</span></label>
+                                                <input type="number" id="hoursInput" min="0.25" max="24" step="0.25"
+                                                    oninput="updateFormValidation()"
+                                                    class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" 
+                                                    placeholder="e.g., 1.5, 2.25, 4" />
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-semibold mb-1">Description * <span class="text-xs text-gray-500">(10-500 chars, min 5 words)</span></label>
+                                                <textarea id="descInput" rows="3"
+                                                    oninput="updateFormValidation()"
+                                                    maxlength="500"
+                                                    class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                                    placeholder="Describe the specific tasks performed..."></textarea>
+                                                <p class="text-xs text-gray-500 mt-1"><span id="charCount">0</span>/500 characters</p>
+                                            </div>
+                                            <div class="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label class="block text-sm font-semibold mb-1">Expense Type</label>
+                                                    <select id="expenseSelect" class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                                        onchange="handleExpenseTypeChange()">
+                                                        <option value="">Not Applicable</option>
+                                                        ${expenseTypes.map(e => `<option value="${e['Expense Type']}">${e['Expense Type']}</option>`).join('')}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-sm font-semibold mb-1">Amount (₹) <span class="text-xs text-gray-500">(Whole numbers)</span></label>
+                                                    <input type="number" id="amountInput" min="0" step="1"
+                                                        oninput="updateFormValidation()"
+                                                        class="w-full px-3 py-2 border rounded disabled:bg-gray-100 disabled:cursor-not-allowed focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" 
+                                                        placeholder="0" value="0" disabled />
+                                                </div>
+                                            </div>
+                                            <div class="flex gap-2">
+                                                <button id="submitBtn" onclick="handleAdd()" disabled
+                                                    class="flex-1 bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                                                    Submit Entry
+                                                </button>
+                                                <button id="cancelEditBtn" onclick="cancelEdit()"
+                                                    class="hidden px-6 bg-gray-500 text-white py-3 rounded-lg hover:bg-gray-600 font-semibold transition-colors">
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div id="submitStatus" class="mt-4"></div>
+                                    </div>
+                                ` : isViewable(selectedDate) ? `
+                                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                        <p class="text-blue-800">ℹ️ This date is more than 7 days old. You can view entries but cannot add or edit.</p>
+                                    </div>
+                                ` : `
+                                    <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                                        <p class="text-yellow-800">⚠️ This date is more than 31 days old or outside your tenure.</p>
+                                    </div>
+                                `}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function render() {
+            const app = document.getElementById('app');
+            app.innerHTML = isLoggedIn ? renderApp() : renderLogin();
+            
+            // Setup character counter for description
+            if (isLoggedIn) {
+                const descInput = document.getElementById('descInput');
+                const charCount = document.getElementById('charCount');
+                if (descInput && charCount) {
+                    descInput.addEventListener('input', () => {
+                        charCount.textContent = descInput.value.length;
+                    });
+                }
+            }
+        }
+
+        // ============================================
+        // INITIALIZE
+        // ============================================
+        setupActivityListeners();
+        render();
+    </script>
+</body>
+</html>
