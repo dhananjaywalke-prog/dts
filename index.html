@@ -6,8 +6,8 @@
     <title>TimeWise - Timesheet System</title>
     <!-- ============================================
     TimeWise Web App
-    Version: 1.5
-    Last Updated: 26-Jan-2026
+    Version: 1.6
+    Last Updated: 27-Jan-2026
     ============================================
     CHANGE LOG:
     v1.0 - Initial version
@@ -15,11 +15,12 @@
     v1.2 - Enhanced formatTimestampDisplay() to handle ISO format
     v1.3 - Added loading indicators for all actions
     v1.4 - Comprehensive validations (19 total)
-    v1.5 - Holidays feature:
-           - Load holidays data at login
-           - Blue color for holiday dates on calendar
-           - Warning when deleting holiday entry
-           - Holiday indicator in calendar legend
+    v1.5 - Holidays feature (blue calendar, delete warning)
+    v1.6 - Assignments feature:
+           - Load assignments at login
+           - Client dropdown from active assignments
+           - Dynamic task dropdown based on selected client
+           - Cascading dropdown logic
     ============================================ -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -139,7 +140,7 @@
         // ============================================
         // CONFIGURATION
         // ============================================
-        const API_URL = 'https://script.google.com/macros/s/AKfycbxmbsVj2enXCwmQdDDe9s84x2um2SazqoCQHo9UxjPNfD-1FuT_YoyfRxU1L95UXgfeKw/exec';
+        const API_URL = 'https://script.google.com/macros/s/AKfycbxr0kWli8ExlBhmpSOwGABXRCyZs-dKIu9TGu4foKGx3GdY9RStIofiCGhTRZTF4z5vYA/exec';
         
         // Session timeout settings (in milliseconds)
         const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
@@ -157,6 +158,7 @@
         let tasks = [];
         let expenseTypes = [];
         let holidays = []; // NEW in v1.5 - Holidays data
+        let assignments = []; // NEW in v1.6 - Assignments data
         let isProcessing = false;
         let hasUnsavedChanges = false;
         
@@ -358,6 +360,57 @@
         }
 
         // ============================================
+        // ASSIGNMENTS FUNCTIONS (NEW in v1.6)
+        // ============================================
+        
+        // Get unique clients from active assignments
+        function getAssignmentClients() {
+            const clientNames = [...new Set(assignments.map(a => a['Client Name']))];
+            return clientNames.sort();
+        }
+        
+        // Get tasks for a specific client from active assignments
+        function getTasksForClient(clientName) {
+            const clientAssignments = assignments.filter(a => a['Client Name'] === clientName);
+            const taskNames = [...new Set(clientAssignments.map(a => a['Task Assigned']))];
+            return taskNames.sort();
+        }
+        
+        // Check if client+task combination is valid assignment
+        function isValidAssignment(clientName, taskName) {
+            return assignments.some(a => 
+                a['Client Name'] === clientName && 
+                a['Task Assigned'] === taskName
+            );
+        }
+        
+        // Handle client selection change - update task dropdown
+        function handleClientChange() {
+            const clientSelect = document.getElementById('clientSelect');
+            const taskSelect = document.getElementById('taskSelect');
+            const selectedClient = clientSelect.value;
+            
+            // Clear current task options
+            taskSelect.innerHTML = '<option value="">Select Task</option>';
+            
+            if (selectedClient) {
+                // Get tasks for selected client
+                const tasksForClient = getTasksForClient(selectedClient);
+                
+                // Populate task dropdown
+                tasksForClient.forEach(task => {
+                    const option = document.createElement('option');
+                    option.value = task;
+                    option.textContent = task;
+                    taskSelect.appendChild(option);
+                });
+            }
+            
+            // Trigger validation update
+            updateFormValidation();
+        }
+
+        // ============================================
         // API CALL FUNCTION
         // ============================================
         async function callAPI(action, data = {}) {
@@ -473,16 +526,24 @@
             );
         }
         
-        // #22 - Check if client is active
+        // #22 - Check if client is in active assignments (UPDATED in v1.6)
         function isClientActive(clientName) {
-            const client = clients.find(c => c['Client Full Name'] === clientName);
-            return client && client['Client Status'] === 'Active';
+            // Check if client exists in active assignments
+            return assignments.some(a => a['Client Name'] === clientName);
         }
         
-        // #23 - Check if task is active
+        // #23 - Check if task is valid for selected client (UPDATED in v1.6)
         function isTaskActive(taskName) {
-            const task = tasks.find(t => t['Work Name'] === taskName);
-            return task && task['Work Status'] === 'Active';
+            const clientSelect = document.getElementById('clientSelect');
+            const selectedClient = clientSelect ? clientSelect.value : '';
+            
+            // If no client selected, just check if task exists in any assignment
+            if (!selectedClient) {
+                return assignments.some(a => a['Task Assigned'] === taskName);
+            }
+            
+            // Check if this client+task combination exists in active assignments
+            return isValidAssignment(selectedClient, taskName);
         }
         
         // #24 - Description max 500 chars
@@ -731,14 +792,15 @@
             statusDiv.innerHTML = '<p class="text-blue-600 text-sm mt-2">⏳ Loading your data...</p>';
 
             try {
-                // UPDATED in v1.5 - Added getHolidays call
-                const [clientsData, tasksData, expensesData, empData, timesheetsData, holidaysData] = await Promise.all([
+                // UPDATED in v1.6 - Added getAssignments call
+                const [clientsData, tasksData, expensesData, empData, timesheetsData, holidaysData, assignmentsData] = await Promise.all([
                     callAPI('getClients'),
                     callAPI('getTasks'),
                     callAPI('getExpenses'),
                     callAPI('getEmployee', { email: employeeEmail }),
                     callAPI('getTimesheets', { email: employeeEmail }),
-                    callAPI('getHolidays')
+                    callAPI('getHolidays'),
+                    callAPI('getAssignments')
                 ]);
                 
                 clients = clientsData;
@@ -746,7 +808,8 @@
                 expenseTypes = expensesData;
                 employeeData = empData;
                 timesheetData = timesheetsData;
-                holidays = holidaysData; // NEW in v1.5
+                holidays = holidaysData;
+                assignments = assignmentsData; // NEW in v1.6
                 
                 isLoggedIn = true;
                 hasUnsavedChanges = false;
@@ -903,7 +966,11 @@
             
             window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
             
+            // UPDATED in v1.6 - Set client first, then trigger task dropdown population
             document.getElementById('clientSelect').value = entry.Client;
+            handleClientChange(); // Populate task dropdown for selected client
+            
+            // Now set the task value after dropdown is populated
             document.getElementById('taskSelect').value = entry.Task;
             document.getElementById('hoursInput').value = entry.Hours;
             document.getElementById('descInput').value = entry.Description;
@@ -934,7 +1001,9 @@
         // ============================================
         function cancelEdit() {
             document.getElementById('clientSelect').value = '';
-            document.getElementById('taskSelect').value = '';
+            // UPDATED in v1.6 - Reset task dropdown to empty state
+            const taskSelect = document.getElementById('taskSelect');
+            taskSelect.innerHTML = '<option value="">Select Task</option>';
             document.getElementById('hoursInput').value = '';
             document.getElementById('descInput').value = '';
             document.getElementById('expenseSelect').value = '';
@@ -1057,7 +1126,8 @@
             employeeEmail = '';
             employeeData = null;
             timesheetData = [];
-            holidays = []; // Clear holidays on logout
+            holidays = [];
+            assignments = []; // Clear assignments on logout
             hasUnsavedChanges = false;
             render();
         }
@@ -1129,6 +1199,9 @@
             // Filter active clients and tasks for dropdowns
             const activeClients = clients.filter(c => c['Client Status'] === 'Active');
             const activeTasks = tasks.filter(t => t['Work Status'] === 'Active');
+            
+            // NEW in v1.6 - Get clients from active assignments
+            const assignmentClients = getAssignmentClients();
             
             // Get holiday info for selected date (NEW in v1.5)
             const selectedDateHoliday = getHolidayInfo(selectedDate);
@@ -1301,17 +1374,16 @@
                                         
                                         <div class="space-y-4">
                                             <div>
-                                                <label class="block text-sm font-semibold mb-1">Client * <span class="text-xs text-gray-500">(Only active clients shown)</span></label>
-                                                <select id="clientSelect" onchange="updateFormValidation()" class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                                                <label class="block text-sm font-semibold mb-1">Client * <span class="text-xs text-gray-500">(From active assignments)</span></label>
+                                                <select id="clientSelect" onchange="handleClientChange()" class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
                                                     <option value="">Select Client</option>
-                                                    ${activeClients.map(c => `<option value="${c['Client Full Name']}">${c['Client Full Name']}</option>`).join('')}
+                                                    ${assignmentClients.map(c => `<option value="${c}">${c}</option>`).join('')}
                                                 </select>
                                             </div>
                                             <div>
-                                                <label class="block text-sm font-semibold mb-1">Task * <span class="text-xs text-gray-500">(Only active tasks shown)</span></label>
+                                                <label class="block text-sm font-semibold mb-1">Task * <span class="text-xs text-gray-500">(Select client first)</span></label>
                                                 <select id="taskSelect" onchange="updateFormValidation()" class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
                                                     <option value="">Select Task</option>
-                                                    ${activeTasks.map(t => `<option value="${t['Work Name']}">${t['Work Name']}</option>`).join('')}
                                                 </select>
                                             </div>
                                             <div>
