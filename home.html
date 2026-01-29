@@ -3,14 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TimeWise - Leave Management</title>
+    <title>TimeWise - Home</title>
     <!-- ============================================
-    TimeWise Leave Management
+    TimeWise Home Dashboard
     Version: 1.0
     Last Updated: 28-Jan-2026
     ============================================ -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        .module-card {
+            transition: all 0.3s ease;
+        }
+        .module-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+        }
         .loading-overlay {
             position: fixed;
             top: 0;
@@ -35,18 +42,14 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        .status-pending { background-color: #FEF3C7; color: #92400E; }
-        .status-approved { background-color: #D1FAE5; color: #065F46; }
-        .status-rejected { background-color: #FEE2E2; color: #991B1B; }
-        .status-cancelled { background-color: #F3F4F6; color: #4B5563; }
     </style>
 </head>
-<body class="bg-gray-50">
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
     <!-- Loading Overlay -->
     <div id="loadingOverlay" class="loading-overlay" style="display: none;">
         <div class="text-center">
             <div class="loading-spinner mx-auto"></div>
-            <p class="text-white mt-4" id="loadingText">Processing...</p>
+            <p class="text-white mt-4" id="loadingText">Loading...</p>
         </div>
     </div>
 
@@ -64,14 +67,37 @@
         let isLoggedIn = false;
         let employeeEmail = '';
         let employeeData = null;
-        let leaveBalance = null;
-        let myLeaves = [];
-        let pendingLeaves = [];
         let approvers = [];
         let isApprover = false;
+        let pendingLeavesCount = 0;
 
         // ============================================
-        // SESSION STORAGE (Shared between pages)
+        // UTILITY FUNCTIONS
+        // ============================================
+        function showLoading(text = 'Loading...') {
+            document.getElementById('loadingText').textContent = text;
+            document.getElementById('loadingOverlay').style.display = 'flex';
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingOverlay').style.display = 'none';
+        }
+
+        async function callAPI(action, params = {}) {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ action, ...params })
+            });
+            const result = await response.json();
+            if (!result.success && result.error) {
+                throw new Error(result.error);
+            }
+            return result.data !== undefined ? result.data : result;
+        }
+
+        // ============================================
+        // SESSION MANAGEMENT
         // ============================================
         function saveSession() {
             const session = {
@@ -108,49 +134,6 @@
         }
 
         // ============================================
-        // UTILITY FUNCTIONS
-        // ============================================
-        function showLoading(text = 'Processing...') {
-            document.getElementById('loadingText').textContent = text;
-            document.getElementById('loadingOverlay').style.display = 'flex';
-        }
-
-        function hideLoading() {
-            document.getElementById('loadingOverlay').style.display = 'none';
-        }
-
-        async function callAPI(action, params = {}) {
-            const response = await fetch(API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify({ action, ...params })
-            });
-            const result = await response.json();
-            if (!result.success && result.error) {
-                throw new Error(result.error);
-            }
-            return result.data !== undefined ? result.data : result;
-        }
-
-        function formatDate(date) {
-            if (!date) return '';
-            const d = new Date(date);
-            if (isNaN(d.getTime())) return date;
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            return `${d.getDate().toString().padStart(2, '0')}-${months[d.getMonth()]}-${d.getFullYear()}`;
-        }
-
-        function getStatusClass(status) {
-            const classes = {
-                'Pending': 'status-pending',
-                'Approved': 'status-approved',
-                'Rejected': 'status-rejected',
-                'Cancelled': 'status-cancelled'
-            };
-            return classes[status] || 'status-cancelled';
-        }
-
-        // ============================================
         // LOGIN
         // ============================================
         async function handleLogin() {
@@ -166,7 +149,7 @@
 
             loginBtn.disabled = true;
             loginBtn.innerHTML = 'Logging in...';
-            statusDiv.innerHTML = '<p class="text-blue-600 text-sm mt-2">⏳ Loading...</p>';
+            statusDiv.innerHTML = '<p class="text-blue-600 text-sm mt-2">⏳ Verifying...</p>';
 
             try {
                 const [empData, approversData] = await Promise.all([
@@ -178,10 +161,14 @@
                 approvers = approversData;
                 isApprover = approvers.some(a => a['Approver Email'] === employeeEmail);
 
-                await loadLeaveData();
+                // Get pending leaves count for approvers
+                if (isApprover) {
+                    const pendingLeaves = await callAPI('getPendingLeaves');
+                    pendingLeavesCount = pendingLeaves.length;
+                }
 
                 isLoggedIn = true;
-                saveSession(); // Save session to localStorage
+                saveSession();
                 render();
             } catch (error) {
                 loginBtn.disabled = false;
@@ -190,146 +177,14 @@
             }
         }
 
-        async function loadLeaveData() {
-            const [balanceData, leavesData] = await Promise.all([
-                callAPI('getLeaveBalance', { email: employeeEmail }),
-                callAPI('getLeaves', { email: employeeEmail })
-            ]);
-
-            leaveBalance = balanceData;
-            myLeaves = leavesData;
-
-            if (isApprover) {
-                pendingLeaves = await callAPI('getPendingLeaves');
-            }
-        }
-
         function handleLogout() {
-            clearSession(); // Clear shared session
+            clearSession();
             isLoggedIn = false;
             employeeEmail = '';
             employeeData = null;
-            leaveBalance = null;
-            myLeaves = [];
-            pendingLeaves = [];
             isApprover = false;
+            pendingLeavesCount = 0;
             render();
-        }
-
-        // ============================================
-        // LEAVE ACTIONS
-        // ============================================
-        async function handleApplyLeave() {
-            const leaveType = document.querySelector('input[name="leaveType"]:checked')?.value;
-            const dayType = document.querySelector('input[name="dayType"]:checked')?.value;
-            const fromDate = document.getElementById('fromDate')?.value;
-            const toDate = document.getElementById('toDate')?.value;
-            const reason = document.getElementById('reason')?.value?.trim();
-
-            // Validations
-            if (!leaveType) { alert('Please select leave type'); return; }
-            if (!dayType) { alert('Please select day type'); return; }
-            if (!fromDate) { alert('Please select from date'); return; }
-            if (!toDate) { alert('Please select to date'); return; }
-            if (new Date(toDate) < new Date(fromDate)) { alert('To date cannot be before from date'); return; }
-            if (!reason || reason.split(/\s+/).length < 3) { alert('Please provide reason (at least 3 words)'); return; }
-
-            showLoading('Submitting leave application...');
-
-            try {
-                const result = await callAPI('applyLeave', {
-                    leave: {
-                        employeeEmail: employeeEmail,
-                        employeeName: employeeData['Employee Name'],
-                        leaveType: leaveType,
-                        dayType: dayType,
-                        fromDate: fromDate,
-                        toDate: toDate,
-                        reason: reason
-                    }
-                });
-
-                await loadLeaveData();
-                hideLoading();
-                
-                if (result.autoLOP === 'Yes') {
-                    alert('Leave applied successfully!\n\n⚠️ Note: Converted to LOP due to insufficient PL balance.');
-                } else {
-                    alert('Leave applied successfully!');
-                }
-                render();
-            } catch (error) {
-                hideLoading();
-                alert('Error: ' + error.message);
-            }
-        }
-
-        async function handleCancelLeave(rowId) {
-            if (!confirm('Are you sure you want to cancel this leave application?')) return;
-
-            showLoading('Cancelling...');
-
-            try {
-                await callAPI('cancelLeave', { rowId: rowId, email: employeeEmail });
-                await loadLeaveData();
-                hideLoading();
-                render();
-            } catch (error) {
-                hideLoading();
-                alert('Error: ' + error.message);
-            }
-        }
-
-        async function handleApproveLeave(rowId) {
-            const comments = document.getElementById(`comments_${rowId}`)?.value || '';
-
-            showLoading('Approving...');
-
-            try {
-                await callAPI('approveLeave', {
-                    rowId: rowId,
-                    approverEmail: employeeEmail,
-                    approverName: employeeData['Employee Name'],
-                    comments: comments
-                });
-
-                await loadLeaveData();
-                hideLoading();
-                alert('Leave approved! Timesheet entries created.');
-                render();
-            } catch (error) {
-                hideLoading();
-                alert('Error: ' + error.message);
-            }
-        }
-
-        async function handleRejectLeave(rowId) {
-            const comments = document.getElementById(`comments_${rowId}`)?.value || '';
-
-            if (!comments) {
-                alert('Please provide a reason for rejection');
-                return;
-            }
-
-            if (!confirm('Are you sure you want to reject this leave?')) return;
-
-            showLoading('Rejecting...');
-
-            try {
-                await callAPI('rejectLeave', {
-                    rowId: rowId,
-                    approverEmail: employeeEmail,
-                    approverName: employeeData['Employee Name'],
-                    comments: comments
-                });
-
-                await loadLeaveData();
-                hideLoading();
-                render();
-            } catch (error) {
-                hideLoading();
-                alert('Error: ' + error.message);
-            }
         }
 
         // ============================================
@@ -337,276 +192,98 @@
         // ============================================
         function renderLogin() {
             return `
-                <div class="min-h-screen bg-gradient-to-br from-green-50 to-teal-100 flex items-center justify-center p-4">
-                    <div class="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
-                        <div class="text-center mb-6">
-                            <div class="text-6xl mb-4">🏖️</div>
-                            <h1 class="text-3xl font-bold text-gray-800">TimeWise</h1>
-                            <p class="text-gray-600 mt-2">Leave Management System</p>
+                <div class="min-h-screen flex items-center justify-center p-4">
+                    <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+                        <div class="text-center mb-8">
+                            <div class="text-7xl mb-4">⏰</div>
+                            <h1 class="text-4xl font-bold text-gray-800">TimeWise</h1>
+                            <p class="text-gray-500 mt-2">Employee Management System</p>
                         </div>
-                        <div class="mb-4">
+                        <div class="mb-6">
                             <label class="block text-gray-700 font-semibold mb-2">Email Address</label>
                             <input type="email" id="emailInput" placeholder="your.email@company.com"
-                                class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500" 
+                                class="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-lg" 
                                 onkeypress="if(event.key === 'Enter') handleLogin()" />
                         </div>
                         <button id="loginBtn" onclick="handleLogin()"
-                            class="w-full bg-teal-600 text-white py-2 rounded-lg hover:bg-teal-700 font-semibold">
+                            class="w-full bg-indigo-600 text-white py-3 rounded-xl hover:bg-indigo-700 font-semibold text-lg transition-colors">
                             Login
                         </button>
-                        <div id="loginStatus"></div>
-                        <div class="mt-4 text-center">
-                            <a href="home.html" class="text-teal-600 hover:text-teal-800 text-sm">← Back to Home</a>
-                        </div>
+                        <div id="loginStatus" class="mt-4"></div>
+                        <p class="text-center text-gray-400 text-sm mt-6">© 2026 DRP & Co. LLP</p>
                     </div>
                 </div>
             `;
         }
 
-        function renderApp() {
-            const today = new Date().toISOString().split('T')[0];
-            const maxDate = new Date();
-            maxDate.setMonth(maxDate.getMonth() + 6);
-            const maxDateStr = maxDate.toISOString().split('T')[0];
-            const minDate = new Date();
-            minDate.setDate(minDate.getDate() - 7);
-            const minDateStr = minDate.toISOString().split('T')[0];
-
+        function renderDashboard() {
             return `
-                <div class="min-h-screen bg-gray-50">
-                    <!-- Header -->
-                    <div class="bg-teal-600 text-white p-4 shadow-md">
-                        <div class="max-w-6xl mx-auto flex justify-between items-center">
-                            <div>
-                                <h1 class="text-2xl font-bold">🏖️ Leave Management</h1>
-                                <p class="text-teal-100 text-sm">${employeeData['Employee Name']} | ${employeeData['Designation'] || ''}</p>
+                <div class="min-h-screen p-4 md:p-8">
+                    <div class="max-w-4xl mx-auto">
+                        <!-- Header -->
+                        <div class="bg-white rounded-2xl shadow-lg p-6 mb-8">
+                            <div class="flex justify-between items-center">
+                                <div>
+                                    <h1 class="text-3xl font-bold text-gray-800">Welcome back! 👋</h1>
+                                    <p class="text-gray-600 mt-1">${employeeData['Employee Name']} | ${employeeData['Designation'] || 'Employee'}</p>
+                                </div>
+                                <button onclick="handleLogout()" 
+                                    class="bg-red-500 text-white px-6 py-2 rounded-xl hover:bg-red-600 font-semibold transition-colors">
+                                    🚪 Logout
+                                </button>
                             </div>
-                            <a href="home.html" class="bg-teal-700 hover:bg-teal-800 px-4 py-2 rounded-lg text-sm font-semibold">
-                                ← Back to Home
+                        </div>
+
+                        <!-- Module Cards -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <!-- Timesheet Module -->
+                            <a href="timesheet.html" class="module-card bg-white rounded-2xl shadow-lg p-8 cursor-pointer block">
+                                <div class="text-center">
+                                    <div class="text-6xl mb-4">📋</div>
+                                    <h2 class="text-2xl font-bold text-gray-800 mb-2">Timesheet</h2>
+                                    <p class="text-gray-500">Log your daily work hours and expenses</p>
+                                </div>
+                                <div class="mt-6 bg-indigo-50 rounded-xl p-4 text-center">
+                                    <p class="text-indigo-600 font-semibold">Click to open →</p>
+                                </div>
                             </a>
-                        </div>
-                    </div>
 
-                    <div class="max-w-6xl mx-auto p-4 space-y-6">
-                        
-                        <!-- Leave Balance -->
-                        <div class="bg-white rounded-lg shadow-md p-6">
-                            <h2 class="text-xl font-bold text-gray-800 mb-4">📊 My Leave Balance</h2>
-                            <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
-                                <div class="bg-green-50 rounded-lg p-4 text-center">
-                                    <p class="text-3xl font-bold text-green-600">${leaveBalance?.plBalance || 0}</p>
-                                    <p class="text-sm text-gray-600">PL Available</p>
+                            <!-- Leave Module -->
+                            <a href="leave.html" class="module-card bg-white rounded-2xl shadow-lg p-8 cursor-pointer block relative">
+                                ${isApprover && pendingLeavesCount > 0 ? `
+                                    <div class="absolute -top-2 -right-2 bg-red-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm animate-pulse">
+                                        ${pendingLeavesCount}
+                                    </div>
+                                ` : ''}
+                                <div class="text-center">
+                                    <div class="text-6xl mb-4">🏖️</div>
+                                    <h2 class="text-2xl font-bold text-gray-800 mb-2">Leave Management</h2>
+                                    <p class="text-gray-500">Apply for leave & check balance</p>
                                 </div>
-                                <div class="bg-blue-50 rounded-lg p-4 text-center">
-                                    <p class="text-3xl font-bold text-blue-600">${leaveBalance?.plEarned || 0}</p>
-                                    <p class="text-sm text-gray-600">PL Earned</p>
+                                <div class="mt-6 bg-teal-50 rounded-xl p-4 text-center">
+                                    ${isApprover ? `
+                                        <p class="text-teal-600 font-semibold">
+                                            ${pendingLeavesCount > 0 ? `⚠️ ${pendingLeavesCount} pending approval(s)` : '✓ No pending approvals'}
+                                        </p>
+                                    ` : `
+                                        <p class="text-teal-600 font-semibold">Click to open →</p>
+                                    `}
                                 </div>
-                                <div class="bg-orange-50 rounded-lg p-4 text-center">
-                                    <p class="text-3xl font-bold text-orange-600">${leaveBalance?.plUsed || 0}</p>
-                                    <p class="text-sm text-gray-600">PL Used</p>
-                                </div>
-                                <div class="bg-purple-50 rounded-lg p-4 text-center">
-                                    <p class="text-3xl font-bold text-purple-600">${leaveBalance?.completedMonths || 0}</p>
-                                    <p class="text-sm text-gray-600">Months Service</p>
-                                </div>
-                                <div class="bg-gray-50 rounded-lg p-4 text-center">
-                                    <p class="text-3xl font-bold text-gray-600">${leaveBalance?.plMaxCap || 6}</p>
-                                    <p class="text-sm text-gray-600">Max PL Cap</p>
+                            </a>
+
+                            <!-- Future Module Placeholder -->
+                            <div class="module-card bg-gray-100 rounded-2xl shadow-lg p-8 opacity-50 cursor-not-allowed md:col-span-2">
+                                <div class="text-center">
+                                    <div class="text-6xl mb-4">🚀</div>
+                                    <h2 class="text-2xl font-bold text-gray-400 mb-2">More Coming Soon</h2>
+                                    <p class="text-gray-400">Additional modules will be added here</p>
                                 </div>
                             </div>
-                            <p class="text-xs text-gray-500 mt-3">📌 Policy: 1 PL per completed month of service, maximum cap of 6 days</p>
-                        </div>
-
-                        <!-- Apply Leave Form -->
-                        <div class="bg-white rounded-lg shadow-md p-6">
-                            <h2 class="text-xl font-bold text-gray-800 mb-4">➕ Apply for Leave</h2>
-                            <div class="grid md:grid-cols-2 gap-6">
-                                <div class="space-y-4">
-                                    <div>
-                                        <label class="block text-sm font-semibold text-gray-700 mb-2">Leave Type *</label>
-                                        <div class="space-y-2">
-                                            <label class="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                                                <input type="radio" name="leaveType" value="PL" class="mr-3">
-                                                <div>
-                                                    <span class="font-medium">Paid Leave (PL)</span>
-                                                    <p class="text-xs text-gray-500">Deducted from PL balance</p>
-                                                </div>
-                                            </label>
-                                            <label class="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                                                <input type="radio" name="leaveType" value="Comp Off" class="mr-3">
-                                                <div>
-                                                    <span class="font-medium">Comp Off</span>
-                                                    <p class="text-xs text-gray-500">Compensatory off (not deducted from PL)</p>
-                                                </div>
-                                            </label>
-                                        </div>
-                                        <p class="text-xs text-yellow-600 mt-2">⚠️ If PL balance is 0, leave will be auto-converted to LOP</p>
-                                    </div>
-                                    
-                                    <div>
-                                        <label class="block text-sm font-semibold text-gray-700 mb-2">Day Type *</label>
-                                        <div class="flex gap-4">
-                                            <label class="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer flex-1">
-                                                <input type="radio" name="dayType" value="Full Day" class="mr-2" checked>
-                                                <span>Full Day (6 hrs)</span>
-                                            </label>
-                                            <label class="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer flex-1">
-                                                <input type="radio" name="dayType" value="Half Day" class="mr-2">
-                                                <span>Half Day (3 hrs)</span>
-                                            </label>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <div class="space-y-4">
-                                    <div class="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label class="block text-sm font-semibold text-gray-700 mb-1">From Date *</label>
-                                            <input type="date" id="fromDate" min="${minDateStr}" max="${maxDateStr}" value="${today}"
-                                                class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500">
-                                        </div>
-                                        <div>
-                                            <label class="block text-sm font-semibold text-gray-700 mb-1">To Date *</label>
-                                            <input type="date" id="toDate" min="${minDateStr}" max="${maxDateStr}" value="${today}"
-                                                class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500">
-                                        </div>
-                                    </div>
-                                    <p class="text-xs text-gray-500">📅 Can apply: Past 7 days to 6 months ahead</p>
-                                    
-                                    <div>
-                                        <label class="block text-sm font-semibold text-gray-700 mb-1">Reason * <span class="font-normal text-gray-500">(min 3 words)</span></label>
-                                        <textarea id="reason" rows="3" placeholder="Please provide reason for leave..."
-                                            class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"></textarea>
-                                    </div>
-                                    
-                                    <button onclick="handleApplyLeave()" 
-                                        class="w-full bg-teal-600 text-white py-3 rounded-lg hover:bg-teal-700 font-semibold text-lg">
-                                        Submit Leave Application
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        ${isApprover && pendingLeaves.length > 0 ? `
-                        <!-- Pending Approvals (Approvers Only) -->
-                        <div class="bg-white rounded-lg shadow-md p-6 border-2 border-yellow-200">
-                            <h2 class="text-xl font-bold text-gray-800 mb-4">
-                                ⏳ Pending Approvals 
-                                <span class="bg-yellow-500 text-white text-sm px-2 py-1 rounded-full ml-2">${pendingLeaves.length}</span>
-                            </h2>
-                            <div class="space-y-4">
-                                ${pendingLeaves.map(leave => `
-                                    <div class="border-2 border-yellow-100 rounded-lg p-4 bg-yellow-50">
-                                        <div class="flex justify-between items-start mb-3">
-                                            <div>
-                                                <p class="font-bold text-lg">${leave['Employee Name']}</p>
-                                                <p class="text-sm text-gray-600">${leave['Employee Email']}</p>
-                                            </div>
-                                            <span class="status-pending px-3 py-1 rounded-full text-sm font-semibold">Pending</span>
-                                        </div>
-                                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">
-                                            <div class="bg-white p-2 rounded">
-                                                <span class="text-gray-500">Type:</span>
-                                                <span class="font-semibold ml-1">${leave['Leave Type']}</span>
-                                            </div>
-                                            <div class="bg-white p-2 rounded">
-                                                <span class="text-gray-500">Duration:</span>
-                                                <span class="font-semibold ml-1">${leave['Total Days']} ${leave['Day Type']}</span>
-                                            </div>
-                                            <div class="bg-white p-2 rounded">
-                                                <span class="text-gray-500">From:</span>
-                                                <span class="font-semibold ml-1">${formatDate(leave['From Date'])}</span>
-                                            </div>
-                                            <div class="bg-white p-2 rounded">
-                                                <span class="text-gray-500">To:</span>
-                                                <span class="font-semibold ml-1">${formatDate(leave['To Date'])}</span>
-                                            </div>
-                                        </div>
-                                        <div class="bg-white p-2 rounded mb-3">
-                                            <span class="text-gray-500">Reason:</span>
-                                            <span class="ml-1">${leave['Reason']}</span>
-                                        </div>
-                                        <div class="flex flex-col md:flex-row gap-2">
-                                            <input type="text" id="comments_${leave['Row ID']}" 
-                                                placeholder="Comments (optional for approve, required for reject)"
-                                                class="flex-1 px-3 py-2 border rounded-lg text-sm">
-                                            <button onclick="handleApproveLeave('${leave['Row ID']}')" 
-                                                class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 font-semibold">
-                                                ✓ Approve
-                                            </button>
-                                            <button onclick="handleRejectLeave('${leave['Row ID']}')" 
-                                                class="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 font-semibold">
-                                                ✗ Reject
-                                            </button>
-                                        </div>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                        ` : ''}
-
-                        <!-- My Leave Applications -->
-                        <div class="bg-white rounded-lg shadow-md p-6">
-                            <h2 class="text-xl font-bold text-gray-800 mb-4">📋 My Leave Applications</h2>
-                            ${myLeaves.length === 0 ? `
-                                <div class="text-center py-8 text-gray-500">
-                                    <div class="text-4xl mb-2">📭</div>
-                                    <p>No leave applications found</p>
-                                </div>
-                            ` : `
-                                <div class="overflow-x-auto">
-                                    <table class="w-full text-sm">
-                                        <thead class="bg-gray-100">
-                                            <tr>
-                                                <th class="text-left p-3">Date Range</th>
-                                                <th class="text-left p-3">Type</th>
-                                                <th class="text-left p-3">Days</th>
-                                                <th class="text-left p-3">Reason</th>
-                                                <th class="text-left p-3">Status</th>
-                                                <th class="text-left p-3">Actioned By</th>
-                                                <th class="text-left p-3">Action</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            ${myLeaves.map(leave => `
-                                                <tr class="border-b hover:bg-gray-50">
-                                                    <td class="p-3">
-                                                        <span class="font-medium">${formatDate(leave['From Date'])}</span>
-                                                        ${leave['From Date'] !== leave['To Date'] ? `<br><span class="text-gray-500">to ${formatDate(leave['To Date'])}</span>` : ''}
-                                                    </td>
-                                                    <td class="p-3">${leave['Leave Type']}</td>
-                                                    <td class="p-3">${leave['Total Days']} ${leave['Day Type']}</td>
-                                                    <td class="p-3 max-w-xs truncate" title="${leave['Reason']}">${leave['Reason']}</td>
-                                                    <td class="p-3">
-                                                        <span class="${getStatusClass(leave['Status'])} px-2 py-1 rounded-full text-xs font-semibold">
-                                                            ${leave['Status']}
-                                                        </span>
-                                                    </td>
-                                                    <td class="p-3">
-                                                        ${leave['Approver Name'] ? `
-                                                            <span class="font-medium">${leave['Approver Name']}</span>
-                                                            ${leave['Approver Comments'] ? `<br><span class="text-xs text-gray-500">"${leave['Approver Comments']}"</span>` : ''}
-                                                        ` : '-'}
-                                                    </td>
-                                                    <td class="p-3">
-                                                        ${leave['Status'] === 'Pending' ? `
-                                                            <button onclick="handleCancelLeave('${leave['Row ID']}')" 
-                                                                class="text-red-600 hover:text-red-800 font-semibold text-xs">
-                                                                Cancel
-                                                            </button>
-                                                        ` : '-'}
-                                                    </td>
-                                                </tr>
-                                            `).join('')}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            `}
                         </div>
 
                         <!-- Footer -->
-                        <div class="text-center text-gray-500 text-sm py-4">
-                            TimeWise Leave Management v1.0 | © 2026 DRP & Co. LLP
+                        <div class="text-center text-gray-400 text-sm mt-8">
+                            TimeWise v2.8 | © 2026 DRP & Co. LLP
                         </div>
                     </div>
                 </div>
@@ -614,43 +291,40 @@
         }
 
         function render() {
-            document.getElementById('app').innerHTML = isLoggedIn ? renderApp() : renderLogin();
+            document.getElementById('app').innerHTML = isLoggedIn ? renderDashboard() : renderLogin();
         }
 
-        // Initialize - Check for existing session
+        // ============================================
+        // INITIALIZE
+        // ============================================
         async function init() {
             const session = loadSession();
-            if (session && session.employeeEmail) {
-                // Restore session
+            if (session && session.employeeEmail && session.employeeData) {
+                showLoading('Restoring session...');
+                
                 employeeEmail = session.employeeEmail;
                 employeeData = session.employeeData;
-                isApprover = session.isApprover;
-                
-                // Show loading and load fresh data
-                document.getElementById('app').innerHTML = `
-                    <div class="min-h-screen bg-gray-50 flex items-center justify-center">
-                        <div class="text-center">
-                            <div class="loading-spinner mx-auto"></div>
-                            <p class="mt-4 text-gray-600">Loading leave data...</p>
-                        </div>
-                    </div>
-                `;
-                
-                try {
-                    await loadLeaveData();
-                    isLoggedIn = true;
-                    saveSession(); // Refresh timestamp
-                    render();
-                } catch (error) {
-                    // Session invalid, show login
-                    clearSession();
-                    render();
+                isApprover = session.isApprover || false;
+
+                // Get pending count for approvers
+                if (isApprover) {
+                    try {
+                        const pendingLeaves = await callAPI('getPendingLeaves');
+                        pendingLeavesCount = pendingLeaves.length;
+                    } catch (e) {
+                        pendingLeavesCount = 0;
+                    }
                 }
+
+                isLoggedIn = true;
+                saveSession(); // Refresh timestamp
+                hideLoading();
+                render();
             } else {
                 render();
             }
         }
-        
+
         init();
     </script>
 </body>
