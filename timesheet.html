@@ -130,7 +130,7 @@
         // ============================================
         // CONFIGURATION
         // ============================================
-        const API_URL = 'https://script.google.com/macros/s/AKfycbz6SLXDzJCrTBIaWBPfdDJCFkrT4tXLWMNeiYTZxyLSn30OvLZeo8TaxLtz1R5m7hy5og/exec';
+        const API_URL = 'https://script.google.com/macros/s/AKfycbwR-3nVGUCt2PXv3sDC_tewUnmzlj5r5Wt2Owpqek6yxhZNZpKBNEo9NVXG_whfgUP67Q/exec';
         
         // Session timeout settings (in milliseconds)
         const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
@@ -662,6 +662,11 @@
                 errors.push({ field: 'taskSelect', msg: 'Please select a task.' });
             } else if (!isTaskActive(task)) {
                 errors.push({ field: 'taskSelect', msg: 'Selected task is inactive.' });
+            }
+            
+            // v2.9: Block SELF + Leave combination - must use Leave Module
+            if (client === 'SELF' && task === 'Leave') {
+                errors.push({ field: 'taskSelect', msg: 'Please use the Leave Module to apply for leave. Direct entry not allowed.' });
             }
             
             // #21 - Duplicate check

@@ -59,7 +59,7 @@
         // ============================================
         // CONFIGURATION
         // ============================================
-        const API_URL = 'https://script.google.com/macros/s/AKfycbz6SLXDzJCrTBIaWBPfdDJCFkrT4tXLWMNeiYTZxyLSn30OvLZeo8TaxLtz1R5m7hy5og/exec';
+        const API_URL = 'https://script.google.com/macros/s/AKfycbwR-3nVGUCt2PXv3sDC_tewUnmzlj5r5Wt2Owpqek6yxhZNZpKBNEo9NVXG_whfgUP67Q/exec';
         
         // ============================================
         // STATE
@@ -70,6 +70,7 @@
         let leaveBalance = null;
         let myLeaves = [];
         let pendingLeaves = [];
+        let recentApprovedLeaves = []; // v2.9: For approvers to reject
         let approvers = [];
         let isApprover = false;
 
@@ -203,18 +204,24 @@
             myLeaves = leavesData;
 
             if (isApprover) {
-                pendingLeaves = await callAPI('getPendingLeaves');
+                const [pending, recentApproved] = await Promise.all([
+                    callAPI('getPendingLeaves'),
+                    callAPI('getRecentApprovedLeaves')
+                ]);
+                pendingLeaves = pending;
+                recentApprovedLeaves = recentApproved;
             }
         }
 
         function handleLogout() {
-            clearSession(); // Clear shared session
+            clearSession();
             isLoggedIn = false;
             employeeEmail = '';
             employeeData = null;
             leaveBalance = null;
             myLeaves = [];
             pendingLeaves = [];
+            recentApprovedLeaves = [];
             isApprover = false;
             render();
         }
@@ -328,6 +335,37 @@
 
                 await loadLeaveData();
                 hideLoading();
+                render();
+            } catch (error) {
+                hideLoading();
+                alert('Error: ' + error.message);
+            }
+        }
+
+        // v2.9: Reject an already approved leave (only for future dates)
+        async function handleRejectApprovedLeave(rowId) {
+            const comments = document.getElementById(`revoke_comments_${rowId}`)?.value || '';
+
+            if (!comments) {
+                alert('Please provide a reason for revoking this approval');
+                return;
+            }
+
+            if (!confirm('Are you sure you want to REVOKE this approved leave?\\n\\nThis will:\\n- Change status to Rejected\\n- Delete the auto-created timesheet entries')) return;
+
+            showLoading('Revoking approval...');
+
+            try {
+                await callAPI('rejectApprovedLeave', {
+                    rowId: rowId,
+                    approverEmail: employeeEmail,
+                    approverName: employeeData['Employee Name'],
+                    comments: comments
+                });
+
+                await loadLeaveData();
+                hideLoading();
+                alert('Approved leave has been revoked successfully!');
                 render();
             } catch (error) {
                 hideLoading();
@@ -540,6 +578,62 @@
                                             <button onclick="handleRejectLeave('${leave['Row ID']}')" 
                                                 class="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 font-semibold">
                                                 ✗ Reject
+                                            </button>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                        ` : ''}
+
+                        ${isApprover && recentApprovedLeaves.length > 0 ? `
+                        <!-- Recent Approved Leaves (Can be Revoked) - Approvers Only -->
+                        <div class="bg-white rounded-lg shadow-md p-6 border-2 border-green-200">
+                            <h2 class="text-xl font-bold text-gray-800 mb-4">
+                                ✅ Recently Approved (Revocable)
+                                <span class="bg-green-500 text-white text-sm px-2 py-1 rounded-full ml-2">${recentApprovedLeaves.length}</span>
+                            </h2>
+                            <p class="text-sm text-gray-500 mb-4">These leaves were approved in the last 7 days and are for future dates. You can revoke if needed.</p>
+                            <div class="space-y-4">
+                                ${recentApprovedLeaves.map(leave => `
+                                    <div class="border-2 border-green-100 rounded-lg p-4 bg-green-50">
+                                        <div class="flex justify-between items-start mb-3">
+                                            <div>
+                                                <p class="font-bold text-lg">${leave['Employee Name']}</p>
+                                                <p class="text-sm text-gray-600">${leave['Employee Email']}</p>
+                                            </div>
+                                            <span class="status-approved px-3 py-1 rounded-full text-sm font-semibold">Approved</span>
+                                        </div>
+                                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">
+                                            <div class="bg-white p-2 rounded">
+                                                <span class="text-gray-500">Type:</span>
+                                                <span class="font-semibold ml-1">${leave['Leave Type']}</span>
+                                            </div>
+                                            <div class="bg-white p-2 rounded">
+                                                <span class="text-gray-500">Duration:</span>
+                                                <span class="font-semibold ml-1">${leave['Total Days']} ${leave['Day Type']}</span>
+                                            </div>
+                                            <div class="bg-white p-2 rounded">
+                                                <span class="text-gray-500">From:</span>
+                                                <span class="font-semibold ml-1">${formatDate(leave['From Date'])}</span>
+                                            </div>
+                                            <div class="bg-white p-2 rounded">
+                                                <span class="text-gray-500">To:</span>
+                                                <span class="font-semibold ml-1">${formatDate(leave['To Date'])}</span>
+                                            </div>
+                                        </div>
+                                        <div class="bg-white p-2 rounded mb-3">
+                                            <span class="text-gray-500">Approved by:</span>
+                                            <span class="ml-1 font-medium">${leave['Approver Name']}</span>
+                                            <span class="text-gray-400 ml-2">on ${formatDate(leave['Actioned On'])}</span>
+                                        </div>
+                                        <div class="flex flex-col md:flex-row gap-2">
+                                            <input type="text" id="revoke_comments_${leave['Row ID']}" 
+                                                placeholder="Reason for revoking approval (required)"
+                                                class="flex-1 px-3 py-2 border rounded-lg text-sm">
+                                            <button onclick="handleRejectApprovedLeave('${leave['Row ID']}')" 
+                                                class="bg-orange-600 text-white px-6 py-2 rounded-lg hover:bg-orange-700 font-semibold">
+                                                ↩️ Revoke Approval
                                             </button>
                                         </div>
                                     </div>
