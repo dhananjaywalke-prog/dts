@@ -62,7 +62,7 @@
         // ============================================
         // CONFIGURATION
         // ============================================
-        const API_URL = 'https://script.google.com/macros/s/AKfycbz6SLXDzJCrTBIaWBPfdDJCFkrT4tXLWMNeiYTZxyLSn30OvLZeo8TaxLtz1R5m7hy5og/exec';
+        const API_URL = 'https://script.google.com/macros/s/AKfycbwDUtXFqFRygwVRBdBzg7EsMN2tFVImbhGPov3cVnfBy-CI368IIM6jDmtJOLsxcLglBA/exec';
         
         // ============================================
         // STATE
@@ -73,6 +73,7 @@
         let approvers = [];
         let isApprover = false;
         let pendingLeavesCount = 0;
+        let pendingExpensesCount = 0;
 
         // ============================================
         // UTILITY FUNCTIONS
@@ -166,8 +167,12 @@
 
                 // Get pending leaves count for approvers
                 if (isApprover) {
-                    const pendingLeaves = await callAPI('getPendingLeaves');
+                    const [pendingLeaves, pendingExpenses] = await Promise.all([
+                        callAPI('getPendingLeaves'),
+                        callAPI('getPendingExpenses')
+                    ]);
                     pendingLeavesCount = pendingLeaves.length;
+                    pendingExpensesCount = pendingExpenses.length;
                 }
 
                 isLoggedIn = true;
@@ -187,6 +192,7 @@
             employeeData = null;
             isApprover = false;
             pendingLeavesCount = 0;
+            pendingExpensesCount = 0;
             render();
         }
 
@@ -238,13 +244,13 @@
                         </div>
 
                         <!-- Module Cards -->
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             <!-- Timesheet Module -->
                             <a href="timesheet.html" class="module-card bg-white rounded-2xl shadow-lg p-8 cursor-pointer block">
                                 <div class="text-center">
                                     <div class="text-6xl mb-4">📋</div>
                                     <h2 class="text-2xl font-bold text-gray-800 mb-2">Timesheet</h2>
-                                    <p class="text-gray-500">Log your daily work hours and expenses</p>
+                                    <p class="text-gray-500">Log your daily work hours</p>
                                 </div>
                                 <div class="mt-6 bg-indigo-50 rounded-xl p-4 text-center">
                                     <p class="text-indigo-600 font-semibold">Click to open →</p>
@@ -260,13 +266,13 @@
                                 ` : ''}
                                 <div class="text-center">
                                     <div class="text-6xl mb-4">🏖️</div>
-                                    <h2 class="text-2xl font-bold text-gray-800 mb-2">Leave Management</h2>
+                                    <h2 class="text-2xl font-bold text-gray-800 mb-2">Leave</h2>
                                     <p class="text-gray-500">Apply for leave & check balance</p>
                                 </div>
                                 <div class="mt-6 bg-teal-50 rounded-xl p-4 text-center">
                                     ${isApprover ? `
                                         <p class="text-teal-600 font-semibold">
-                                            ${pendingLeavesCount > 0 ? `⚠️ ${pendingLeavesCount} pending approval(s)` : '✓ No pending approvals'}
+                                            ${pendingLeavesCount > 0 ? `⚠️ ${pendingLeavesCount} pending` : '✓ No pending'}
                                         </p>
                                     ` : `
                                         <p class="text-teal-600 font-semibold">Click to open →</p>
@@ -274,19 +280,33 @@
                                 </div>
                             </a>
 
-                            <!-- Future Module Placeholder -->
-                            <div class="module-card bg-gray-100 rounded-2xl shadow-lg p-8 opacity-50 cursor-not-allowed md:col-span-2">
+                            <!-- Expense Module (NEW) -->
+                            <a href="expenses.html" class="module-card bg-white rounded-2xl shadow-lg p-8 cursor-pointer block relative">
+                                ${isApprover && pendingExpensesCount > 0 ? `
+                                    <div class="absolute -top-2 -right-2 bg-red-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm animate-pulse">
+                                        ${pendingExpensesCount}
+                                    </div>
+                                ` : ''}
                                 <div class="text-center">
-                                    <div class="text-6xl mb-4">🚀</div>
-                                    <h2 class="text-2xl font-bold text-gray-400 mb-2">More Coming Soon</h2>
-                                    <p class="text-gray-400">Additional modules will be added here</p>
+                                    <div class="text-6xl mb-4">💰</div>
+                                    <h2 class="text-2xl font-bold text-gray-800 mb-2">Expenses</h2>
+                                    <p class="text-gray-500">Submit & track expenses</p>
                                 </div>
-                            </div>
+                                <div class="mt-6 bg-violet-50 rounded-xl p-4 text-center">
+                                    ${isApprover ? `
+                                        <p class="text-violet-600 font-semibold">
+                                            ${pendingExpensesCount > 0 ? `⚠️ ${pendingExpensesCount} pending` : '✓ No pending'}
+                                        </p>
+                                    ` : `
+                                        <p class="text-violet-600 font-semibold">Click to open →</p>
+                                    `}
+                                </div>
+                            </a>
                         </div>
 
                         <!-- Footer -->
                         <div class="text-center text-gray-400 text-sm mt-8">
-                            TimeWise v2.8 | © 2026 DRP & Co. LLP
+                            TimeWise v3.0 | © 2026 DRP & Co. LLP
                         </div>
                     </div>
                 </div>
@@ -312,10 +332,15 @@
                 // Get pending count for approvers
                 if (isApprover) {
                     try {
-                        const pendingLeaves = await callAPI('getPendingLeaves');
+                        const [pendingLeaves, pendingExpenses] = await Promise.all([
+                            callAPI('getPendingLeaves'),
+                            callAPI('getPendingExpenses')
+                        ]);
                         pendingLeavesCount = pendingLeaves.length;
+                        pendingExpensesCount = pendingExpenses.length;
                     } catch (e) {
                         pendingLeavesCount = 0;
+                        pendingExpensesCount = 0;
                     }
                 }
 
