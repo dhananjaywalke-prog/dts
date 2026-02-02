@@ -61,7 +61,8 @@
             try {
                 const [empData, approversData, expTypesData, clientsData] = await Promise.all([callAPI('getEmployee', { email: employeeEmail }), callAPI('getApprovers'), callAPI('getExpenseTypes'), callAPI('getClients')]);
                 employeeData = empData; approvers = approversData;
-                expenseTypes = expTypesData.filter(e => e['Expense Status'] === 'Active');
+                // Exps sheet doesn't have 'Expense Status' column - use all expense types
+                expenseTypes = expTypesData;
                 clients = clientsData.filter(c => c['Client Status'] === 'Active');
                 isApprover = approvers.some(a => a['Approver Email'] === employeeEmail);
                 await loadExpenseData(); isLoggedIn = true; saveSession(); render();
@@ -274,7 +275,8 @@
                 try {
                     employeeEmail = session.employeeEmail; employeeData = session.employeeData; isApprover = session.isApprover || false;
                     const [expTypesData, clientsData] = await Promise.all([callAPI('getExpenseTypes'), callAPI('getClients')]);
-                    expenseTypes = expTypesData.filter(e => e['Expense Status'] === 'Active');
+                    // Exps sheet doesn't have 'Expense Status' column - use all expense types
+                    expenseTypes = expTypesData;
                     clients = clientsData.filter(c => c['Client Status'] === 'Active');
                     await loadExpenseData(); isLoggedIn = true; saveSession(); render();
                 } catch (error) { console.error('Session restore error:', error); clearSession(); render(); }
