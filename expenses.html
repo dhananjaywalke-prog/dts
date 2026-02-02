@@ -60,10 +60,21 @@
             loginBtn.disabled = true; loginBtn.innerHTML = 'Logging in...';
             try {
                 const [empData, approversData, expTypesData, clientsData] = await Promise.all([callAPI('getEmployee', { email: employeeEmail }), callAPI('getApprovers'), callAPI('getExpenseTypes'), callAPI('getClients')]);
+                
+                // DEBUG: Log raw data to console
+                console.log('=== DEBUG: Raw API Data ===');
+                console.log('clientsData:', clientsData);
+                console.log('First client object:', clientsData[0]);
+                console.log('Client keys:', clientsData[0] ? Object.keys(clientsData[0]) : 'No clients');
+                
                 employeeData = empData; approvers = approversData;
                 // Exps sheet doesn't have 'Expense Status' column - use all expense types
                 expenseTypes = expTypesData;
                 clients = clientsData.filter(c => c['Client Status'] === 'Active');
+                
+                // DEBUG: Log filtered clients
+                console.log('Filtered clients:', clients);
+                console.log('=== END DEBUG ===');
                 isApprover = approvers.some(a => a['Approver Email'] === employeeEmail);
                 await loadExpenseData(); isLoggedIn = true; saveSession(); render();
             } catch (error) { loginBtn.disabled = false; loginBtn.innerHTML = 'Login'; statusDiv.innerHTML = `<p class="text-red-600 text-sm mt-2">❌ ${error.message}</p>`; }
@@ -275,9 +286,21 @@
                 try {
                     employeeEmail = session.employeeEmail; employeeData = session.employeeData; isApprover = session.isApprover || false;
                     const [expTypesData, clientsData] = await Promise.all([callAPI('getExpenseTypes'), callAPI('getClients')]);
+                    
+                    // DEBUG: Log raw data to console
+                    console.log('=== DEBUG (init): Raw API Data ===');
+                    console.log('clientsData:', clientsData);
+                    console.log('First client object:', clientsData[0]);
+                    console.log('Client keys:', clientsData[0] ? Object.keys(clientsData[0]) : 'No clients');
+                    
                     // Exps sheet doesn't have 'Expense Status' column - use all expense types
                     expenseTypes = expTypesData;
                     clients = clientsData.filter(c => c['Client Status'] === 'Active');
+                    
+                    // DEBUG: Log filtered clients
+                    console.log('Filtered clients:', clients);
+                    console.log('=== END DEBUG ===');
+                    
                     await loadExpenseData(); isLoggedIn = true; saveSession(); render();
                 } catch (error) { console.error('Session restore error:', error); clearSession(); render(); }
             } else { render(); }
