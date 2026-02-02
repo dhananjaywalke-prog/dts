@@ -60,14 +60,6 @@
             loginBtn.disabled = true; loginBtn.innerHTML = 'Logging in...';
             try {
                 const [empData, approversData, expTypesData, clientsData] = await Promise.all([callAPI('getEmployee', { email: employeeEmail }), callAPI('getApprovers'), callAPI('getExpenseTypes'), callAPI('getClients')]);
-                
-                // DEBUG: Show actual column names
-                console.log('=== CLIENT COLUMN DEBUG ===');
-                if (clientsData[0]) {
-                    console.log('All columns in Clients sheet:', Object.keys(clientsData[0]));
-                    console.log('First client full data:', JSON.stringify(clientsData[0], null, 2));
-                }
-                
                 employeeData = empData; approvers = approversData;
                 expenseTypes = expTypesData;
                 clients = clientsData.filter(c => c['Client Status'] === 'Active');
@@ -192,7 +184,7 @@
                                     <label class="block text-sm font-semibold text-gray-700 mb-1">Select Client *</label>
                                     <select id="clientSelect" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-violet-500">
                                         <option value="">-- Select Client --</option>
-                                        ${clients.filter(c => c['Client Name'] !== 'SELF').map(c => `<option value="${c['Client Name']}" ${editingExpense && editingExpense['Client Name'] === c['Client Name'] ? 'selected' : ''}>${c['Client Name']}</option>`).join('')}
+                                        ${clients.filter(c => c['Client Short Name'] !== 'SELF').map(c => `<option value="${c['Client Short Name']}" ${editingExpense && editingExpense['Client Name'] === c['Client Short Name'] ? 'selected' : ''}>${c['Client Short Name']}</option>`).join('')}
                                     </select>
                                 </div>
                             </div>
@@ -282,7 +274,7 @@
                 try {
                     employeeEmail = session.employeeEmail; employeeData = session.employeeData; isApprover = session.isApprover || false;
                     const [expTypesData, clientsData] = await Promise.all([callAPI('getExpenseTypes'), callAPI('getClients')]);
-                    expenseTypes = expTypesData.filter(e => e['Expense Status'] === 'Active');
+                    expenseTypes = expTypesData;
                     clients = clientsData.filter(c => c['Client Status'] === 'Active');
                     await loadExpenseData(); isLoggedIn = true; saveSession(); render();
                 } catch (error) { console.error('Session restore error:', error); clearSession(); render(); }
