@@ -27,8 +27,9 @@
     </div>
     <div id="app"></div>
 
+    <script src="config.js"></script>
     <script>
-        const API_URL = 'https://script.google.com/macros/s/AKfycby0qtzGR-5XLgouSdBLUsmj-aBhW0MMIxXgjY7l5QlEa1ONMRaB4-6yWzG4wIgKSxV5_w/exec';
+        // API_URL loaded from config.js
         
         let isLoggedIn = false, employeeEmail = '', employeeData = null;
         let expenseTypes = [], clients = [], myExpenses = [], pendingExpenses = [], allExpenses = [];
@@ -59,12 +60,20 @@
             if (!employeeEmail || !employeeEmail.includes('@')) { statusDiv.innerHTML = '<p class="text-red-600 text-sm mt-2">Please enter a valid email</p>'; return; }
             loginBtn.disabled = true; loginBtn.innerHTML = 'Logging in...';
             try {
-                const [empData, approversData, expTypesData, clientsData] = await Promise.all([callAPI('getEmployee', { email: employeeEmail }), callAPI('getApprovers'), callAPI('getExpenseTypes'), callAPI('getClients')]);
-                employeeData = empData; approvers = approversData;
-                expenseTypes = expTypesData;
-                clients = clientsData.filter(c => c['Client Status'] === 'Active');
-                isApprover = approvers.some(a => a['Approver Email'] === employeeEmail);
-                await loadExpenseData(); isLoggedIn = true; saveSession(); render();
+                // v3.1: Single API call instead of 6 separate calls
+                const initData = await callAPI('initExpense', { email: employeeEmail });
+                
+                employeeData = initData.employee;
+                approvers = initData.approvers;
+                isApprover = initData.isApprover;
+                expenseTypes = initData.expenseTypes;
+                clients = initData.clients.filter(c => c['Client Status'] === 'Active');
+                expenseSummary = initData.summary;
+                myExpenses = initData.expenses;
+                pendingExpenses = initData.pendingExpenses || [];
+                allExpenses = initData.allExpenses || [];
+                
+                isLoggedIn = true; saveSession(); render();
             } catch (error) { loginBtn.disabled = false; loginBtn.innerHTML = 'Login'; statusDiv.innerHTML = `<p class="text-red-600 text-sm mt-2">❌ ${error.message}</p>`; }
         }
 
@@ -272,11 +281,22 @@
             if (session && session.employeeEmail && session.employeeData) {
                 document.getElementById('app').innerHTML = `<div class="min-h-screen bg-gray-50 flex items-center justify-center"><div class="text-center"><div class="loading-spinner mx-auto"></div><p class="mt-4 text-gray-600">Loading expense data...</p></div></div>`;
                 try {
-                    employeeEmail = session.employeeEmail; employeeData = session.employeeData; isApprover = session.isApprover || false;
-                    const [expTypesData, clientsData] = await Promise.all([callAPI('getExpenseTypes'), callAPI('getClients')]);
-                    expenseTypes = expTypesData;
-                    clients = clientsData.filter(c => c['Client Status'] === 'Active');
-                    await loadExpenseData(); isLoggedIn = true; saveSession(); render();
+                    employeeEmail = session.employeeEmail;
+                    employeeData = session.employeeData;
+                    isApprover = session.isApprover || false;
+                    
+                    // v3.1: Single API call for refresh
+                    const initData = await callAPI('initExpense', { email: employeeEmail });
+                    
+                    expenseTypes = initData.expenseTypes;
+                    clients = initData.clients.filter(c => c['Client Status'] === 'Active');
+                    expenseSummary = initData.summary;
+                    myExpenses = initData.expenses;
+                    pendingExpenses = initData.pendingExpenses || [];
+                    allExpenses = initData.allExpenses || [];
+                    isApprover = initData.isApprover;
+                    
+                    isLoggedIn = true; saveSession(); render();
                 } catch (error) { console.error('Session restore error:', error); clearSession(); render(); }
             } else { render(); }
         }
