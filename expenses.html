@@ -4,10 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
     <title>TimeWise - Expenses</title>
-    <script src="https://cdn.tailwindcss.com?v=3.0"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 9999; }
         .loading-spinner { width: 50px; height: 50px; border: 4px solid #f3f3f3; border-top: 4px solid #8B5CF6; border-radius: 50%; animation: spin 1s linear infinite; }
@@ -16,6 +14,7 @@
         .status-approved { background-color: #D1FAE5; color: #065F46; }
         .status-rejected { background-color: #FEE2E2; color: #991B1B; }
         .status-cancelled { background-color: #F3F4F6; color: #4B5563; }
+        .edit-field { background-color: #FEF3C7; border: 2px solid #F59E0B !important; }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -29,12 +28,10 @@
 
     <script src="config.js"></script>
     <script>
-        // API_URL loaded from config.js
-        
         let isLoggedIn = false, employeeEmail = '', employeeData = null;
         let expenseTypes = [], clients = [], myExpenses = [], pendingExpenses = [], allExpenses = [];
         let expenseSummary = { pending: 0, approved: 0, rejected: 0 };
-        let approvers = [], isApprover = false, editingExpense = null;
+        let isApprover = false, editingExpense = null, editingApproval = null;
 
         function saveSession() { localStorage.setItem('timewise_session', JSON.stringify({ employeeEmail, employeeData, isApprover, timestamp: Date.now() })); }
         function loadSession() { try { const s = JSON.parse(localStorage.getItem('timewise_session')); if (s && (Date.now() - s.timestamp) < 30*60*1000) return s; localStorage.removeItem('timewise_session'); } catch(e){} return null; }
@@ -58,13 +55,10 @@
             const input = document.getElementById('emailInput'), statusDiv = document.getElementById('loginStatus'), loginBtn = document.getElementById('loginBtn');
             employeeEmail = input.value.trim().toLowerCase();
             if (!employeeEmail || !employeeEmail.includes('@')) { statusDiv.innerHTML = '<p class="text-red-600 text-sm mt-2">Please enter a valid email</p>'; return; }
-            loginBtn.disabled = true; loginBtn.innerHTML = 'Logging in...';
+            loginBtn.disabled = true; loginBtn.innerHTML = '<span class="inline-block animate-spin mr-2">⏳</span> Logging in...';
             try {
-                // v3.1: Single API call instead of 6 separate calls
                 const initData = await callAPI('initExpense', { email: employeeEmail });
-                
                 employeeData = initData.employee;
-                approvers = initData.approvers;
                 isApprover = initData.isApprover;
                 expenseTypes = initData.expenseTypes;
                 clients = initData.clients.filter(c => c['Client Status'] === 'Active');
@@ -72,18 +66,23 @@
                 myExpenses = initData.expenses;
                 pendingExpenses = initData.pendingExpenses || [];
                 allExpenses = initData.allExpenses || [];
-                
                 isLoggedIn = true; saveSession(); render();
             } catch (error) { loginBtn.disabled = false; loginBtn.innerHTML = 'Login'; statusDiv.innerHTML = `<p class="text-red-600 text-sm mt-2">❌ ${error.message}</p>`; }
         }
 
-        async function loadExpenseData() {
-            const [summaryData, expensesData] = await Promise.all([callAPI('getExpenseSummary', { email: employeeEmail }), callAPI('getMyExpenses', { email: employeeEmail })]);
-            expenseSummary = summaryData; myExpenses = expensesData;
-            if (isApprover) { const [pending, all] = await Promise.all([callAPI('getPendingExpenses'), callAPI('getAllExpenses')]); pendingExpenses = pending; allExpenses = all; }
+        async function refreshData() {
+            showLoading('Refreshing...');
+            try {
+                const initData = await callAPI('initExpense', { email: employeeEmail });
+                expenseSummary = initData.summary;
+                myExpenses = initData.expenses;
+                pendingExpenses = initData.pendingExpenses || [];
+                allExpenses = initData.allExpenses || [];
+                hideLoading(); render();
+            } catch (error) { hideLoading(); alert('Error refreshing: ' + error.message); }
         }
 
-        function handleLogout() { clearSession(); isLoggedIn = false; employeeEmail = ''; employeeData = null; myExpenses = []; pendingExpenses = []; isApprover = false; editingExpense = null; render(); }
+        function handleLogout() { clearSession(); isLoggedIn = false; employeeEmail = ''; employeeData = null; myExpenses = []; pendingExpenses = []; isApprover = false; editingExpense = null; editingApproval = null; render(); }
 
         async function handleSubmitExpense() {
             const date = document.getElementById('expenseDate')?.value, expenseType = document.getElementById('expenseType')?.value;
@@ -97,14 +96,16 @@
             if (!reimbursementBy) { alert('Please select who will reimburse'); return; }
             if (reimbursementBy === 'Client' && !clientName) { alert('Please select a client'); return; }
             if (!receiptReference || receiptReference.length < 3) { alert('Receipt reference is required'); return; }
-            showLoading(editingExpense ? 'Updating expense...' : 'Submitting expense...');
+            showLoading(editingExpense ? 'Updating...' : 'Submitting...');
             try {
                 if (editingExpense) {
                     await callAPI('updateExpense', { expense: { rowId: editingExpense['Row ID'], employeeEmail, date, expenseType, amount: parseFloat(amount), description, reimbursementBy, clientName, receiptReference } });
                 } else {
                     await callAPI('submitExpense', { expense: { employeeEmail, employeeName: employeeData['Employee Name'], date, expenseType, amount: parseFloat(amount), description, reimbursementBy, clientName, receiptReference } });
                 }
-                await loadExpenseData(); hideLoading(); const wasEditing = editingExpense; editingExpense = null; alert(wasEditing ? 'Expense updated!' : 'Expense submitted successfully!'); render();
+                const wasEditing = editingExpense; editingExpense = null;
+                await refreshData();
+                alert(wasEditing ? 'Expense updated!' : 'Expense submitted!');
             } catch (error) { hideLoading(); alert('Error: ' + error.message); }
         }
 
@@ -112,16 +113,26 @@
         function handleCancelEdit() { editingExpense = null; render(); }
 
         async function handleCancelExpense(rowId) {
-            if (!confirm('Are you sure you want to cancel this expense?')) return;
+            if (!confirm('Cancel this expense?')) return;
             showLoading('Cancelling...');
-            try { await callAPI('cancelExpense', { rowId, email: employeeEmail }); await loadExpenseData(); hideLoading(); render(); }
+            try { await callAPI('cancelExpense', { rowId, email: employeeEmail }); await refreshData(); }
             catch (error) { hideLoading(); alert('Error: ' + error.message); }
         }
 
+        function handleEditBeforeApproval(exp) { editingApproval = JSON.parse(JSON.stringify(exp)); render(); }
+        function handleCancelApprovalEdit() { editingApproval = null; render(); }
+
         async function handleApproveExpense(rowId) {
             const comments = document.getElementById(`exp_comments_${rowId}`)?.value || '';
+            let updates = null;
+            if (editingApproval && editingApproval['Row ID'] === rowId) {
+                const newExpenseType = document.getElementById(`edit_expType_${rowId}`)?.value;
+                const newReimbursementBy = document.querySelector(`input[name="edit_reimburse_${rowId}"]:checked`)?.value;
+                const newClientName = document.getElementById(`edit_client_${rowId}`)?.value || '';
+                updates = { expenseType: newExpenseType, reimbursementBy: newReimbursementBy, clientName: newReimbursementBy === 'Client' ? newClientName : '' };
+            }
             showLoading('Approving...');
-            try { await callAPI('approveExpense', { rowId, approverEmail: employeeEmail, approverName: employeeData['Employee Name'], comments }); await loadExpenseData(); hideLoading(); alert('Expense approved!'); render(); }
+            try { await callAPI('approveExpense', { rowId, approverEmail: employeeEmail, approverName: employeeData['Employee Name'], comments, updates }); editingApproval = null; await refreshData(); alert('Expense approved!'); }
             catch (error) { hideLoading(); alert('Error: ' + error.message); }
         }
 
@@ -130,11 +141,12 @@
             if (!comments) { alert('Please provide a reason for rejection'); return; }
             if (!confirm('Reject this expense?')) return;
             showLoading('Rejecting...');
-            try { await callAPI('rejectExpense', { rowId, approverEmail: employeeEmail, approverName: employeeData['Employee Name'], comments }); await loadExpenseData(); hideLoading(); render(); }
+            try { await callAPI('rejectExpense', { rowId, approverEmail: employeeEmail, approverName: employeeData['Employee Name'], comments }); editingApproval = null; await refreshData(); }
             catch (error) { hideLoading(); alert('Error: ' + error.message); }
         }
 
         function handleReimbursementChange() { const r = document.querySelector('input[name="reimbursementBy"]:checked')?.value; const d = document.getElementById('clientSelectDiv'); if (d) d.style.display = r === 'Client' ? 'block' : 'none'; }
+        function handleApprovalReimbursementChange(rowId) { const r = document.querySelector(`input[name="edit_reimburse_${rowId}"]:checked`)?.value; const d = document.getElementById(`edit_clientDiv_${rowId}`); if (d) d.style.display = r === 'Client' ? 'block' : 'none'; }
 
         function renderLogin() {
             return `<div class="min-h-screen bg-gradient-to-br from-purple-50 to-violet-100 flex items-center justify-center p-4">
@@ -147,20 +159,80 @@
                 </div></div>`;
         }
 
+        function renderPendingExpenseCard(exp) {
+            const isEditing = editingApproval && editingApproval['Row ID'] === exp['Row ID'];
+            if (isEditing) {
+                return `<div class="border-2 border-orange-400 rounded-lg p-4 bg-orange-50">
+                    <div class="flex justify-between items-start mb-3">
+                        <div><p class="font-bold text-lg">${exp['Employee Name']}</p><p class="text-sm text-gray-600">${exp['Employee Email']}</p></div>
+                        <div class="text-right"><p class="text-2xl font-bold text-violet-600">${formatCurrency(exp.Amount)}</p><span class="bg-orange-500 text-white px-2 py-1 rounded-full text-xs font-semibold">✏️ Editing</span></div>
+                    </div>
+                    <div class="bg-white rounded-lg p-4 mb-3 space-y-3">
+                        <p class="text-sm font-semibold text-orange-600">✏️ Edit before approval:</p>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div><label class="block text-xs font-semibold text-gray-600 mb-1">Expense Type</label>
+                                <select id="edit_expType_${exp['Row ID']}" class="w-full px-2 py-1 border-2 border-orange-300 rounded edit-field text-sm">
+                                    ${expenseTypes.map(e => `<option value="${e['Expense Type']}" ${exp['Expense Type'] === e['Expense Type'] ? 'selected' : ''}>${e['Expense Type']}</option>`).join('')}
+                                </select></div>
+                            <div><label class="block text-xs font-semibold text-gray-600 mb-1">Date</label><p class="px-2 py-1 bg-gray-100 rounded text-sm">${formatDate(exp.Date)}</p></div>
+                        </div>
+                        <div><label class="block text-xs font-semibold text-gray-600 mb-1">Reimbursement By</label>
+                            <div class="flex gap-2">
+                                <label class="flex items-center px-3 py-1 border-2 border-orange-300 rounded edit-field cursor-pointer text-sm"><input type="radio" name="edit_reimburse_${exp['Row ID']}" value="DRP & Co. LLP" ${exp['Reimbursement By'] === 'DRP & Co. LLP' ? 'checked' : ''} onchange="handleApprovalReimbursementChange('${exp['Row ID']}')" class="mr-1"><span>DRP & Co. LLP</span></label>
+                                <label class="flex items-center px-3 py-1 border-2 border-orange-300 rounded edit-field cursor-pointer text-sm"><input type="radio" name="edit_reimburse_${exp['Row ID']}" value="Client" ${exp['Reimbursement By'] === 'Client' ? 'checked' : ''} onchange="handleApprovalReimbursementChange('${exp['Row ID']}')" class="mr-1"><span>Client</span></label>
+                            </div></div>
+                        <div id="edit_clientDiv_${exp['Row ID']}" style="display: ${exp['Reimbursement By'] === 'Client' ? 'block' : 'none'}">
+                            <label class="block text-xs font-semibold text-gray-600 mb-1">Select Client</label>
+                            <select id="edit_client_${exp['Row ID']}" class="w-full px-2 py-1 border-2 border-orange-300 rounded edit-field text-sm">
+                                <option value="">-- Select --</option>
+                                ${clients.filter(c => c['Client Short Name'] !== 'SELF').map(c => `<option value="${c['Client Short Name']}" ${exp['Client Name'] === c['Client Short Name'] ? 'selected' : ''}>${c['Client Short Name']}</option>`).join('')}
+                            </select></div>
+                        <div><label class="block text-xs font-semibold text-gray-600 mb-1">Description</label><p class="px-2 py-1 bg-gray-100 rounded text-sm">${exp.Description}</p></div>
+                        <div><label class="block text-xs font-semibold text-gray-600 mb-1">Receipt</label><p class="px-2 py-1 bg-gray-100 rounded text-sm">${exp['Receipt Reference']}</p></div>
+                    </div>
+                    <div class="flex flex-col gap-2">
+                        <input type="text" id="exp_comments_${exp['Row ID']}" placeholder="Comments (optional)" class="w-full px-3 py-2 border rounded-lg text-sm">
+                        <div class="flex gap-2">
+                            <button onclick="handleApproveExpense('${exp['Row ID']}')" class="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-semibold">✓ Approve with Changes</button>
+                            <button onclick="handleCancelApprovalEdit()" class="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 font-semibold">Cancel</button>
+                        </div>
+                    </div>
+                </div>`;
+            }
+            return `<div class="border-2 border-yellow-100 rounded-lg p-4 bg-yellow-50">
+                <div class="flex justify-between items-start mb-3">
+                    <div><p class="font-bold text-lg">${exp['Employee Name']}</p><p class="text-sm text-gray-600">${exp['Employee Email']}</p></div>
+                    <div class="text-right"><p class="text-2xl font-bold text-violet-600">${formatCurrency(exp.Amount)}</p><span class="status-pending px-2 py-1 rounded-full text-xs font-semibold">Pending</span></div>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">
+                    <div class="bg-white p-2 rounded"><span class="text-gray-500">Date:</span> <span class="font-semibold">${formatDate(exp.Date)}</span></div>
+                    <div class="bg-white p-2 rounded"><span class="text-gray-500">Type:</span> <span class="font-semibold">${exp['Expense Type']}</span></div>
+                    <div class="bg-white p-2 rounded"><span class="text-gray-500">Reimburse:</span> <span class="font-semibold">${exp['Reimbursement By']}</span></div>
+                    <div class="bg-white p-2 rounded"><span class="text-gray-500">Receipt:</span> <span class="font-semibold">${exp['Receipt Reference']}</span></div>
+                </div>
+                ${exp['Client Name'] ? `<div class="bg-white p-2 rounded mb-3 text-sm"><span class="text-gray-500">Client:</span> <span class="font-semibold">${exp['Client Name']}</span></div>` : ''}
+                <div class="bg-white p-2 rounded mb-3 text-sm"><span class="text-gray-500">Description:</span> ${exp.Description}</div>
+                <div class="flex flex-col md:flex-row gap-2">
+                    <input type="text" id="exp_comments_${exp['Row ID']}" placeholder="Comments (optional for approve, required for reject)" class="flex-1 px-3 py-2 border rounded-lg text-sm">
+                    <button onclick="handleEditBeforeApproval(${JSON.stringify(exp).replace(/"/g, '&quot;')})" class="bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 font-semibold">✏️ Edit</button>
+                    <button onclick="handleApproveExpense('${exp['Row ID']}')" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-semibold">✓ Approve</button>
+                    <button onclick="handleRejectExpense('${exp['Row ID']}')" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 font-semibold">✗ Reject</button>
+                </div>
+            </div>`;
+        }
+
         function renderApp() {
             const today = new Date().toISOString().split('T')[0];
             const minDate = new Date(); minDate.setDate(minDate.getDate() - 7);
             const minDateStr = minDate.toISOString().split('T')[0];
             const editDate = editingExpense?.Date ? (typeof editingExpense.Date === 'string' && editingExpense.Date.includes('/') ? '' : editingExpense.Date.split('T')[0]) : today;
-
             return `<div class="min-h-screen bg-gray-50">
                 <div class="bg-violet-600 text-white p-4 shadow-md">
                     <div class="max-w-6xl mx-auto flex justify-between items-center">
                         <div><h1 class="text-2xl font-bold">💰 Expense Management</h1><p class="text-violet-100 text-sm">${employeeData['Employee Name']} | ${employeeData['Designation'] || ''}</p></div>
-                        <a href="home.html" class="bg-violet-700 hover:bg-violet-800 px-4 py-2 rounded-lg text-sm font-semibold">← Back to Home</a>
+                        <a href="home.html" class="bg-violet-700 hover:bg-violet-800 px-4 py-2 rounded-lg text-sm font-semibold">← Home</a>
                     </div>
                 </div>
-
                 <div class="max-w-6xl mx-auto p-4 space-y-6">
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div class="bg-white rounded-xl shadow-md p-4 text-center"><p class="text-2xl font-bold text-yellow-600">${formatCurrency(expenseSummary.pending)}</p><p class="text-sm text-gray-500">Pending</p></div>
@@ -168,108 +240,75 @@
                         <div class="bg-white rounded-xl shadow-md p-4 text-center"><p class="text-2xl font-bold text-red-600">${formatCurrency(expenseSummary.rejected)}</p><p class="text-sm text-gray-500">Rejected</p></div>
                         <div class="bg-white rounded-xl shadow-md p-4 text-center"><p class="text-2xl font-bold text-violet-600">${formatCurrency(expenseSummary.pending + expenseSummary.approved)}</p><p class="text-sm text-gray-500">Total Claims</p></div>
                     </div>
-
                     <div id="expenseForm" class="bg-white rounded-xl shadow-md p-6">
                         <h2 class="text-xl font-bold text-gray-800 mb-4">${editingExpense ? '✏️ Edit Expense' : '➕ Submit New Expense'}</h2>
                         <div class="grid md:grid-cols-2 gap-6">
                             <div class="space-y-4">
                                 <div class="grid grid-cols-2 gap-4">
-                                    <div><label class="block text-sm font-semibold text-gray-700 mb-1">Date *</label><input type="date" id="expenseDate" min="${minDateStr}" max="${today}" value="${editDate}" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-violet-500"></div>
-                                    <div><label class="block text-sm font-semibold text-gray-700 mb-1">Amount (₹) *</label><input type="number" id="expenseAmount" min="1" step="0.01" placeholder="0.00" value="${editingExpense ? editingExpense.Amount : ''}" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-violet-500"></div>
+                                    <div><label class="block text-sm font-semibold text-gray-700 mb-1">Date *</label><input type="date" id="expenseDate" min="${minDateStr}" max="${today}" value="${editDate}" class="w-full px-3 py-2 border rounded-lg"></div>
+                                    <div><label class="block text-sm font-semibold text-gray-700 mb-1">Amount (₹) *</label><input type="number" id="expenseAmount" min="1" step="0.01" placeholder="0.00" value="${editingExpense ? editingExpense.Amount : ''}" class="w-full px-3 py-2 border rounded-lg"></div>
                                 </div>
                                 <div><label class="block text-sm font-semibold text-gray-700 mb-1">Expense Type *</label>
-                                    <select id="expenseType" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-violet-500">
+                                    <select id="expenseType" class="w-full px-3 py-2 border rounded-lg">
                                         <option value="">-- Select Type --</option>
                                         ${expenseTypes.map(e => `<option value="${e['Expense Type']}" ${editingExpense && editingExpense['Expense Type'] === e['Expense Type'] ? 'selected' : ''}>${e['Expense Type']}</option>`).join('')}
-                                    </select>
-                                </div>
+                                    </select></div>
                                 <div><label class="block text-sm font-semibold text-gray-700 mb-2">Reimbursement By *</label>
                                     <div class="flex gap-4">
                                         <label class="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer flex-1"><input type="radio" name="reimbursementBy" value="DRP & Co. LLP" ${!editingExpense || editingExpense['Reimbursement By'] === 'DRP & Co. LLP' ? 'checked' : ''} onchange="handleReimbursementChange()" class="mr-2"><span>DRP & Co. LLP</span></label>
                                         <label class="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer flex-1"><input type="radio" name="reimbursementBy" value="Client" ${editingExpense && editingExpense['Reimbursement By'] === 'Client' ? 'checked' : ''} onchange="handleReimbursementChange()" class="mr-2"><span>Client</span></label>
-                                    </div>
-                                </div>
+                                    </div></div>
                                 <div id="clientSelectDiv" style="display: ${editingExpense && editingExpense['Reimbursement By'] === 'Client' ? 'block' : 'none'}">
                                     <label class="block text-sm font-semibold text-gray-700 mb-1">Select Client *</label>
-                                    <select id="clientSelect" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-violet-500">
+                                    <select id="clientSelect" class="w-full px-3 py-2 border rounded-lg">
                                         <option value="">-- Select Client --</option>
                                         ${clients.filter(c => c['Client Short Name'] !== 'SELF').map(c => `<option value="${c['Client Short Name']}" ${editingExpense && editingExpense['Client Name'] === c['Client Short Name'] ? 'selected' : ''}>${c['Client Short Name']}</option>`).join('')}
-                                    </select>
-                                </div>
+                                    </select></div>
                             </div>
                             <div class="space-y-4">
-                                <div><label class="block text-sm font-semibold text-gray-700 mb-1">Description * <span class="font-normal text-gray-500">(min 10 chars)</span></label><textarea id="expenseDescription" rows="3" placeholder="Detailed description of expense..." class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-violet-500">${editingExpense ? editingExpense.Description : ''}</textarea></div>
-                                <div><label class="block text-sm font-semibold text-gray-700 mb-1">Receipt Reference * <span class="font-normal text-gray-500">(Bill/Invoice No.)</span></label><input type="text" id="receiptReference" placeholder="e.g., INV-2026-001" value="${editingExpense ? editingExpense['Receipt Reference'] : ''}" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-violet-500"></div>
+                                <div><label class="block text-sm font-semibold text-gray-700 mb-1">Description * <span class="font-normal text-gray-500">(min 10 chars)</span></label><textarea id="expenseDescription" rows="3" placeholder="Detailed description..." class="w-full px-3 py-2 border rounded-lg">${editingExpense ? editingExpense.Description : ''}</textarea></div>
+                                <div><label class="block text-sm font-semibold text-gray-700 mb-1">Receipt Reference *</label><input type="text" id="receiptReference" placeholder="e.g., INV-2026-001" value="${editingExpense ? editingExpense['Receipt Reference'] : ''}" class="w-full px-3 py-2 border rounded-lg"></div>
                                 <div class="flex gap-2">
-                                    <button onclick="handleSubmitExpense()" class="flex-1 bg-violet-600 text-white py-3 rounded-lg hover:bg-violet-700 font-semibold">${editingExpense ? '💾 Update Expense' : '📤 Submit Expense'}</button>
+                                    <button onclick="handleSubmitExpense()" class="flex-1 bg-violet-600 text-white py-3 rounded-lg hover:bg-violet-700 font-semibold">${editingExpense ? '💾 Update' : '📤 Submit'}</button>
                                     ${editingExpense ? `<button onclick="handleCancelEdit()" class="px-6 bg-gray-500 text-white py-3 rounded-lg hover:bg-gray-600 font-semibold">Cancel</button>` : ''}
                                 </div>
                                 <p class="text-xs text-gray-500">📅 Can submit expenses from last 7 days only</p>
                             </div>
                         </div>
                     </div>
-
                     ${isApprover && pendingExpenses.length > 0 ? `
                     <div class="bg-white rounded-xl shadow-md p-6 border-2 border-yellow-200">
                         <h2 class="text-xl font-bold text-gray-800 mb-4">⏳ Pending Approvals <span class="bg-yellow-500 text-white text-sm px-2 py-1 rounded-full ml-2">${pendingExpenses.length}</span></h2>
-                        <div class="space-y-4">
-                            ${pendingExpenses.map(exp => `
-                                <div class="border-2 border-yellow-100 rounded-lg p-4 bg-yellow-50">
-                                    <div class="flex justify-between items-start mb-3">
-                                        <div><p class="font-bold text-lg">${exp['Employee Name']}</p><p class="text-sm text-gray-600">${exp['Employee Email']}</p></div>
-                                        <div class="text-right"><p class="text-2xl font-bold text-violet-600">${formatCurrency(exp.Amount)}</p><span class="status-pending px-2 py-1 rounded-full text-xs font-semibold">Pending</span></div>
-                                    </div>
-                                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">
-                                        <div class="bg-white p-2 rounded"><span class="text-gray-500">Date:</span> <span class="font-semibold">${formatDate(exp.Date)}</span></div>
-                                        <div class="bg-white p-2 rounded"><span class="text-gray-500">Type:</span> <span class="font-semibold">${exp['Expense Type']}</span></div>
-                                        <div class="bg-white p-2 rounded"><span class="text-gray-500">Reimburse:</span> <span class="font-semibold">${exp['Reimbursement By']}</span></div>
-                                        <div class="bg-white p-2 rounded"><span class="text-gray-500">Receipt:</span> <span class="font-semibold">${exp['Receipt Reference']}</span></div>
-                                    </div>
-                                    ${exp['Client Name'] ? `<div class="bg-white p-2 rounded mb-3 text-sm"><span class="text-gray-500">Client:</span> <span class="font-semibold">${exp['Client Name']}</span></div>` : ''}
-                                    <div class="bg-white p-2 rounded mb-3 text-sm"><span class="text-gray-500">Description:</span> <span class="ml-1">${exp.Description}</span></div>
-                                    <div class="flex flex-col md:flex-row gap-2">
-                                        <input type="text" id="exp_comments_${exp['Row ID']}" placeholder="Comments (optional for approve, required for reject)" class="flex-1 px-3 py-2 border rounded-lg text-sm">
-                                        <button onclick="handleApproveExpense('${exp['Row ID']}')" class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 font-semibold">✓ Approve</button>
-                                        <button onclick="handleRejectExpense('${exp['Row ID']}')" class="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 font-semibold">✗ Reject</button>
-                                    </div>
-                                </div>
-                            `).join('')}
-                        </div>
+                        <div class="space-y-4">${pendingExpenses.map(exp => renderPendingExpenseCard(exp)).join('')}</div>
                     </div>` : ''}
-
                     <div class="bg-white rounded-xl shadow-md p-6">
                         <h2 class="text-xl font-bold text-gray-800 mb-4">📋 My Expenses</h2>
-                        ${myExpenses.length === 0 ? `<div class="text-center py-8 text-gray-500"><div class="text-4xl mb-2">📭</div><p>No expenses submitted yet</p></div>` : `
-                            <div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-gray-100"><tr><th class="text-left p-3">Date</th><th class="text-left p-3">Type</th><th class="text-right p-3">Amount</th><th class="text-left p-3">Reimburse By</th><th class="text-left p-3">Description</th><th class="text-left p-3">Status</th><th class="text-left p-3">Actions</th></tr></thead>
+                        ${myExpenses.length === 0 ? `<div class="text-center py-8 text-gray-500"><div class="text-4xl mb-2">📭</div><p>No expenses yet</p></div>` : `
+                            <div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-gray-100"><tr><th class="text-left p-3">Date</th><th class="text-left p-3">Type</th><th class="text-right p-3">Amount</th><th class="text-left p-3">Reimburse</th><th class="text-left p-3">Status</th><th class="text-left p-3">Actions</th></tr></thead>
                             <tbody>${myExpenses.map(exp => `<tr class="border-b hover:bg-gray-50">
                                 <td class="p-3 font-medium">${formatDate(exp.Date)}</td>
                                 <td class="p-3">${exp['Expense Type']}</td>
                                 <td class="p-3 text-right font-semibold">${formatCurrency(exp.Amount)}</td>
                                 <td class="p-3">${exp['Reimbursement By']}${exp['Client Name'] ? `<br><span class="text-xs text-gray-500">${exp['Client Name']}</span>` : ''}</td>
-                                <td class="p-3 max-w-xs truncate" title="${exp.Description}">${exp.Description}</td>
                                 <td class="p-3"><span class="${getStatusClass(exp.Status)} px-2 py-1 rounded-full text-xs font-semibold">${exp.Status}</span>${exp['Approver Name'] ? `<br><span class="text-xs text-gray-500">by ${exp['Approver Name']}</span>` : ''}</td>
                                 <td class="p-3">${canEditExpense(exp) ? `<button onclick='handleEditExpense(${JSON.stringify(exp).replace(/'/g, "\\'")})' class="text-blue-600 hover:text-blue-800 text-xs font-semibold mr-2">Edit</button><button onclick="handleCancelExpense('${exp['Row ID']}')" class="text-red-600 hover:text-red-800 text-xs font-semibold">Cancel</button>` : '-'}</td>
                             </tr>`).join('')}</tbody></table></div>`}
                     </div>
-
-                    ${isApprover ? `
+                    ${isApprover && allExpenses.length > 0 ? `
                     <div class="bg-white rounded-xl shadow-md p-6">
-                        <h2 class="text-xl font-bold text-gray-800 mb-4">📊 All Expenses History (Admin View)</h2>
-                        ${allExpenses.length === 0 ? `<div class="text-center py-8 text-gray-500"><p>No expense records found</p></div>` : `
-                            <div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-gray-100"><tr><th class="text-left p-3">Date</th><th class="text-left p-3">Employee</th><th class="text-left p-3">Type</th><th class="text-right p-3">Amount</th><th class="text-left p-3">Reimburse By</th><th class="text-left p-3">Receipt</th><th class="text-left p-3">Status</th></tr></thead>
-                            <tbody>${allExpenses.slice(0, 50).map(exp => `<tr class="border-b hover:bg-gray-50">
-                                <td class="p-3">${formatDate(exp.Date)}</td>
-                                <td class="p-3"><span class="font-medium">${exp['Employee Name']}</span><br><span class="text-xs text-gray-500">${exp['Employee Email']}</span></td>
-                                <td class="p-3">${exp['Expense Type']}</td>
-                                <td class="p-3 text-right font-semibold">${formatCurrency(exp.Amount)}</td>
-                                <td class="p-3">${exp['Reimbursement By']}${exp['Client Name'] ? `<br><span class="text-xs text-gray-500">${exp['Client Name']}</span>` : ''}</td>
-                                <td class="p-3">${exp['Receipt Reference']}</td>
-                                <td class="p-3"><span class="${getStatusClass(exp.Status)} px-2 py-1 rounded-full text-xs font-semibold">${exp.Status}</span></td>
-                            </tr>`).join('')}</tbody></table></div>
-                            ${allExpenses.length > 50 ? `<p class="text-center text-gray-500 text-sm mt-4">Showing first 50 records</p>` : ''}`}
+                        <h2 class="text-xl font-bold text-gray-800 mb-4">📊 All Expenses</h2>
+                        <div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-gray-100"><tr><th class="text-left p-3">Date</th><th class="text-left p-3">Employee</th><th class="text-left p-3">Type</th><th class="text-right p-3">Amount</th><th class="text-left p-3">Reimburse</th><th class="text-left p-3">Status</th></tr></thead>
+                        <tbody>${allExpenses.slice(0, 50).map(exp => `<tr class="border-b hover:bg-gray-50">
+                            <td class="p-3">${formatDate(exp.Date)}</td>
+                            <td class="p-3"><span class="font-medium">${exp['Employee Name']}</span></td>
+                            <td class="p-3">${exp['Expense Type']}</td>
+                            <td class="p-3 text-right font-semibold">${formatCurrency(exp.Amount)}</td>
+                            <td class="p-3">${exp['Reimbursement By']}${exp['Client Name'] ? `<br><span class="text-xs text-gray-500">${exp['Client Name']}</span>` : ''}</td>
+                            <td class="p-3"><span class="${getStatusClass(exp.Status)} px-2 py-1 rounded-full text-xs font-semibold">${exp.Status}</span></td>
+                        </tr>`).join('')}</tbody></table></div>
+                        ${allExpenses.length > 50 ? `<p class="text-center text-gray-500 text-sm mt-4">Showing first 50</p>` : ''}
                     </div>` : ''}
-
-                    <div class="text-center text-gray-400 text-sm py-4">TimeWise Expense Module v1.0 | © 2026 DRP & Co. LLP</div>
+                    <div class="text-center text-gray-400 text-sm py-4">TimeWise v3.2 | © 2026 DRP & Co. LLP</div>
                 </div>
             </div>`;
         }
@@ -279,15 +318,10 @@
         async function init() {
             const session = loadSession();
             if (session && session.employeeEmail && session.employeeData) {
-                document.getElementById('app').innerHTML = `<div class="min-h-screen bg-gray-50 flex items-center justify-center"><div class="text-center"><div class="loading-spinner mx-auto"></div><p class="mt-4 text-gray-600">Loading expense data...</p></div></div>`;
+                document.getElementById('app').innerHTML = `<div class="min-h-screen bg-gray-50 flex items-center justify-center"><div class="text-center"><div class="loading-spinner mx-auto"></div><p class="mt-4 text-gray-600">Loading...</p></div></div>`;
                 try {
-                    employeeEmail = session.employeeEmail;
-                    employeeData = session.employeeData;
-                    isApprover = session.isApprover || false;
-                    
-                    // v3.1: Single API call for refresh
+                    employeeEmail = session.employeeEmail; employeeData = session.employeeData; isApprover = session.isApprover || false;
                     const initData = await callAPI('initExpense', { email: employeeEmail });
-                    
                     expenseTypes = initData.expenseTypes;
                     clients = initData.clients.filter(c => c['Client Status'] === 'Active');
                     expenseSummary = initData.summary;
@@ -295,9 +329,8 @@
                     pendingExpenses = initData.pendingExpenses || [];
                     allExpenses = initData.allExpenses || [];
                     isApprover = initData.isApprover;
-                    
                     isLoggedIn = true; saveSession(); render();
-                } catch (error) { console.error('Session restore error:', error); clearSession(); render(); }
+                } catch (error) { console.error('Session error:', error); clearSession(); render(); }
             } else { render(); }
         }
         init();

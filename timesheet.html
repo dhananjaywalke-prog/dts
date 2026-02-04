@@ -1367,11 +1367,10 @@
                                         <div class="space-y-3">
                                             ${entries.map(e => `
                                                 <div class="border rounded-lg p-4 hover:shadow-sm transition-shadow">
-                                                    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                                                    <div class="grid grid-cols-3 gap-2 text-sm">
                                                         <div><strong>Client:</strong> ${e.Client}</div>
                                                         <div><strong>Task:</strong> ${e.Task}</div>
                                                         <div><strong>Hours:</strong> ${e.Hours}</div>
-                                                        <div><strong>Expense:</strong> ₹${e['Expense Amount'] || 0}</div>
                                                     </div>
                                                     <div class="mt-2 text-sm"><strong>Description:</strong> ${e.Description}</div>
                                                     <div class="mt-1 text-xs text-gray-500"><strong>Submitted:</strong> ${formatTimestampDisplay(e.Timestamp)}</div>
@@ -1436,23 +1435,9 @@
                                                     placeholder="Describe the specific tasks performed..."></textarea>
                                                 <p class="text-xs text-gray-500 mt-1"><span id="charCount">0</span>/500 characters</p>
                                             </div>
-                                            <div class="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <label class="block text-sm font-semibold mb-1">Expense Type</label>
-                                                    <select id="expenseSelect" class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                                                        onchange="handleExpenseTypeChange()">
-                                                        <option value="">Not Applicable</option>
-                                                        ${expenseTypes.map(e => `<option value="${e['Expense Type']}">${e['Expense Type']}</option>`).join('')}
-                                                    </select>
-                                                </div>
-                                                <div>
-                                                    <label class="block text-sm font-semibold mb-1">Amount (₹) <span class="text-xs text-gray-500">(Whole numbers)</span></label>
-                                                    <input type="number" id="amountInput" min="0" step="1"
-                                                        oninput="updateFormValidation()"
-                                                        class="w-full px-3 py-2 border rounded disabled:bg-gray-100 disabled:cursor-not-allowed focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" 
-                                                        placeholder="0" value="0" disabled />
-                                                </div>
-                                            </div>
+                                            <!-- Expense removed - use Expense Module -->
+                                            <input type="hidden" id="expenseSelect" value="">
+                                            <input type="hidden" id="amountInput" value="0">
                                             <div class="flex gap-2">
                                                 <button id="submitBtn" onclick="handleAdd()" disabled
                                                     class="flex-1 bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">

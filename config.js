@@ -1,6 +1,6 @@
 // ============================================
 // TimeWise Configuration File
-// Version: 3.1
+// Version: 3.2 (Performance Optimized)
 // Last Updated: 02-Feb-2026
 // ============================================
 // 
@@ -11,10 +11,10 @@
 
 const CONFIG = {
     // Backend API URL - UPDATE THIS WHEN URL CHANGES
-    API_URL: 'https://script.google.com/macros/s/AKfycby9UCIR3MFDgCWaTYyjyXG5OfnbrbJ8P7hI6RgdYhp1iCH_AYs3Ip29JdzvW_KZcUFhLQ/exec',
+    API_URL: 'https://script.google.com/macros/s/AKfycbxkstxTScmbZLl15JHTnHXpqqzHZ9Eww-k5Jh8dWoMgW7qHshX94ifmyi4thT7nLoWjVQ/exec',
     
     // App Version
-    VERSION: '3.1',
+    VERSION: '3.2',
     
     // Session timeout in minutes
     SESSION_TIMEOUT: 30,
