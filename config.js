@@ -11,7 +11,7 @@
 
 const CONFIG = {
     // Backend API URL - UPDATE THIS WHEN URL CHANGES
-    API_URL: 'https://script.google.com/macros/s/AKfycbytN_KCpQnzjrP_OuoLU3wj6u0C5xZdDuh1HAh0Xs-46Wwg2uZ1cmLaakTo9jJa3pmLYA/exec',
+    API_URL: 'https://script.google.com/macros/s/AKfycbzAdFKqfHgbiFAoqOB41lqneZFnBNV5_6x-TZqOaI7yd02w0acIspvNgETTD1BodIa9Jw/exec',
     
     // App Version
     VERSION: '3.3',
