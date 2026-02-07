@@ -124,7 +124,7 @@
 
             if (!statusUpdate) { alert('Please provide a status update'); return; }
 
-            const isHead = editingTask['Assignment Head'] === employeeEmail;
+            const isHead = editingTask.isHead === true; // Use flag from backend
             const currentStatus = editingTask.taskData?.['Type'] || 'To Start';
             
             // Validate: Can't change due date if completed
@@ -191,7 +191,7 @@
         function renderTaskCard(task) {
             const td = task.taskData || {};
             const status = td['Type'] || 'To Start';
-            const isHead = task['Assignment Head'] === employeeEmail;
+            const isHead = task.isHead === true; // Use flag from backend
             const overdueClass = isOverdue(task) ? 'overdue' : '';
             
             return `<div class="bg-white rounded-xl shadow-md p-4 border-l-4 ${overdueClass}" style="border-left-color: ${isOverdue(task) ? '#EF4444' : '#E5E7EB'}">
@@ -225,7 +225,7 @@
         function renderEditModal() {
             if (!editingTask) return '';
             const td = editingTask.taskData || {};
-            const isHead = editingTask['Assignment Head'] === employeeEmail;
+            const isHead = editingTask.isHead === true; // Use flag from backend
             const currentStatus = td['Type'] || 'To Start';
             const isCompleted = currentStatus === 'Completed' || currentStatus === 'Cancelled';
             const today = new Date().toISOString().split('T')[0];
