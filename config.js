@@ -11,10 +11,10 @@
 
 const CONFIG = {
     // Backend API URL - UPDATE THIS WHEN URL CHANGES
-    API_URL: 'https://script.google.com/macros/s/AKfycbxkstxTScmbZLl15JHTnHXpqqzHZ9Eww-k5Jh8dWoMgW7qHshX94ifmyi4thT7nLoWjVQ/exec',
+    API_URL: 'https://script.google.com/macros/s/AKfycbxN6alMxOqQDjy0WI7W-Yrvx0I-QSv6-0p6Op_7T7ifOtWB54WYsfo9QYybEO9EnDJ_6A/exec',
     
     // App Version
-    VERSION: '3.2',
+    VERSION: '3.3',
     
     // Session timeout in minutes
     SESSION_TIMEOUT: 30,
