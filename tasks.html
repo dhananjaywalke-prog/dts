@@ -35,8 +35,11 @@
         let tasks = [], employees = [], summary = {};
         let editingTask = null, viewingHistory = null;
         let filterStatus = 'all', searchQuery = '';
-        let sortColumn = 'Client Name', sortDirection = 'asc';
+        let sortColumn = 'Due Date', sortDirection = 'asc';  // Default: Due Date ascending (nearest first)
         let currentPage = 1, pageSize = 10;
+        
+        // Status priority for sorting (lower = higher priority)
+        const statusPriority = { 'Priority': 1, 'WIP': 2, 'To Start': 3, 'Hold': 4, 'Completed': 5, 'Cancelled': 6 };
 
         function saveSession() { localStorage.setItem('timewise_session', JSON.stringify({ employeeEmail, employeeData, timestamp: Date.now() })); }
         function loadSession() { try { const s = JSON.parse(localStorage.getItem('timewise_session')); if (s && (Date.now() - s.timestamp) < 30*60*1000) return s; } catch(e){} return null; }
@@ -86,13 +89,42 @@
                 const q = searchQuery.toLowerCase();
                 f = f.filter(t => (t['Client Name']||'').toLowerCase().includes(q) || (t['Task Assigned']||'').toLowerCase().includes(q) || (t['Assignment Description']||'').toLowerCase().includes(q) || (t['Assigned To']||'').toLowerCase().includes(q));
             }
+            // Multi-level sorting: Due Date → Status → Client Name
             f.sort((a, b) => {
-                let vA = a[sortColumn] || '', vB = b[sortColumn] || '';
-                if (sortColumn === 'Due Date' || sortColumn === 'Last Updated On') { vA = vA ? new Date(vA).getTime() : 0; vB = vB ? new Date(vB).getTime() : 0; }
-                else { vA = String(vA).toLowerCase(); vB = String(vB).toLowerCase(); }
-                if (vA < vB) return sortDirection === 'asc' ? -1 : 1;
-                if (vA > vB) return sortDirection === 'asc' ? 1 : -1;
-                return 0;
+                // If user selected a specific column, use that first
+                if (sortColumn === 'Due Date') {
+                    // Due date: nulls last, then ascending (nearest first)
+                    const dA = a['Due Date'] ? new Date(a['Due Date']).getTime() : (sortDirection === 'asc' ? Infinity : -Infinity);
+                    const dB = b['Due Date'] ? new Date(b['Due Date']).getTime() : (sortDirection === 'asc' ? Infinity : -Infinity);
+                    if (dA !== dB) return sortDirection === 'asc' ? dA - dB : dB - dA;
+                    
+                    // Then by status priority
+                    const sA = statusPriority[a['Type'] || 'To Start'] || 99;
+                    const sB = statusPriority[b['Type'] || 'To Start'] || 99;
+                    if (sA !== sB) return sA - sB;
+                    
+                    // Then by client name
+                    return (a['Client Name'] || '').localeCompare(b['Client Name'] || '');
+                } else if (sortColumn === 'Type') {
+                    // Sort by status priority
+                    const sA = statusPriority[a['Type'] || 'To Start'] || 99;
+                    const sB = statusPriority[b['Type'] || 'To Start'] || 99;
+                    const result = sA - sB;
+                    return sortDirection === 'asc' ? result : -result;
+                } else {
+                    // Other columns: simple sort
+                    let vA = a[sortColumn] || '', vB = b[sortColumn] || '';
+                    if (sortColumn === 'Last Updated On') { 
+                        vA = vA ? new Date(vA).getTime() : 0; 
+                        vB = vB ? new Date(vB).getTime() : 0; 
+                    } else { 
+                        vA = String(vA).toLowerCase(); 
+                        vB = String(vB).toLowerCase(); 
+                    }
+                    if (vA < vB) return sortDirection === 'asc' ? -1 : 1;
+                    if (vA > vB) return sortDirection === 'asc' ? 1 : -1;
+                    return 0;
+                }
             });
             return f;
         }
@@ -104,7 +136,22 @@
 
         function handleSort(col) { if (sortColumn === col) sortDirection = sortDirection === 'asc' ? 'desc' : 'asc'; else { sortColumn = col; sortDirection = 'asc'; } currentPage = 1; render(); }
         function handleFilter(s) { filterStatus = s; currentPage = 1; render(); }
-        function handleSearch(e) { searchQuery = e.target.value; currentPage = 1; render(); }
+        let searchTimeout = null;
+        function handleSearch(e) { 
+            const value = e.target.value;
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                searchQuery = value; 
+                currentPage = 1; 
+                render();
+                // Restore focus and cursor position
+                const searchBox = document.getElementById('searchBox');
+                if (searchBox) {
+                    searchBox.focus();
+                    searchBox.setSelectionRange(searchBox.value.length, searchBox.value.length);
+                }
+            }, 300); // 300ms debounce
+        }
         function handlePageChange(p) { currentPage = p; render(); }
 
         function exportToExcel() {
@@ -133,6 +180,15 @@
             const type = document.getElementById('taskType')?.value || 'To Start';
             const statusUpdate = document.getElementById('taskStatusUpdate')?.value?.trim() || '';
             if (!statusUpdate) { alert('Please provide a status update'); return; }
+            
+            // Debug: Show what we're sending
+            console.log('Saving task:', {
+                rowId: editingTask['Row ID'],
+                client: editingTask['Client Name'],
+                head: editingTask['Assignment Head'],
+                isHead: editingTask.isHead
+            });
+            
             showLoading('Saving...');
             try {
                 await callAPI('updateTask', { task: { rowId: editingTask['Row ID'], dueDate, executionReady, assignedTo, assignedToEmail, type, statusUpdate }, email: employeeEmail, employeeName: employeeData['Employee Name'] });
@@ -226,7 +282,7 @@
                         return `<tr class="${od?'overdue':''}">
                             <td class="px-4 py-3 font-medium">${t['Client Name']||'-'}</td>
                             <td class="px-4 py-3 text-blue-600">${t['Task Assigned']||'-'}</td>
-                            <td class="px-4 py-3 text-gray-600 max-w-xs truncate">${t['Assignment Description']||'-'}</td>
+                            <td class="px-4 py-3 text-gray-600 max-w-xs truncate" title="${(t['Assignment Description']||'').replace(/"/g, '&quot;')}">${t['Assignment Description']||'-'}</td>
                             <td class="px-4 py-3 whitespace-nowrap ${od?'text-red-600 font-bold':''}">${formatDate(t['Due Date'])}${od?' 🔴':''}</td>
                             <td class="px-4 py-3">${t['Assigned To']||'-'}</td>
                             <td class="px-4 py-3"><span class="px-2 py-1 rounded-full text-xs font-semibold ${getStatusClass(s)}">${getStatusIcon(s)} ${s}</span></td>
@@ -275,7 +331,7 @@
                                 <option value="Cancelled" ${filterStatus==='Cancelled'?'selected':''}>Cancelled</option>
                                 <option value="overdue" ${filterStatus==='overdue'?'selected':''}>⚠️ Overdue</option>
                             </select>
-                            <input type="text" placeholder="🔍 Search..." value="${searchQuery}" oninput="handleSearch(event)" class="px-3 py-1 border rounded-lg text-sm w-48">
+                            <input type="text" id="searchBox" placeholder="🔍 Search..." value="${searchQuery}" oninput="handleSearch(event)" class="px-3 py-1 border rounded-lg text-sm w-48">
                         </div>
                         <div class="flex gap-2">
                             <button onclick="exportToExcel()" class="px-4 py-1 bg-green-600 text-white rounded-lg text-sm font-semibold">📥 Export</button>
