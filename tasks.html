@@ -3,49 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>TimeWise - Tasks</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 9999; }
         .loading-spinner { width: 50px; height: 50px; border: 4px solid #f3f3f3; border-top: 4px solid #3B82F6; border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .status-tostart { background-color: #E5E7EB; color: #374151; }
-        .status-priority { background-color: #FEE2E2; color: #991B1B; }
-        .status-wip { background-color: #DBEAFE; color: #1E40AF; }
-        .status-completed { background-color: #D1FAE5; color: #065F46; }
-        .status-hold { background-color: #FEF3C7; color: #92400E; }
-        .status-cancelled { background-color: #F3F4F6; color: #6B7280; }
-        .overdue { border-left: 4px solid #EF4444 !important; }
+        .status-tostart { background: #E5E7EB; color: #374151; }
+        .status-priority { background: #FEE2E2; color: #991B1B; }
+        .status-wip { background: #DBEAFE; color: #1E40AF; }
+        .status-completed { background: #D1FAE5; color: #065F46; }
+        .status-hold { background: #FEF3C7; color: #92400E; }
+        .status-cancelled { background: #F3F4F6; color: #6B7280; }
         .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1000; }
-        .modal-content { background: white; border-radius: 1rem; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; }
+        .modal-content { background: white; border-radius: 1rem; max-width: 600px; width: 95%; max-height: 90vh; overflow-y: auto; }
+        th.sortable { cursor: pointer; user-select: none; }
+        th.sortable:hover { background: #E5E7EB; }
+        tr.overdue { background: #FEF2F2 !important; }
+        tr:hover { background: #F9FAFB; }
     </style>
 </head>
 <body class="bg-gray-50">
     <div id="loadingOverlay" class="loading-overlay" style="display: none;">
-        <div class="text-center">
-            <div class="loading-spinner mx-auto"></div>
-            <p class="text-white mt-4" id="loadingText">Processing...</p>
-        </div>
+        <div class="text-center"><div class="loading-spinner mx-auto"></div><p class="text-white mt-4" id="loadingText">Processing...</p></div>
     </div>
     <div id="app"></div>
-
     <script src="config.js"></script>
     <script>
-        // State
         let isLoggedIn = false, employeeEmail = '', employeeData = null;
-        let assignments = [], employees = [], summary = {};
-        let editingTask = null, viewingLog = null;
-        let filterStatus = 'all';
+        let tasks = [], employees = [], summary = {};
+        let editingTask = null, viewingHistory = null;
+        let filterStatus = 'all', searchQuery = '';
+        let sortColumn = 'Client Name', sortDirection = 'asc';
+        let currentPage = 1, pageSize = 10;
 
-        // Session
         function saveSession() { localStorage.setItem('timewise_session', JSON.stringify({ employeeEmail, employeeData, timestamp: Date.now() })); }
-        function loadSession() { try { const s = JSON.parse(localStorage.getItem('timewise_session')); if (s && (Date.now() - s.timestamp) < 30*60*1000) return s; localStorage.removeItem('timewise_session'); } catch(e){} return null; }
+        function loadSession() { try { const s = JSON.parse(localStorage.getItem('timewise_session')); if (s && (Date.now() - s.timestamp) < 30*60*1000) return s; } catch(e){} return null; }
         function clearSession() { localStorage.removeItem('timewise_session'); }
         function showLoading(t = 'Processing...') { document.getElementById('loadingText').textContent = t; document.getElementById('loadingOverlay').style.display = 'flex'; }
         function hideLoading() { document.getElementById('loadingOverlay').style.display = 'none'; }
 
-        // API
         async function callAPI(action, params = {}) {
             const r = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, ...params }) });
             const result = await r.json();
@@ -53,375 +51,248 @@
             return result.data !== undefined ? result.data : result;
         }
 
-        // Formatters
-        function formatDate(date) { 
-            if (!date) return '-'; 
-            const d = new Date(date); 
-            if (isNaN(d.getTime())) return date; 
-            const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; 
-            return `${d.getDate().toString().padStart(2,'0')}-${m[d.getMonth()]}-${d.getFullYear()}`; 
-        }
-        function formatDateTime(date) {
-            if (!date) return '-';
-            const d = new Date(date);
-            if (isNaN(d.getTime())) return date;
-            return formatDate(date) + ' ' + d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-        }
-        function getStatusClass(status) {
-            const map = { 'To Start': 'status-tostart', 'Priority': 'status-priority', 'WIP': 'status-wip', 'Completed': 'status-completed', 'Hold': 'status-hold', 'Cancelled': 'status-cancelled' };
-            return map[status] || 'status-tostart';
-        }
-        function isOverdue(task) {
-            if (!task.taskData?.['Due Date']) return false;
-            const status = task.taskData?.['Type'] || 'To Start';
-            if (status === 'Completed' || status === 'Cancelled') return false;
-            return new Date(task.taskData['Due Date']) < new Date(new Date().toDateString());
-        }
-        function getEmployeeName(email) {
-            const emp = employees.find(e => e['Employee Email'] === email);
-            return emp ? emp['Employee Name'] : email;
-        }
+        function formatDate(date) { if (!date) return '-'; const d = new Date(date); if (isNaN(d.getTime())) return date; return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); }
+        function formatDateTime(date) { if (!date) return '-'; const d = new Date(date); if (isNaN(d.getTime())) return date; return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+        function getStatusClass(s) { return { 'To Start': 'status-tostart', 'Priority': 'status-priority', 'WIP': 'status-wip', 'Completed': 'status-completed', 'Hold': 'status-hold', 'Cancelled': 'status-cancelled' }[s] || 'status-tostart'; }
+        function getStatusIcon(s) { return { 'To Start': '⬜', 'Priority': '🔴', 'WIP': '🔵', 'Completed': '✅', 'Hold': '⏸️', 'Cancelled': '❌' }[s] || '⬜'; }
+        function isOverdue(t) { if (!t['Due Date']) return false; const s = t['Type'] || 'To Start'; if (s === 'Completed' || s === 'Cancelled') return false; return new Date(t['Due Date']) < new Date(new Date().toDateString()); }
 
-        // Login
         async function handleLogin() {
-            const input = document.getElementById('emailInput'), statusDiv = document.getElementById('loginStatus'), loginBtn = document.getElementById('loginBtn');
+            const input = document.getElementById('emailInput'), statusDiv = document.getElementById('loginStatus'), btn = document.getElementById('loginBtn');
             employeeEmail = input.value.trim().toLowerCase();
             if (!employeeEmail || !employeeEmail.includes('@')) { statusDiv.innerHTML = '<p class="text-red-600 text-sm mt-2">Please enter a valid email</p>'; return; }
-            loginBtn.disabled = true; loginBtn.innerHTML = '<span class="inline-block animate-spin mr-2">⏳</span> Logging in...';
+            btn.disabled = true; btn.innerHTML = '⏳ Logging in...';
             try {
-                const initData = await callAPI('initTask', { email: employeeEmail });
-                employeeData = initData.employee;
-                assignments = initData.assignments || [];
-                employees = initData.employees || [];
-                summary = initData.summary || {};
+                const data = await callAPI('initTask', { email: employeeEmail });
+                employeeData = data.employee; tasks = data.tasks || []; employees = data.employees || []; summary = data.summary || {};
                 isLoggedIn = true; saveSession(); render();
-            } catch (error) { loginBtn.disabled = false; loginBtn.innerHTML = 'Login'; statusDiv.innerHTML = `<p class="text-red-600 text-sm mt-2">❌ ${error.message}</p>`; }
+            } catch (e) { btn.disabled = false; btn.innerHTML = 'Login'; statusDiv.innerHTML = `<p class="text-red-600 text-sm mt-2">❌ ${e.message}</p>`; }
         }
 
         async function refreshData() {
             showLoading('Refreshing...');
             try {
-                const initData = await callAPI('initTask', { email: employeeEmail });
-                assignments = initData.assignments || [];
-                employees = initData.employees || [];
-                summary = initData.summary || {};
+                const data = await callAPI('initTask', { email: employeeEmail });
+                tasks = data.tasks || []; employees = data.employees || []; summary = data.summary || {};
                 hideLoading(); render();
-            } catch (error) { hideLoading(); alert('Error: ' + error.message); }
+            } catch (e) { hideLoading(); alert('Error: ' + e.message); }
         }
 
-        function handleLogout() { clearSession(); isLoggedIn = false; employeeEmail = ''; employeeData = null; assignments = []; render(); }
+        function getFilteredTasks() {
+            let f = [...tasks];
+            if (filterStatus === 'overdue') f = f.filter(t => isOverdue(t));
+            else if (filterStatus !== 'all') f = f.filter(t => (t['Type'] || 'To Start') === filterStatus);
+            if (searchQuery) {
+                const q = searchQuery.toLowerCase();
+                f = f.filter(t => (t['Client Name']||'').toLowerCase().includes(q) || (t['Task Assigned']||'').toLowerCase().includes(q) || (t['Assignment Description']||'').toLowerCase().includes(q) || (t['Assigned To']||'').toLowerCase().includes(q));
+            }
+            f.sort((a, b) => {
+                let vA = a[sortColumn] || '', vB = b[sortColumn] || '';
+                if (sortColumn === 'Due Date' || sortColumn === 'Last Updated On') { vA = vA ? new Date(vA).getTime() : 0; vB = vB ? new Date(vB).getTime() : 0; }
+                else { vA = String(vA).toLowerCase(); vB = String(vB).toLowerCase(); }
+                if (vA < vB) return sortDirection === 'asc' ? -1 : 1;
+                if (vA > vB) return sortDirection === 'asc' ? 1 : -1;
+                return 0;
+            });
+            return f;
+        }
 
-        // Task Actions
-        function handleEditTask(task) { editingTask = JSON.parse(JSON.stringify(task)); render(); }
+        function getPaginatedTasks() {
+            const f = getFilteredTasks(), start = (currentPage - 1) * pageSize;
+            return { tasks: f.slice(start, start + pageSize), total: f.length, totalPages: Math.ceil(f.length / pageSize) || 1 };
+        }
+
+        function handleSort(col) { if (sortColumn === col) sortDirection = sortDirection === 'asc' ? 'desc' : 'asc'; else { sortColumn = col; sortDirection = 'asc'; } currentPage = 1; render(); }
+        function handleFilter(s) { filterStatus = s; currentPage = 1; render(); }
+        function handleSearch(e) { searchQuery = e.target.value; currentPage = 1; render(); }
+        function handlePageChange(p) { currentPage = p; render(); }
+
+        function exportToExcel() {
+            const f = getFilteredTasks();
+            const data = f.map(t => ({ Client: t['Client Name']||'', Task: t['Task Assigned']||'', Description: t['Assignment Description']||'', Head: t['Assignment Head']||'', 'Due Date': formatDate(t['Due Date']), 'Assigned To': t['Assigned To']||'', 'Exec Ready': t['Execution Ready']||'No', Status: t['Type']||'To Start', 'Status Update': t['Status Update']||'', 'Last Updated': formatDateTime(t['Last Updated On']) }));
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Tasks');
+            XLSX.writeFile(wb, `Tasks_${new Date().toISOString().split('T')[0]}.xlsx`);
+        }
+
+        function handleEditTask(t) { editingTask = JSON.parse(JSON.stringify(t)); render(); }
         function handleCancelEdit() { editingTask = null; render(); }
 
         async function handleSaveTask() {
             const dueDate = document.getElementById('taskDueDate')?.value || '';
             const executionReady = document.getElementById('taskExecReady')?.value || 'No';
             const assignedToEmail = document.getElementById('taskAssignedTo')?.value || '';
+            const assignedTo = assignedToEmail ? (employees.find(e => e.email === assignedToEmail)?.name || '') : '';
             const type = document.getElementById('taskType')?.value || 'To Start';
             const statusUpdate = document.getElementById('taskStatusUpdate')?.value?.trim() || '';
-
             if (!statusUpdate) { alert('Please provide a status update'); return; }
-
-            const isHead = editingTask.isHead === true; // Use flag from backend
-            const currentStatus = editingTask.taskData?.['Type'] || 'To Start';
-            
-            // Validate: Can't change due date if completed
-            if ((currentStatus === 'Completed' || currentStatus === 'Cancelled') && dueDate !== (editingTask.taskData?.['Due Date']?.split('T')[0] || '')) {
-                alert('Cannot change due date for completed/cancelled tasks');
-                return;
-            }
-
             showLoading('Saving...');
             try {
-                await callAPI('updateTask', {
-                    task: {
-                        assignmentRowId: editingTask['Row ID'],
-                        dueDate,
-                        executionReady,
-                        assignedTo: assignedToEmail ? getEmployeeName(assignedToEmail) : '',
-                        assignedToEmail,
-                        type,
-                        statusUpdate,
-                        currentAssignedToEmail: editingTask.taskData?.['Assigned To Email'] || ''
-                    },
-                    email: employeeEmail,
-                    employeeName: employeeData['Employee Name']
-                });
-                editingTask = null;
-                await refreshData();
-                alert('Task updated successfully!');
-            } catch (error) { hideLoading(); alert('Error: ' + error.message); }
+                await callAPI('updateTask', { task: { rowId: editingTask['Row ID'], dueDate, executionReady, assignedTo, assignedToEmail, type, statusUpdate }, email: employeeEmail, employeeName: employeeData['Employee Name'] });
+                editingTask = null; await refreshData(); alert('Task updated successfully!');
+            } catch (e) { hideLoading(); alert('Error: ' + e.message); }
         }
 
-        async function handleViewLog(task) {
+        async function handleViewHistory(t) {
             showLoading('Loading history...');
             try {
-                const logs = await callAPI('getTaskLog', { assignmentRowId: task['Row ID'] });
-                viewingLog = { task, logs: logs || [] };
-                hideLoading(); render();
-            } catch (error) { hideLoading(); alert('Error: ' + error.message); }
+                const h = await callAPI('getTaskHistory', { assignmentRowId: t['Row ID'] });
+                viewingHistory = { task: t, history: h || [] }; hideLoading(); render();
+            } catch (e) { hideLoading(); alert('Error: ' + e.message); }
         }
+        function handleCloseHistory() { viewingHistory = null; render(); }
 
-        function handleCloseLog() { viewingLog = null; render(); }
-
-        function setFilter(status) { filterStatus = status; render(); }
-
-        function getFilteredAssignments() {
-            if (filterStatus === 'all') return assignments;
-            if (filterStatus === 'overdue') return assignments.filter(a => isOverdue(a));
-            if (filterStatus === 'nodata') return assignments.filter(a => !a.hasTaskData);
-            return assignments.filter(a => (a.taskData?.['Type'] || 'To Start') === filterStatus);
-        }
-
-        // Render Login
         function renderLogin() {
             return `<div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
                 <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
                     <div class="text-center mb-6"><div class="text-6xl mb-4">📋</div><h1 class="text-3xl font-bold text-gray-800">TimeWise</h1><p class="text-gray-600 mt-2">Task Management</p></div>
-                    <div class="mb-4"><label class="block text-gray-700 font-semibold mb-2">Email Address</label><input type="email" id="emailInput" placeholder="your.email@company.com" class="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500" onkeypress="if(event.key === 'Enter') handleLogin()" /></div>
+                    <div class="mb-4"><label class="block text-gray-700 font-semibold mb-2">Email Address</label><input type="email" id="emailInput" placeholder="your.email@company.com" class="w-full px-4 py-3 border-2 rounded-xl" onkeypress="if(event.key==='Enter')handleLogin()" /></div>
                     <button id="loginBtn" onclick="handleLogin()" class="w-full bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700 font-semibold">Login</button>
                     <div id="loginStatus" class="mt-4"></div>
                     <div class="mt-4 text-center"><a href="home.html" class="text-blue-600 hover:text-blue-800 text-sm">← Back to Home</a></div>
                 </div></div>`;
         }
 
-        // Render Task Card
-        function renderTaskCard(task) {
-            const td = task.taskData || {};
-            const status = td['Type'] || 'To Start';
-            const isHead = task.isHead === true; // Use flag from backend
-            const overdueClass = isOverdue(task) ? 'overdue' : '';
-            
-            return `<div class="bg-white rounded-xl shadow-md p-4 border-l-4 ${overdueClass}" style="border-left-color: ${isOverdue(task) ? '#EF4444' : '#E5E7EB'}">
-                <div class="flex justify-between items-start mb-2">
-                    <div class="flex-1">
-                        <h3 class="font-bold text-lg text-gray-800">${task['Client Name']}</h3>
-                        <p class="text-blue-600 font-medium">${task['Task Assigned']}</p>
-                    </div>
-                    <div class="flex flex-col items-end gap-1">
-                        <span class="px-3 py-1 rounded-full text-xs font-bold ${getStatusClass(status)}">${status}</span>
-                        ${isOverdue(task) ? '<span class="text-red-600 text-xs font-bold">🔴 OVERDUE</span>' : ''}
-                        ${task.isAssignedTo ? '<span class="text-xs text-purple-600 font-semibold">👤 Assigned to you</span>' : ''}
-                    </div>
-                </div>
-                <p class="text-gray-600 text-sm mb-3">${task['Assignment Description'] || '-'}</p>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs mb-3">
-                    <div class="bg-gray-50 p-2 rounded"><span class="text-gray-500">Head:</span><br><span class="font-semibold">${getEmployeeName(task['Assignment Head'])}</span></div>
-                    <div class="bg-gray-50 p-2 rounded"><span class="text-gray-500">Due:</span><br><span class="font-semibold ${isOverdue(task) ? 'text-red-600' : ''}">${formatDate(td['Due Date'])}</span></div>
-                    <div class="bg-gray-50 p-2 rounded"><span class="text-gray-500">Assigned To:</span><br><span class="font-semibold">${td['Assigned To'] || '-'}</span></div>
-                    <div class="bg-gray-50 p-2 rounded"><span class="text-gray-500">Exec Ready:</span><br><span class="font-semibold">${td['Execution Ready'] === 'Yes' ? '✅ Yes' : '❌ No'}</span></div>
-                </div>
-                ${td['Status Update'] ? `<div class="bg-blue-50 p-2 rounded text-sm mb-3"><span class="text-gray-500">Last Update:</span> ${td['Status Update']}</div>` : ''}
-                <div class="flex gap-2">
-                    <button onclick='handleEditTask(${JSON.stringify(task).replace(/'/g, "\\'")})' class="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-semibold text-sm">📝 Update</button>
-                    <button onclick='handleViewLog(${JSON.stringify(task).replace(/'/g, "\\'")})' class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 font-semibold text-sm">📜 History</button>
-                </div>
-            </div>`;
-        }
-
-        // Render Edit Modal
         function renderEditModal() {
             if (!editingTask) return '';
-            const td = editingTask.taskData || {};
-            const isHead = editingTask.isHead === true; // Use flag from backend
-            const currentStatus = td['Type'] || 'To Start';
-            const isCompleted = currentStatus === 'Completed' || currentStatus === 'Cancelled';
+            const isHead = editingTask.isHead === true;
+            const status = editingTask['Type'] || 'To Start';
+            const isLocked = status === 'Completed' || status === 'Cancelled';
             const today = new Date().toISOString().split('T')[0];
-            const currentDueDate = td['Due Date'] ? (typeof td['Due Date'] === 'string' && td['Due Date'].includes('T') ? td['Due Date'].split('T')[0] : td['Due Date']) : '';
-
-            return `<div class="modal" onclick="if(event.target === this) handleCancelEdit()">
+            let dueVal = '';
+            if (editingTask['Due Date']) { try { dueVal = new Date(editingTask['Due Date']).toISOString().split('T')[0]; } catch(e){} }
+            return `<div class="modal" onclick="if(event.target===this)handleCancelEdit()">
                 <div class="modal-content p-6">
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-xl font-bold text-gray-800">📝 Update Task</h2>
-                        <button onclick="handleCancelEdit()" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
-                    </div>
+                    <div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold">📝 Update Task</h2><button onclick="handleCancelEdit()" class="text-2xl text-gray-500">&times;</button></div>
                     <div class="bg-blue-50 p-3 rounded-lg mb-4">
                         <p class="font-bold text-blue-800">${editingTask['Client Name']} - ${editingTask['Task Assigned']}</p>
-                        <p class="text-sm text-blue-600">${editingTask['Assignment Description'] || ''}</p>
+                        <p class="text-sm text-blue-600">${editingTask['Assignment Description']||''}</p>
+                        <p class="text-xs text-gray-500 mt-1">Head: ${editingTask['Assignment Head']}</p>
                     </div>
                     ${!isHead ? '<div class="bg-yellow-50 border border-yellow-200 p-3 rounded-lg mb-4 text-sm text-yellow-800">⚠️ You are the assignee. You can only update Status and Status Update.</div>' : ''}
                     <div class="space-y-4">
                         <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-semibold text-gray-700 mb-1">Due Date ${isCompleted ? '(Locked)' : ''}</label>
-                                <input type="date" id="taskDueDate" value="${currentDueDate}" ${!isHead || isCompleted ? 'disabled' : ''} min="${today}"
-                                    class="w-full px-3 py-2 border rounded-lg ${!isHead || isCompleted ? 'bg-gray-100 cursor-not-allowed' : ''}">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-semibold text-gray-700 mb-1">Execution Ready?</label>
-                                <select id="taskExecReady" ${!isHead ? 'disabled' : ''} class="w-full px-3 py-2 border rounded-lg ${!isHead ? 'bg-gray-100 cursor-not-allowed' : ''}">
-                                    <option value="No" ${td['Execution Ready'] !== 'Yes' ? 'selected' : ''}>No</option>
-                                    <option value="Yes" ${td['Execution Ready'] === 'Yes' ? 'selected' : ''}>Yes</option>
-                                </select>
-                            </div>
+                            <div><label class="block text-sm font-semibold mb-1">Due Date</label><input type="date" id="taskDueDate" value="${dueVal}" ${!isHead||isLocked?'disabled':''} class="w-full px-3 py-2 border rounded-lg ${!isHead||isLocked?'bg-gray-100':''}"></div>
+                            <div><label class="block text-sm font-semibold mb-1">Execution Ready?</label><select id="taskExecReady" ${!isHead?'disabled':''} class="w-full px-3 py-2 border rounded-lg ${!isHead?'bg-gray-100':''}"><option value="No" ${editingTask['Execution Ready']!=='Yes'?'selected':''}>No</option><option value="Yes" ${editingTask['Execution Ready']==='Yes'?'selected':''}>Yes</option></select></div>
                         </div>
-                        <div>
-                            <label class="block text-sm font-semibold text-gray-700 mb-1">Assigned To</label>
-                            <select id="taskAssignedTo" ${!isHead ? 'disabled' : ''} class="w-full px-3 py-2 border rounded-lg ${!isHead ? 'bg-gray-100 cursor-not-allowed' : ''}">
-                                <option value="">-- Not Assigned --</option>
-                                ${employees.map(e => `<option value="${e['Employee Email']}" ${td['Assigned To Email'] === e['Employee Email'] ? 'selected' : ''}>${e['Employee Name']}</option>`).join('')}
+                        <div><label class="block text-sm font-semibold mb-1">Assigned To</label><select id="taskAssignedTo" ${!isHead?'disabled':''} class="w-full px-3 py-2 border rounded-lg ${!isHead?'bg-gray-100':''}"><option value="">-- Not Assigned --</option>${employees.map(e=>`<option value="${e.email}" ${editingTask['Assigned To Email']===e.email?'selected':''}>${e.name}</option>`).join('')}</select></div>
+                        <div><label class="block text-sm font-semibold mb-1">Status</label><select id="taskType" class="w-full px-3 py-2 border rounded-lg"><option value="To Start" ${status==='To Start'?'selected':''}>⬜ To Start</option><option value="Priority" ${status==='Priority'?'selected':''}>🔴 Priority</option><option value="WIP" ${status==='WIP'?'selected':''}>🔵 WIP</option><option value="Completed" ${status==='Completed'?'selected':''}>✅ Completed</option><option value="Hold" ${status==='Hold'?'selected':''}>⏸️ Hold</option><option value="Cancelled" ${status==='Cancelled'?'selected':''}>❌ Cancelled</option></select></div>
+                        <div><label class="block text-sm font-semibold mb-1">Status Update *</label><textarea id="taskStatusUpdate" rows="3" placeholder="Describe the progress..." class="w-full px-3 py-2 border rounded-lg"></textarea></div>
+                        <div class="flex gap-2"><button onclick="handleSaveTask()" class="flex-1 bg-blue-600 text-white py-3 rounded-lg font-semibold">💾 Save</button><button onclick="handleCancelEdit()" class="px-6 bg-gray-500 text-white py-3 rounded-lg font-semibold">Cancel</button></div>
+                    </div>
+                </div></div>`;
+        }
+
+        function renderHistoryModal() {
+            if (!viewingHistory) return '';
+            const t = viewingHistory.task, h = viewingHistory.history || [];
+            return `<div class="modal" onclick="if(event.target===this)handleCloseHistory()">
+                <div class="modal-content p-6">
+                    <div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold">📜 Task History</h2><button onclick="handleCloseHistory()" class="text-2xl text-gray-500">&times;</button></div>
+                    <div class="bg-blue-50 p-3 rounded-lg mb-4"><p class="font-bold text-blue-800">${t['Client Name']} - ${t['Task Assigned']}</p><p class="text-sm text-blue-600">${t['Assignment Description']||''}</p></div>
+                    ${h.length===0?'<div class="text-center py-8 text-gray-500"><div class="text-4xl mb-2">📭</div><p>No updates yet</p></div>':`
+                    <div class="space-y-3 max-h-96 overflow-y-auto">${h.map(x=>`<div class="border rounded-lg p-3 ${x.Trail==='Edited'?'bg-gray-50 opacity-70':''}">
+                        <div class="flex justify-between items-start mb-2"><span class="font-semibold">${x['Updated By Name']||x['Updated By Email']||'-'}</span><div class="text-right"><span class="text-xs text-gray-500">${formatDateTime(x.Timestamp)}</span>${x.Trail==='Edited'?'<span class="block text-xs text-orange-500">Superseded</span>':''}</div></div>
+                        <div class="grid grid-cols-3 gap-2 text-xs mb-2"><div><span class="text-gray-500">Status:</span> ${getStatusIcon(x.Type)} ${x.Type||'-'}</div><div><span class="text-gray-500">Due:</span> ${formatDate(x['Due Date'])}</div><div><span class="text-gray-500">Assigned:</span> ${x['Assigned To']||'-'}</div></div>
+                        ${x['Status Update']?`<div class="text-sm bg-gray-50 p-2 rounded">${x['Status Update']}</div>`:''}
+                    </div>`).join('')}</div>`}
+                    <div class="mt-4"><button onclick="handleCloseHistory()" class="w-full bg-gray-200 py-2 rounded-lg font-semibold">Close</button></div>
+                </div></div>`;
+        }
+
+        function renderTable() {
+            const { tasks: pt, total, totalPages } = getPaginatedTasks();
+            if (pt.length === 0) return `<div class="bg-white rounded-xl shadow p-8 text-center text-gray-500"><div class="text-5xl mb-3">📋</div><p class="text-lg">No tasks found</p></div>`;
+            const cols = [['Client Name','Client',1],['Task Assigned','Task',1],['Assignment Description','Description',0],['Due Date','Due Date',1],['Assigned To','Assigned To',1],['Type','Status',1]];
+            return `<div class="bg-white rounded-xl shadow overflow-hidden">
+                <div class="overflow-x-auto"><table class="w-full text-sm">
+                    <thead class="bg-gray-100"><tr>
+                        ${cols.map(([k,l,s])=>`<th class="px-4 py-3 text-left font-semibold ${s?'sortable cursor-pointer':''}" ${s?`onclick="handleSort('${k}')"`:''}>
+                            ${l} ${s&&sortColumn===k?(sortDirection==='asc'?'▲':'▼'):''}
+                        </th>`).join('')}
+                        <th class="px-4 py-3 text-left font-semibold">Actions</th>
+                    </tr></thead>
+                    <tbody class="divide-y">${pt.map(t=>{
+                        const s=t['Type']||'To Start', od=isOverdue(t);
+                        return `<tr class="${od?'overdue':''}">
+                            <td class="px-4 py-3 font-medium">${t['Client Name']||'-'}</td>
+                            <td class="px-4 py-3 text-blue-600">${t['Task Assigned']||'-'}</td>
+                            <td class="px-4 py-3 text-gray-600 max-w-xs truncate">${t['Assignment Description']||'-'}</td>
+                            <td class="px-4 py-3 whitespace-nowrap ${od?'text-red-600 font-bold':''}">${formatDate(t['Due Date'])}${od?' 🔴':''}</td>
+                            <td class="px-4 py-3">${t['Assigned To']||'-'}</td>
+                            <td class="px-4 py-3"><span class="px-2 py-1 rounded-full text-xs font-semibold ${getStatusClass(s)}">${getStatusIcon(s)} ${s}</span></td>
+                            <td class="px-4 py-3 whitespace-nowrap">
+                                <button onclick='handleEditTask(${JSON.stringify(t).replace(/'/g,"&#39;")})' class="text-blue-600 font-semibold mr-2">✏️</button>
+                                <button onclick='handleViewHistory(${JSON.stringify(t).replace(/'/g,"&#39;")})' class="text-gray-600 font-semibold">📜</button>
+                            </td>
+                        </tr>`;
+                    }).join('')}</tbody>
+                </table></div>
+                <div class="px-4 py-3 bg-gray-50 border-t flex flex-wrap justify-between items-center gap-2">
+                    <span class="text-sm text-gray-600">Showing ${(currentPage-1)*pageSize+1}-${Math.min(currentPage*pageSize,total)} of ${total}</span>
+                    <div class="flex gap-1">
+                        <button onclick="handlePageChange(1)" ${currentPage===1?'disabled':''} class="px-3 py-1 rounded border ${currentPage===1?'bg-gray-100 text-gray-400':'bg-white hover:bg-gray-100'}">«</button>
+                        <button onclick="handlePageChange(${currentPage-1})" ${currentPage===1?'disabled':''} class="px-3 py-1 rounded border ${currentPage===1?'bg-gray-100 text-gray-400':'bg-white hover:bg-gray-100'}">‹</button>
+                        ${Array.from({length:Math.min(5,totalPages)},(_,i)=>{let p;if(totalPages<=5)p=i+1;else if(currentPage<=3)p=i+1;else if(currentPage>=totalPages-2)p=totalPages-4+i;else p=currentPage-2+i;return`<button onclick="handlePageChange(${p})" class="px-3 py-1 rounded border ${p===currentPage?'bg-blue-600 text-white':'bg-white hover:bg-gray-100'}">${p}</button>`;}).join('')}
+                        <button onclick="handlePageChange(${currentPage+1})" ${currentPage===totalPages?'disabled':''} class="px-3 py-1 rounded border ${currentPage===totalPages?'bg-gray-100 text-gray-400':'bg-white hover:bg-gray-100'}">›</button>
+                        <button onclick="handlePageChange(${totalPages})" ${currentPage===totalPages?'disabled':''} class="px-3 py-1 rounded border ${currentPage===totalPages?'bg-gray-100 text-gray-400':'bg-white hover:bg-gray-100'}">»</button>
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        function renderApp() {
+            return `<div class="min-h-screen bg-gray-50">
+                <div class="bg-blue-600 text-white p-4 shadow-md"><div class="max-w-7xl mx-auto flex justify-between items-center">
+                    <div><h1 class="text-2xl font-bold">📋 Task Management</h1><p class="text-blue-100 text-sm">${employeeData['Employee Name']}</p></div>
+                    <a href="home.html" class="bg-blue-700 hover:bg-blue-800 px-4 py-2 rounded-lg text-sm font-semibold">← Home</a>
+                </div></div>
+                <div class="max-w-7xl mx-auto p-4 space-y-4">
+                    <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+                        ${[['all','Total',summary.total||0,'gray'],['To Start','To Start',summary.toStart||0,'gray'],['Priority','Priority',summary.priority||0,'red'],['WIP','WIP',summary.wip||0,'blue'],['Completed','Done',summary.completed||0,'green'],['Hold','Hold',summary.hold||0,'yellow'],['overdue','Overdue',summary.overdue||0,'red']].map(([f,l,v,c])=>`
+                        <div onclick="handleFilter('${f}')" class="cursor-pointer bg-white rounded-xl shadow p-3 text-center hover:shadow-lg ${filterStatus===f?'ring-2 ring-blue-500':''}">
+                            <p class="text-2xl font-bold text-${c}-600">${v}</p><p class="text-xs text-gray-500">${l}</p>
+                        </div>`).join('')}
+                    </div>
+                    <div class="bg-white rounded-xl shadow p-4 flex flex-wrap gap-3 items-center justify-between">
+                        <div class="flex flex-wrap gap-2 items-center">
+                            <select onchange="handleFilter(this.value)" class="px-3 py-1 border rounded-lg text-sm">
+                                <option value="all" ${filterStatus==='all'?'selected':''}>All Status</option>
+                                <option value="To Start" ${filterStatus==='To Start'?'selected':''}>To Start</option>
+                                <option value="Priority" ${filterStatus==='Priority'?'selected':''}>Priority</option>
+                                <option value="WIP" ${filterStatus==='WIP'?'selected':''}>WIP</option>
+                                <option value="Completed" ${filterStatus==='Completed'?'selected':''}>Completed</option>
+                                <option value="Hold" ${filterStatus==='Hold'?'selected':''}>Hold</option>
+                                <option value="Cancelled" ${filterStatus==='Cancelled'?'selected':''}>Cancelled</option>
+                                <option value="overdue" ${filterStatus==='overdue'?'selected':''}>⚠️ Overdue</option>
                             </select>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-semibold text-gray-700 mb-1">Status</label>
-                            <select id="taskType" class="w-full px-3 py-2 border rounded-lg">
-                                <option value="To Start" ${currentStatus === 'To Start' ? 'selected' : ''}>📋 To Start</option>
-                                <option value="Priority" ${currentStatus === 'Priority' ? 'selected' : ''}>🔴 Priority</option>
-                                <option value="WIP" ${currentStatus === 'WIP' ? 'selected' : ''}>🔵 WIP (Work in Progress)</option>
-                                <option value="Completed" ${currentStatus === 'Completed' ? 'selected' : ''}>✅ Completed</option>
-                                <option value="Hold" ${currentStatus === 'Hold' ? 'selected' : ''}>⏸️ Hold</option>
-                                <option value="Cancelled" ${currentStatus === 'Cancelled' ? 'selected' : ''}>❌ Cancelled</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-semibold text-gray-700 mb-1">Status Update * <span class="font-normal text-gray-500">(What changed?)</span></label>
-                            <textarea id="taskStatusUpdate" rows="3" placeholder="Describe the progress or update..." class="w-full px-3 py-2 border rounded-lg"></textarea>
+                            <input type="text" placeholder="🔍 Search..." value="${searchQuery}" oninput="handleSearch(event)" class="px-3 py-1 border rounded-lg text-sm w-48">
                         </div>
                         <div class="flex gap-2">
-                            <button onclick="handleSaveTask()" class="flex-1 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 font-semibold">💾 Save Update</button>
-                            <button onclick="handleCancelEdit()" class="px-6 bg-gray-500 text-white py-3 rounded-lg hover:bg-gray-600 font-semibold">Cancel</button>
+                            <button onclick="exportToExcel()" class="px-4 py-1 bg-green-600 text-white rounded-lg text-sm font-semibold">📥 Export</button>
+                            <button onclick="refreshData()" class="px-4 py-1 bg-blue-100 text-blue-700 rounded-lg text-sm font-semibold">🔄 Refresh</button>
                         </div>
                     </div>
+                    ${renderTable()}
+                    <div class="text-center text-gray-400 text-sm py-4">TimeWise v3.4</div>
                 </div>
-            </div>`;
-        }
-
-        // Render Log Modal
-        function renderLogModal() {
-            if (!viewingLog) return '';
-            const task = viewingLog.task;
-            const logs = viewingLog.logs || [];
-
-            return `<div class="modal" onclick="if(event.target === this) handleCloseLog()">
-                <div class="modal-content p-6">
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-xl font-bold text-gray-800">📜 Task History</h2>
-                        <button onclick="handleCloseLog()" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
-                    </div>
-                    <div class="bg-blue-50 p-3 rounded-lg mb-4">
-                        <p class="font-bold text-blue-800">${task['Client Name']} - ${task['Task Assigned']}</p>
-                        <p class="text-sm text-blue-600">${task['Assignment Description'] || ''}</p>
-                    </div>
-                    ${logs.length === 0 ? `
-                        <div class="text-center py-8 text-gray-500">
-                            <div class="text-4xl mb-2">📭</div>
-                            <p>No updates recorded yet</p>
-                        </div>
-                    ` : `
-                        <div class="space-y-3 max-h-96 overflow-y-auto">
-                            ${logs.map((log, i) => `
-                                <div class="border rounded-lg p-3 ${log.Trail === 'Edited' ? 'bg-gray-100 opacity-60' : 'bg-white'}">
-                                    <div class="flex justify-between items-start mb-2">
-                                        <div>
-                                            <span class="font-semibold text-gray-800">${log['Employee Name'] || log['Employee Email']}</span>
-                                            ${log.Trail === 'Edited' ? '<span class="text-xs text-gray-500 ml-2">(superseded)</span>' : ''}
-                                        </div>
-                                        <span class="text-xs text-gray-500">${formatDateTime(log.Timestamp)}</span>
-                                    </div>
-                                    <div class="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs mb-2">
-                                        <div><span class="text-gray-500">Status:</span> <span class="font-semibold ${getStatusClass(log.Type)}">${log.Type || '-'}</span></div>
-                                        <div><span class="text-gray-500">Due:</span> <span class="font-semibold">${formatDate(log['Due Date'])}</span></div>
-                                        <div><span class="text-gray-500">Assigned:</span> <span class="font-semibold">${log['Assigned To'] || '-'}</span></div>
-                                    </div>
-                                    ${log['Status Update'] ? `<div class="text-sm bg-gray-50 p-2 rounded"><span class="text-gray-500">Update:</span> ${log['Status Update']}</div>` : ''}
-                                </div>
-                            `).join('')}
-                        </div>
-                    `}
-                    <div class="mt-4">
-                        <button onclick="handleCloseLog()" class="w-full bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300 font-semibold">Close</button>
-                    </div>
-                </div>
-            </div>`;
-        }
-
-        // Render App
-        function renderApp() {
-            const filteredTasks = getFilteredAssignments();
-            
-            return `<div class="min-h-screen bg-gray-50">
-                <div class="bg-blue-600 text-white p-4 shadow-md">
-                    <div class="max-w-6xl mx-auto flex justify-between items-center">
-                        <div><h1 class="text-2xl font-bold">📋 Task Management</h1><p class="text-blue-100 text-sm">${employeeData['Employee Name']} | ${employeeData['Designation'] || ''}</p></div>
-                        <a href="home.html" class="bg-blue-700 hover:bg-blue-800 px-4 py-2 rounded-lg text-sm font-semibold">← Home</a>
-                    </div>
-                </div>
-                <div class="max-w-6xl mx-auto p-4 space-y-6">
-                    <!-- Summary Cards -->
-                    <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
-                        <div onclick="setFilter('all')" class="cursor-pointer bg-white rounded-xl shadow-md p-3 text-center hover:shadow-lg transition ${filterStatus === 'all' ? 'ring-2 ring-blue-500' : ''}">
-                            <p class="text-2xl font-bold text-gray-800">${summary.total || 0}</p>
-                            <p class="text-xs text-gray-500">Total</p>
-                        </div>
-                        <div onclick="setFilter('To Start')" class="cursor-pointer bg-white rounded-xl shadow-md p-3 text-center hover:shadow-lg transition ${filterStatus === 'To Start' ? 'ring-2 ring-blue-500' : ''}">
-                            <p class="text-2xl font-bold text-gray-600">${summary.toStart || 0}</p>
-                            <p class="text-xs text-gray-500">To Start</p>
-                        </div>
-                        <div onclick="setFilter('Priority')" class="cursor-pointer bg-white rounded-xl shadow-md p-3 text-center hover:shadow-lg transition ${filterStatus === 'Priority' ? 'ring-2 ring-blue-500' : ''}">
-                            <p class="text-2xl font-bold text-red-600">${summary.priority || 0}</p>
-                            <p class="text-xs text-gray-500">Priority</p>
-                        </div>
-                        <div onclick="setFilter('WIP')" class="cursor-pointer bg-white rounded-xl shadow-md p-3 text-center hover:shadow-lg transition ${filterStatus === 'WIP' ? 'ring-2 ring-blue-500' : ''}">
-                            <p class="text-2xl font-bold text-blue-600">${summary.wip || 0}</p>
-                            <p class="text-xs text-gray-500">WIP</p>
-                        </div>
-                        <div onclick="setFilter('Completed')" class="cursor-pointer bg-white rounded-xl shadow-md p-3 text-center hover:shadow-lg transition ${filterStatus === 'Completed' ? 'ring-2 ring-blue-500' : ''}">
-                            <p class="text-2xl font-bold text-green-600">${summary.completed || 0}</p>
-                            <p class="text-xs text-gray-500">Completed</p>
-                        </div>
-                        <div onclick="setFilter('overdue')" class="cursor-pointer bg-white rounded-xl shadow-md p-3 text-center hover:shadow-lg transition ${filterStatus === 'overdue' ? 'ring-2 ring-red-500' : ''}">
-                            <p class="text-2xl font-bold text-red-600">${summary.overdue || 0}</p>
-                            <p class="text-xs text-gray-500">Overdue</p>
-                        </div>
-                    </div>
-
-                    <!-- Filter Bar -->
-                    <div class="flex flex-wrap gap-2 items-center">
-                        <span class="text-gray-600 font-semibold">Filter:</span>
-                        <button onclick="setFilter('all')" class="px-3 py-1 rounded-full text-sm ${filterStatus === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}">All</button>
-                        <button onclick="setFilter('nodata')" class="px-3 py-1 rounded-full text-sm ${filterStatus === 'nodata' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}">New (${summary.noData || 0})</button>
-                        <button onclick="setFilter('Hold')" class="px-3 py-1 rounded-full text-sm ${filterStatus === 'Hold' ? 'bg-yellow-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}">On Hold (${summary.hold || 0})</button>
-                        <button onclick="setFilter('Cancelled')" class="px-3 py-1 rounded-full text-sm ${filterStatus === 'Cancelled' ? 'bg-gray-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}">Cancelled (${summary.cancelled || 0})</button>
-                        <button onclick="refreshData()" class="ml-auto px-4 py-1 bg-blue-100 text-blue-700 rounded-full text-sm hover:bg-blue-200 font-semibold">🔄 Refresh</button>
-                    </div>
-
-                    <!-- Task List -->
-                    ${filteredTasks.length === 0 ? `
-                        <div class="bg-white rounded-xl shadow-md p-8 text-center text-gray-500">
-                            <div class="text-5xl mb-3">📋</div>
-                            <p class="text-lg">No tasks found</p>
-                            <p class="text-sm">Tasks will appear here when assignments are created with you as the head</p>
-                        </div>
-                    ` : `
-                        <div class="grid md:grid-cols-2 gap-4">
-                            ${filteredTasks.map(task => renderTaskCard(task)).join('')}
-                        </div>
-                    `}
-
-                    <div class="text-center text-gray-400 text-sm py-4">TimeWise v3.3 | © 2026 DRP & Co. LLP</div>
-                </div>
-                ${renderEditModal()}
-                ${renderLogModal()}
+                ${renderEditModal()}${renderHistoryModal()}
             </div>`;
         }
 
         function render() { document.getElementById('app').innerHTML = isLoggedIn ? renderApp() : renderLogin(); }
 
-        // Initialize
         async function init() {
-            const session = loadSession();
-            if (session && session.employeeEmail && session.employeeData) {
-                document.getElementById('app').innerHTML = `<div class="min-h-screen bg-gray-50 flex items-center justify-center"><div class="text-center"><div class="loading-spinner mx-auto"></div><p class="mt-4 text-gray-600">Loading tasks...</p></div></div>`;
+            const s = loadSession();
+            if (s && s.employeeEmail && s.employeeData) {
+                document.getElementById('app').innerHTML = '<div class="min-h-screen flex items-center justify-center"><div class="loading-spinner"></div></div>';
                 try {
-                    employeeEmail = session.employeeEmail; employeeData = session.employeeData;
-                    const initData = await callAPI('initTask', { email: employeeEmail });
-                    assignments = initData.assignments || [];
-                    employees = initData.employees || [];
-                    summary = initData.summary || {};
+                    employeeEmail = s.employeeEmail; employeeData = s.employeeData;
+                    const data = await callAPI('initTask', { email: employeeEmail });
+                    tasks = data.tasks || []; employees = data.employees || []; summary = data.summary || {};
                     isLoggedIn = true; saveSession(); render();
-                } catch (error) { console.error('Session error:', error); clearSession(); render(); }
+                } catch (e) { clearSession(); render(); }
             } else { render(); }
         }
         init();
