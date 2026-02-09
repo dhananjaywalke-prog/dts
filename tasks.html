@@ -163,10 +163,22 @@
             XLSX.writeFile(wb, `Tasks_${new Date().toISOString().split('T')[0]}.xlsx`);
         }
 
-        function handleEditTask(taskIndex) { 
+        async function handleEditTask(taskIndex) { 
             const t = getPaginatedTasks().tasks[taskIndex];
             if (t) {
-                editingTask = JSON.parse(JSON.stringify(t)); 
+                editingTask = JSON.parse(JSON.stringify(t));
+                
+                // If user is head, fetch assignee updates
+                if (editingTask.isHead) {
+                    try {
+                        const updates = await callAPI('getAssigneeUpdates', { assignmentRowId: editingTask['Row ID'] });
+                        editingTask.assigneeUpdates = updates || [];
+                    } catch (e) {
+                        console.error('Failed to fetch assignee updates:', e);
+                        editingTask.assigneeUpdates = [];
+                    }
+                }
+                
                 render(); 
             }
         }
@@ -175,24 +187,57 @@
         async function handleSaveTask() {
             const dueDate = document.getElementById('taskDueDate')?.value || '';
             const executionReady = document.getElementById('taskExecReady')?.value || 'No';
-            const assignedToEmail = document.getElementById('taskAssignedTo')?.value || '';
-            const assignedTo = assignedToEmail ? (employees.find(e => e.email === assignedToEmail)?.name || '') : '';
             const type = document.getElementById('taskType')?.value || 'To Start';
             const statusUpdate = document.getElementById('taskStatusUpdate')?.value?.trim() || '';
+            
             if (!statusUpdate) { alert('Please provide a status update'); return; }
+            
+            // Get selected assignees (multi-select checkboxes)
+            let assignedToEmails = '';
+            let assignedToNames = '';
+            
+            if (editingTask.isHead) {
+                const checkboxes = document.querySelectorAll('.assignee-checkbox:checked');
+                const emails = [], names = [];
+                checkboxes.forEach(cb => {
+                    emails.push(cb.value);
+                    names.push(cb.dataset.name);
+                });
+                assignedToEmails = emails.join(', ');
+                assignedToNames = names.join(', ');
+            } else {
+                // Assignee can't change assignees
+                assignedToEmails = editingTask['Assigned To Email'] || '';
+                assignedToNames = editingTask['Assigned To'] || '';
+            }
             
             // Debug: Show what we're sending
             console.log('Saving task:', {
                 rowId: editingTask['Row ID'],
                 client: editingTask['Client Name'],
                 head: editingTask['Assignment Head'],
-                isHead: editingTask.isHead
+                isHead: editingTask.isHead,
+                assignees: assignedToNames
             });
             
             showLoading('Saving...');
             try {
-                await callAPI('updateTask', { task: { rowId: editingTask['Row ID'], dueDate, executionReady, assignedTo, assignedToEmail, type, statusUpdate }, email: employeeEmail, employeeName: employeeData['Employee Name'] });
-                editingTask = null; await refreshData(); alert('Task updated successfully!');
+                await callAPI('updateTask', { 
+                    task: { 
+                        rowId: editingTask['Row ID'], 
+                        dueDate, 
+                        executionReady, 
+                        assignedTo: assignedToNames, 
+                        assignedToEmail: assignedToEmails, 
+                        type, 
+                        statusUpdate 
+                    }, 
+                    email: employeeEmail, 
+                    employeeName: employeeData['Employee Name'] 
+                });
+                editingTask = null; 
+                await refreshData(); 
+                alert('Task updated successfully!');
             } catch (e) { hideLoading(); alert('Error: ' + e.message); }
         }
 
@@ -226,6 +271,10 @@
             const today = new Date().toISOString().split('T')[0];
             let dueVal = '';
             if (editingTask['Due Date']) { try { dueVal = new Date(editingTask['Due Date']).toISOString().split('T')[0]; } catch(e){} }
+            
+            // Parse current assignees (comma-separated)
+            const currentAssigneeEmails = (editingTask['Assigned To Email'] || '').split(',').map(e => e.trim()).filter(e => e);
+            
             return `<div class="modal" onclick="if(event.target===this)handleCancelEdit()">
                 <div class="modal-content p-6">
                     <div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold">📝 Update Task</h2><button onclick="handleCancelEdit()" class="text-2xl text-gray-500">&times;</button></div>
@@ -234,14 +283,42 @@
                         <p class="text-sm text-blue-600">${editingTask['Assignment Description']||''}</p>
                         <p class="text-xs text-gray-500 mt-1">Head: ${editingTask['Assignment Head']}</p>
                     </div>
-                    ${!isHead ? '<div class="bg-yellow-50 border border-yellow-200 p-3 rounded-lg mb-4 text-sm text-yellow-800">⚠️ You are the assignee. You can only update Status and Status Update.</div>' : ''}
+                    ${!isHead ? '<div class="bg-yellow-50 border border-yellow-200 p-3 rounded-lg mb-4 text-sm text-yellow-800">⚠️ You are an assignee. You can only update your Status and Status Update.</div>' : ''}
+                    
+                    ${isHead && editingTask.assigneeUpdates && editingTask.assigneeUpdates.length > 0 ? `
+                    <div class="bg-gray-50 p-3 rounded-lg mb-4">
+                        <p class="font-semibold text-gray-700 mb-2">👥 Assignee Updates:</p>
+                        <div class="space-y-2 max-h-32 overflow-y-auto">
+                            ${editingTask.assigneeUpdates.map(u => `
+                                <div class="flex items-center justify-between text-sm bg-white p-2 rounded border">
+                                    <span class="font-medium">${u['Updated By Name']}</span>
+                                    <span class="px-2 py-0.5 rounded text-xs ${getStatusClass(u['Type'] || 'To Start')}">${u['Type'] || 'To Start'}</span>
+                                    <span class="text-gray-500 text-xs max-w-xs truncate" title="${u['Status Update'] || ''}">${u['Status Update'] || '-'}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                    ` : ''}
+                    
                     <div class="space-y-4">
                         <div class="grid grid-cols-2 gap-4">
                             <div><label class="block text-sm font-semibold mb-1">Due Date</label><input type="date" id="taskDueDate" value="${dueVal}" ${!isHead||isLocked?'disabled':''} class="w-full px-3 py-2 border rounded-lg ${!isHead||isLocked?'bg-gray-100':''}"></div>
                             <div><label class="block text-sm font-semibold mb-1">Execution Ready?</label><select id="taskExecReady" ${!isHead?'disabled':''} class="w-full px-3 py-2 border rounded-lg ${!isHead?'bg-gray-100':''}"><option value="No" ${editingTask['Execution Ready']!=='Yes'?'selected':''}>No</option><option value="Yes" ${editingTask['Execution Ready']==='Yes'?'selected':''}>Yes</option></select></div>
                         </div>
-                        <div><label class="block text-sm font-semibold mb-1">Assigned To</label><select id="taskAssignedTo" ${!isHead?'disabled':''} class="w-full px-3 py-2 border rounded-lg ${!isHead?'bg-gray-100':''}"><option value="">-- Not Assigned --</option>${employees.map(e=>`<option value="${e.email}" ${editingTask['Assigned To Email']===e.email?'selected':''}>${e.name}</option>`).join('')}</select></div>
-                        <div><label class="block text-sm font-semibold mb-1">Status</label><select id="taskType" class="w-full px-3 py-2 border rounded-lg"><option value="To Start" ${status==='To Start'?'selected':''}>⬜ To Start</option><option value="Priority" ${status==='Priority'?'selected':''}>🔴 Priority</option><option value="WIP" ${status==='WIP'?'selected':''}>🔵 WIP</option><option value="Completed" ${status==='Completed'?'selected':''}>✅ Completed</option><option value="Hold" ${status==='Hold'?'selected':''}>⏸️ Hold</option><option value="Cancelled" ${status==='Cancelled'?'selected':''}>❌ Cancelled</option></select></div>
+                        ${isHead ? `
+                        <div>
+                            <label class="block text-sm font-semibold mb-1">Assigned To (select multiple)</label>
+                            <div class="border rounded-lg p-2 max-h-40 overflow-y-auto bg-white">
+                                ${employees.map(e => `
+                                    <label class="flex items-center p-1 hover:bg-gray-50 cursor-pointer">
+                                        <input type="checkbox" class="assignee-checkbox mr-2" value="${e.email}" data-name="${e.name}" ${currentAssigneeEmails.includes(e.email) ? 'checked' : ''}>
+                                        <span class="text-sm">${e.name}</span>
+                                    </label>
+                                `).join('')}
+                            </div>
+                        </div>
+                        ` : ''}
+                        <div><label class="block text-sm font-semibold mb-1">Overall Status (set by Head)</label><select id="taskType" ${!isHead?'disabled':''} class="w-full px-3 py-2 border rounded-lg ${!isHead?'bg-gray-100':''}"><option value="To Start" ${status==='To Start'?'selected':''}>⬜ To Start</option><option value="Priority" ${status==='Priority'?'selected':''}>🔴 Priority</option><option value="WIP" ${status==='WIP'?'selected':''}>🔵 WIP</option><option value="Completed" ${status==='Completed'?'selected':''}>✅ Completed</option><option value="Hold" ${status==='Hold'?'selected':''}>⏸️ Hold</option><option value="Cancelled" ${status==='Cancelled'?'selected':''}>❌ Cancelled</option></select></div>
                         <div><label class="block text-sm font-semibold mb-1">Status Update *</label><textarea id="taskStatusUpdate" rows="3" placeholder="Describe the progress..." class="w-full px-3 py-2 border rounded-lg"></textarea></div>
                         <div class="flex gap-2"><button onclick="handleSaveTask()" class="flex-1 bg-blue-600 text-white py-3 rounded-lg font-semibold">💾 Save</button><button onclick="handleCancelEdit()" class="px-6 bg-gray-500 text-white py-3 rounded-lg font-semibold">Cancel</button></div>
                     </div>
