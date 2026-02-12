@@ -481,7 +481,9 @@
         }
 
         function renderApp() {
-            const isAssignmentHead = employeeData && (employeeData['Is Assignment Head'] === 'Yes' || employeeData['Is Assignment Head'] === true);
+            // Check if user is head of any task OR has the Is Assignment Head flag
+            const isAssignmentHead = tasks.some(t => t.isHead === true) || 
+                                     (employeeData && (employeeData['Is Assignment Head'] === 'Yes' || employeeData['Is Assignment Head'] === true));
             
             return `<div class="min-h-screen bg-gray-50">
                 <div class="bg-blue-600 text-white p-4 shadow-md">
