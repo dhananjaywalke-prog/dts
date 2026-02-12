@@ -21,7 +21,17 @@
         th.sortable { cursor: pointer; user-select: none; }
         th.sortable:hover { background: #E5E7EB; }
         tr.overdue { background: #FEF2F2 !important; }
-        tr:hover { background: #F9FAFB; }
+        tbody tr:hover { background: #F9FAFB; }
+        .summary-card { transition: all 0.2s; }
+        .summary-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        table { table-layout: fixed; }
+        .col-client { width: 18%; }
+        .col-task { width: 15%; }
+        .col-desc { width: 20%; }
+        .col-due { width: 12%; }
+        .col-assigned { width: 18%; }
+        .col-status { width: 10%; }
+        .col-actions { width: 7%; }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -32,13 +42,12 @@
     <script src="config.js"></script>
     <script>
         let isLoggedIn = false, employeeEmail = '', employeeData = null;
-        let tasks = [], employees = [], summary = {};
-        let editingTask = null, viewingHistory = null;
+        let tasks = [], employees = [], clients = [], taskTypes = [], summary = {};
+        let editingTask = null, viewingHistory = null, creatingTask = false;
         let filterStatus = 'all', searchQuery = '';
-        let sortColumn = 'Due Date', sortDirection = 'asc';  // Default: Due Date ascending (nearest first)
+        let sortColumn = 'Due Date', sortDirection = 'asc';
         let currentPage = 1, pageSize = 10;
         
-        // Status priority for sorting (lower = higher priority)
         const statusPriority = { 'Priority': 1, 'WIP': 2, 'To Start': 3, 'Hold': 4, 'Completed': 5, 'Cancelled': 6 };
 
         function saveSession() { localStorage.setItem('timewise_session', JSON.stringify({ employeeEmail, employeeData, timestamp: Date.now() })); }
@@ -59,6 +68,7 @@
         function getStatusClass(s) { return { 'To Start': 'status-tostart', 'Priority': 'status-priority', 'WIP': 'status-wip', 'Completed': 'status-completed', 'Hold': 'status-hold', 'Cancelled': 'status-cancelled' }[s] || 'status-tostart'; }
         function getStatusIcon(s) { return { 'To Start': '⬜', 'Priority': '🔴', 'WIP': '🔵', 'Completed': '✅', 'Hold': '⏸️', 'Cancelled': '❌' }[s] || '⬜'; }
         function isOverdue(t) { if (!t['Due Date']) return false; const s = t['Type'] || 'To Start'; if (s === 'Completed' || s === 'Cancelled') return false; return new Date(t['Due Date']) < new Date(new Date().toDateString()); }
+        function escapeHtml(str) { return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
         async function handleLogin() {
             const input = document.getElementById('emailInput'), statusDiv = document.getElementById('loginStatus'), btn = document.getElementById('loginBtn');
@@ -67,7 +77,9 @@
             btn.disabled = true; btn.innerHTML = '⏳ Logging in...';
             try {
                 const data = await callAPI('initTask', { email: employeeEmail });
-                employeeData = data.employee; tasks = data.tasks || []; employees = data.employees || []; summary = data.summary || {};
+                employeeData = data.employee; tasks = data.tasks || []; employees = data.employees || []; 
+                clients = data.clients || []; taskTypes = data.taskTypes || [];
+                summary = data.summary || {};
                 isLoggedIn = true; saveSession(); render();
             } catch (e) { btn.disabled = false; btn.innerHTML = 'Login'; statusDiv.innerHTML = `<p class="text-red-600 text-sm mt-2">❌ ${e.message}</p>`; }
         }
@@ -76,66 +88,19 @@
             showLoading('Refreshing...');
             try {
                 const data = await callAPI('initTask', { email: employeeEmail });
-                tasks = data.tasks || []; employees = data.employees || []; summary = data.summary || {};
+                tasks = data.tasks || []; employees = data.employees || []; 
+                clients = data.clients || []; taskTypes = data.taskTypes || [];
+                summary = data.summary || {};
                 hideLoading(); render();
             } catch (e) { hideLoading(); alert('Error: ' + e.message); }
         }
 
-        function getFilteredTasks() {
-            let f = [...tasks];
-            if (filterStatus === 'overdue') f = f.filter(t => isOverdue(t));
-            else if (filterStatus !== 'all') f = f.filter(t => (t['Type'] || 'To Start') === filterStatus);
-            if (searchQuery) {
-                const q = searchQuery.toLowerCase();
-                f = f.filter(t => (t['Client Name']||'').toLowerCase().includes(q) || (t['Task Assigned']||'').toLowerCase().includes(q) || (t['Assignment Description']||'').toLowerCase().includes(q) || (t['Assigned To']||'').toLowerCase().includes(q));
-            }
-            // Multi-level sorting: Due Date → Status → Client Name
-            f.sort((a, b) => {
-                // If user selected a specific column, use that first
-                if (sortColumn === 'Due Date') {
-                    // Due date: nulls last, then ascending (nearest first)
-                    const dA = a['Due Date'] ? new Date(a['Due Date']).getTime() : (sortDirection === 'asc' ? Infinity : -Infinity);
-                    const dB = b['Due Date'] ? new Date(b['Due Date']).getTime() : (sortDirection === 'asc' ? Infinity : -Infinity);
-                    if (dA !== dB) return sortDirection === 'asc' ? dA - dB : dB - dA;
-                    
-                    // Then by status priority
-                    const sA = statusPriority[a['Type'] || 'To Start'] || 99;
-                    const sB = statusPriority[b['Type'] || 'To Start'] || 99;
-                    if (sA !== sB) return sA - sB;
-                    
-                    // Then by client name
-                    return (a['Client Name'] || '').localeCompare(b['Client Name'] || '');
-                } else if (sortColumn === 'Type') {
-                    // Sort by status priority
-                    const sA = statusPriority[a['Type'] || 'To Start'] || 99;
-                    const sB = statusPriority[b['Type'] || 'To Start'] || 99;
-                    const result = sA - sB;
-                    return sortDirection === 'asc' ? result : -result;
-                } else {
-                    // Other columns: simple sort
-                    let vA = a[sortColumn] || '', vB = b[sortColumn] || '';
-                    if (sortColumn === 'Last Updated On') { 
-                        vA = vA ? new Date(vA).getTime() : 0; 
-                        vB = vB ? new Date(vB).getTime() : 0; 
-                    } else { 
-                        vA = String(vA).toLowerCase(); 
-                        vB = String(vB).toLowerCase(); 
-                    }
-                    if (vA < vB) return sortDirection === 'asc' ? -1 : 1;
-                    if (vA > vB) return sortDirection === 'asc' ? 1 : -1;
-                    return 0;
-                }
-            });
-            return f;
-        }
-
-        function getPaginatedTasks() {
-            const f = getFilteredTasks(), start = (currentPage - 1) * pageSize;
-            return { tasks: f.slice(start, start + pageSize), total: f.length, totalPages: Math.ceil(f.length / pageSize) || 1 };
-        }
-
+        function handleLogout() { clearSession(); isLoggedIn = false; employeeEmail = ''; employeeData = null; tasks = []; render(); }
+        function handleFilter(f) { filterStatus = f; currentPage = 1; render(); }
         function handleSort(col) { if (sortColumn === col) sortDirection = sortDirection === 'asc' ? 'desc' : 'asc'; else { sortColumn = col; sortDirection = 'asc'; } currentPage = 1; render(); }
-        function handleFilter(s) { filterStatus = s; currentPage = 1; render(); }
+        function handlePageChange(p) { currentPage = p; render(); }
+        function handlePageSizeChange(s) { pageSize = parseInt(s); currentPage = 1; render(); }
+        
         let searchTimeout = null;
         function handleSearch(e) { 
             const value = e.target.value;
@@ -144,41 +109,101 @@
                 searchQuery = value; 
                 currentPage = 1; 
                 render();
-                // Restore focus and cursor position
                 const searchBox = document.getElementById('searchBox');
                 if (searchBox) {
                     searchBox.focus();
                     searchBox.setSelectionRange(searchBox.value.length, searchBox.value.length);
                 }
-            }, 300); // 300ms debounce
+            }, 300);
         }
-        function handlePageChange(p) { currentPage = p; render(); }
+
+        function getPaginatedTasks() {
+            let f = [...tasks];
+            if (filterStatus !== 'all') {
+                if (filterStatus === 'overdue') f = f.filter(t => isOverdue(t));
+                else f = f.filter(t => (t['Type'] || 'To Start') === filterStatus);
+            }
+            if (searchQuery) {
+                const q = searchQuery.toLowerCase();
+                f = f.filter(t => (t['Client Name']||'').toLowerCase().includes(q) || (t['Task Assigned']||'').toLowerCase().includes(q) || (t['Assignment Description']||'').toLowerCase().includes(q) || (t['Assigned To']||'').toLowerCase().includes(q));
+            }
+            // Multi-level sorting
+            f.sort((a, b) => {
+                if (sortColumn === 'Due Date') {
+                    const dA = a['Due Date'] ? new Date(a['Due Date']).getTime() : (sortDirection === 'asc' ? Infinity : -Infinity);
+                    const dB = b['Due Date'] ? new Date(b['Due Date']).getTime() : (sortDirection === 'asc' ? Infinity : -Infinity);
+                    if (dA !== dB) return sortDirection === 'asc' ? dA - dB : dB - dA;
+                    const sA = statusPriority[a['Type'] || 'To Start'] || 99;
+                    const sB = statusPriority[b['Type'] || 'To Start'] || 99;
+                    if (sA !== sB) return sA - sB;
+                    return (a['Client Name'] || '').localeCompare(b['Client Name'] || '');
+                } else if (sortColumn === 'Type') {
+                    const sA = statusPriority[a['Type'] || 'To Start'] || 99;
+                    const sB = statusPriority[b['Type'] || 'To Start'] || 99;
+                    return sortDirection === 'asc' ? sA - sB : sB - sA;
+                } else {
+                    let vA = a[sortColumn] || '', vB = b[sortColumn] || '';
+                    vA = String(vA).toLowerCase(); vB = String(vB).toLowerCase();
+                    if (vA < vB) return sortDirection === 'asc' ? -1 : 1;
+                    if (vA > vB) return sortDirection === 'asc' ? 1 : -1;
+                    return 0;
+                }
+            });
+            const total = f.length, totalPages = Math.ceil(total / pageSize) || 1;
+            return { tasks: f.slice((currentPage - 1) * pageSize, currentPage * pageSize), total, totalPages };
+        }
 
         function exportToExcel() {
-            const f = getFilteredTasks();
-            const data = f.map(t => ({ Client: t['Client Name']||'', Task: t['Task Assigned']||'', Description: t['Assignment Description']||'', Head: t['Assignment Head']||'', 'Due Date': formatDate(t['Due Date']), 'Assigned To': t['Assigned To']||'', 'Exec Ready': t['Execution Ready']||'No', Status: t['Type']||'To Start', 'Status Update': t['Status Update']||'', 'Last Updated': formatDateTime(t['Last Updated On']) }));
+            const data = tasks.map(t => ({ 'Client': t['Client Name'], 'Task': t['Task Assigned'], 'Description': t['Assignment Description'], 'Due Date': formatDate(t['Due Date']), 'Assigned To': t['Assigned To'], 'Status': t['Type'] || 'To Start', 'Head': t['Assignment Head'] }));
             const ws = XLSX.utils.json_to_sheet(data);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Tasks');
             XLSX.writeFile(wb, `Tasks_${new Date().toISOString().split('T')[0]}.xlsx`);
         }
 
+        // ============ CREATE TASK ============
+        function handleCreateTask() { creatingTask = true; render(); }
+        function handleCancelCreate() { creatingTask = false; render(); }
+
+        async function handleSaveNewTask() {
+            const clientName = document.getElementById('newTaskClient')?.value || '';
+            const taskAssigned = document.getElementById('newTaskType')?.value || '';
+            const description = document.getElementById('newTaskDesc')?.value?.trim() || '';
+            const dueDate = document.getElementById('newTaskDueDate')?.value || '';
+            const execReady = document.getElementById('newTaskExecReady')?.value || 'No';
+            
+            // Get selected assignees
+            const checkboxes = document.querySelectorAll('.new-assignee-checkbox:checked');
+            const emails = [], names = [];
+            checkboxes.forEach(cb => { emails.push(cb.value); names.push(cb.dataset.name); });
+            
+            if (!clientName) { alert('Please select a client'); return; }
+            if (!taskAssigned) { alert('Please select a task type'); return; }
+            
+            showLoading('Creating task...');
+            try {
+                await callAPI('createTask', {
+                    clientName, taskAssigned, description, dueDate, executionReady: execReady,
+                    assignedTo: names.join(', '), assignedToEmail: emails.join(', '),
+                    assignmentHead: employeeData['Employee Name'], headEmail: employeeEmail
+                });
+                creatingTask = false;
+                await refreshData();
+                alert('Task created successfully!');
+            } catch (e) { hideLoading(); alert('Error: ' + e.message); }
+        }
+
+        // ============ EDIT TASK ============
         async function handleEditTask(taskIndex) { 
             const t = getPaginatedTasks().tasks[taskIndex];
             if (t) {
                 editingTask = JSON.parse(JSON.stringify(t));
-                
-                // If user is head, fetch assignee updates
                 if (editingTask.isHead) {
                     try {
                         const updates = await callAPI('getAssigneeUpdates', { assignmentRowId: editingTask['Row ID'] });
                         editingTask.assigneeUpdates = updates || [];
-                    } catch (e) {
-                        console.error('Failed to fetch assignee updates:', e);
-                        editingTask.assigneeUpdates = [];
-                    }
+                    } catch (e) { editingTask.assigneeUpdates = []; }
                 }
-                
                 render(); 
             }
         }
@@ -192,48 +217,23 @@
             
             if (!statusUpdate) { alert('Please provide a status update'); return; }
             
-            // Get selected assignees (multi-select checkboxes)
-            let assignedToEmails = '';
-            let assignedToNames = '';
-            
+            let assignedToEmails = '', assignedToNames = '';
             if (editingTask.isHead) {
                 const checkboxes = document.querySelectorAll('.assignee-checkbox:checked');
                 const emails = [], names = [];
-                checkboxes.forEach(cb => {
-                    emails.push(cb.value);
-                    names.push(cb.dataset.name);
-                });
+                checkboxes.forEach(cb => { emails.push(cb.value); names.push(cb.dataset.name); });
                 assignedToEmails = emails.join(', ');
                 assignedToNames = names.join(', ');
             } else {
-                // Assignee can't change assignees
                 assignedToEmails = editingTask['Assigned To Email'] || '';
                 assignedToNames = editingTask['Assigned To'] || '';
             }
             
-            // Debug: Show what we're sending
-            console.log('Saving task:', {
-                rowId: editingTask['Row ID'],
-                client: editingTask['Client Name'],
-                head: editingTask['Assignment Head'],
-                isHead: editingTask.isHead,
-                assignees: assignedToNames
-            });
-            
             showLoading('Saving...');
             try {
                 await callAPI('updateTask', { 
-                    task: { 
-                        rowId: editingTask['Row ID'], 
-                        dueDate, 
-                        executionReady, 
-                        assignedTo: assignedToNames, 
-                        assignedToEmail: assignedToEmails, 
-                        type, 
-                        statusUpdate 
-                    }, 
-                    email: employeeEmail, 
-                    employeeName: employeeData['Employee Name'] 
+                    task: { rowId: editingTask['Row ID'], dueDate, executionReady, assignedTo: assignedToNames, assignedToEmail: assignedToEmails, type, statusUpdate }, 
+                    email: employeeEmail, employeeName: employeeData['Employee Name'] 
                 });
                 editingTask = null; 
                 await refreshData(); 
@@ -241,25 +241,86 @@
             } catch (e) { hideLoading(); alert('Error: ' + e.message); }
         }
 
+        // ============ HISTORY ============
         async function handleViewHistory(taskIndex) {
             const t = getPaginatedTasks().tasks[taskIndex];
-            if (!t) return;
-            showLoading('Loading history...');
-            try {
-                const h = await callAPI('getTaskHistory', { assignmentRowId: t['Row ID'] });
-                viewingHistory = { task: t, history: h || [] }; hideLoading(); render();
-            } catch (e) { hideLoading(); alert('Error: ' + e.message); }
+            if (t) {
+                showLoading('Loading history...');
+                try {
+                    const history = await callAPI('getTaskHistory', { assignmentRowId: t['Row ID'] });
+                    viewingHistory = { task: t, history: history || [] };
+                    hideLoading(); render();
+                } catch (e) { hideLoading(); alert('Error: ' + e.message); }
+            }
         }
         function handleCloseHistory() { viewingHistory = null; render(); }
 
+        // ============ RENDER FUNCTIONS ============
         function renderLogin() {
-            return `<div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+            return `<div class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 to-blue-100">
                 <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
-                    <div class="text-center mb-6"><div class="text-6xl mb-4">📋</div><h1 class="text-3xl font-bold text-gray-800">TimeWise</h1><p class="text-gray-600 mt-2">Task Management</p></div>
-                    <div class="mb-4"><label class="block text-gray-700 font-semibold mb-2">Email Address</label><input type="email" id="emailInput" placeholder="your.email@company.com" class="w-full px-4 py-3 border-2 rounded-xl" onkeypress="if(event.key==='Enter')handleLogin()" /></div>
+                    <div class="text-center mb-6"><div class="text-5xl mb-2">📋</div><h1 class="text-2xl font-bold text-gray-800">Task Management</h1><p class="text-gray-500">TimeWise v3.5</p></div>
+                    <div class="mb-4"><label class="block text-sm font-semibold mb-2">Email Address</label><input type="email" id="emailInput" placeholder="your.email@company.com" class="w-full px-4 py-3 border rounded-xl" onkeypress="if(event.key==='Enter')handleLogin()"></div>
                     <button id="loginBtn" onclick="handleLogin()" class="w-full bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700 font-semibold">Login</button>
                     <div id="loginStatus" class="mt-4"></div>
                     <div class="mt-4 text-center"><a href="home.html" class="text-blue-600 hover:text-blue-800 text-sm">← Back to Home</a></div>
+                </div></div>`;
+        }
+
+        function renderCreateModal() {
+            if (!creatingTask) return '';
+            const today = new Date().toISOString().split('T')[0];
+            return `<div class="modal" onclick="if(event.target===this)handleCancelCreate()">
+                <div class="modal-content p-6">
+                    <div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold">➕ Create New Task</h2><button onclick="handleCancelCreate()" class="text-2xl text-gray-500">&times;</button></div>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-semibold mb-1">Client *</label>
+                            <select id="newTaskClient" class="w-full px-3 py-2 border rounded-lg">
+                                <option value="">-- Select Client --</option>
+                                ${clients.map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold mb-1">Task Type *</label>
+                            <select id="newTaskType" class="w-full px-3 py-2 border rounded-lg">
+                                <option value="">-- Select Task --</option>
+                                ${taskTypes.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold mb-1">Description</label>
+                            <textarea id="newTaskDesc" rows="2" placeholder="Assignment description..." class="w-full px-3 py-2 border rounded-lg"></textarea>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-semibold mb-1">Due Date</label>
+                                <input type="date" id="newTaskDueDate" class="w-full px-3 py-2 border rounded-lg">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold mb-1">Execution Ready?</label>
+                                <select id="newTaskExecReady" class="w-full px-3 py-2 border rounded-lg">
+                                    <option value="No">No</option>
+                                    <option value="Yes">Yes</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold mb-1">Assign To (select multiple)</label>
+                            <div class="border rounded-lg p-2 max-h-40 overflow-y-auto bg-white">
+                                ${employees.map(e => `
+                                    <label class="flex items-center p-1 hover:bg-gray-50 cursor-pointer">
+                                        <input type="checkbox" class="new-assignee-checkbox mr-2" value="${e.email}" data-name="${escapeHtml(e.name)}">
+                                        <span class="text-sm">${escapeHtml(e.name)}</span>
+                                    </label>
+                                `).join('')}
+                            </div>
+                        </div>
+                        <div class="flex gap-2 pt-2">
+                            <button onclick="handleSaveNewTask()" class="flex-1 bg-green-600 text-white py-3 rounded-lg font-semibold">✅ Create Task</button>
+                            <button onclick="handleCancelCreate()" class="px-6 bg-gray-500 text-white py-3 rounded-lg font-semibold">Cancel</button>
+                        </div>
+                    </div>
                 </div></div>`;
         }
 
@@ -268,20 +329,17 @@
             const isHead = editingTask.isHead === true;
             const status = editingTask['Type'] || 'To Start';
             const isLocked = status === 'Completed' || status === 'Cancelled';
-            const today = new Date().toISOString().split('T')[0];
             let dueVal = '';
             if (editingTask['Due Date']) { try { dueVal = new Date(editingTask['Due Date']).toISOString().split('T')[0]; } catch(e){} }
-            
-            // Parse current assignees (comma-separated)
             const currentAssigneeEmails = (editingTask['Assigned To Email'] || '').split(',').map(e => e.trim()).filter(e => e);
             
             return `<div class="modal" onclick="if(event.target===this)handleCancelEdit()">
                 <div class="modal-content p-6">
                     <div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold">📝 Update Task</h2><button onclick="handleCancelEdit()" class="text-2xl text-gray-500">&times;</button></div>
                     <div class="bg-blue-50 p-3 rounded-lg mb-4">
-                        <p class="font-bold text-blue-800">${editingTask['Client Name']} - ${editingTask['Task Assigned']}</p>
-                        <p class="text-sm text-blue-600">${editingTask['Assignment Description']||''}</p>
-                        <p class="text-xs text-gray-500 mt-1">Head: ${editingTask['Assignment Head']}</p>
+                        <p class="font-bold text-blue-800">${escapeHtml(editingTask['Client Name'])} - ${escapeHtml(editingTask['Task Assigned'])}</p>
+                        <p class="text-sm text-blue-600">${escapeHtml(editingTask['Assignment Description']||'')}</p>
+                        <p class="text-xs text-gray-500 mt-1">Head: ${escapeHtml(editingTask['Assignment Head'])}</p>
                     </div>
                     ${!isHead ? '<div class="bg-yellow-50 border border-yellow-200 p-3 rounded-lg mb-4 text-sm text-yellow-800">⚠️ You are an assignee. You can only update your Status and Status Update.</div>' : ''}
                     
@@ -291,14 +349,13 @@
                         <div class="space-y-2 max-h-32 overflow-y-auto">
                             ${editingTask.assigneeUpdates.map(u => `
                                 <div class="flex items-center justify-between text-sm bg-white p-2 rounded border">
-                                    <span class="font-medium">${u['Updated By Name']}</span>
+                                    <span class="font-medium">${escapeHtml(u['Updated By Name'])}</span>
                                     <span class="px-2 py-0.5 rounded text-xs ${getStatusClass(u['Type'] || 'To Start')}">${u['Type'] || 'To Start'}</span>
-                                    <span class="text-gray-500 text-xs max-w-xs truncate" title="${u['Status Update'] || ''}">${u['Status Update'] || '-'}</span>
+                                    <span class="text-gray-500 text-xs max-w-xs truncate" title="${escapeHtml(u['Status Update'] || '')}">${escapeHtml(u['Status Update'] || '-')}</span>
                                 </div>
                             `).join('')}
                         </div>
-                    </div>
-                    ` : ''}
+                    </div>` : ''}
                     
                     <div class="space-y-4">
                         <div class="grid grid-cols-2 gap-4">
@@ -311,14 +368,13 @@
                             <div class="border rounded-lg p-2 max-h-40 overflow-y-auto bg-white">
                                 ${employees.map(e => `
                                     <label class="flex items-center p-1 hover:bg-gray-50 cursor-pointer">
-                                        <input type="checkbox" class="assignee-checkbox mr-2" value="${e.email}" data-name="${e.name}" ${currentAssigneeEmails.includes(e.email) ? 'checked' : ''}>
-                                        <span class="text-sm">${e.name}</span>
+                                        <input type="checkbox" class="assignee-checkbox mr-2" value="${e.email}" data-name="${escapeHtml(e.name)}" ${currentAssigneeEmails.includes(e.email) ? 'checked' : ''}>
+                                        <span class="text-sm">${escapeHtml(e.name)}</span>
                                     </label>
                                 `).join('')}
                             </div>
-                        </div>
-                        ` : ''}
-                        <div><label class="block text-sm font-semibold mb-1">Overall Status (set by Head)</label><select id="taskType" ${!isHead?'disabled':''} class="w-full px-3 py-2 border rounded-lg ${!isHead?'bg-gray-100':''}"><option value="To Start" ${status==='To Start'?'selected':''}>⬜ To Start</option><option value="Priority" ${status==='Priority'?'selected':''}>🔴 Priority</option><option value="WIP" ${status==='WIP'?'selected':''}>🔵 WIP</option><option value="Completed" ${status==='Completed'?'selected':''}>✅ Completed</option><option value="Hold" ${status==='Hold'?'selected':''}>⏸️ Hold</option><option value="Cancelled" ${status==='Cancelled'?'selected':''}>❌ Cancelled</option></select></div>
+                        </div>` : ''}
+                        <div><label class="block text-sm font-semibold mb-1">Overall Status</label><select id="taskType" ${!isHead?'disabled':''} class="w-full px-3 py-2 border rounded-lg ${!isHead?'bg-gray-100':''}"><option value="To Start" ${status==='To Start'?'selected':''}>⬜ To Start</option><option value="Priority" ${status==='Priority'?'selected':''}>🔴 Priority</option><option value="WIP" ${status==='WIP'?'selected':''}>🔵 WIP</option><option value="Completed" ${status==='Completed'?'selected':''}>✅ Completed</option><option value="Hold" ${status==='Hold'?'selected':''}>⏸️ Hold</option><option value="Cancelled" ${status==='Cancelled'?'selected':''}>❌ Cancelled</option></select></div>
                         <div><label class="block text-sm font-semibold mb-1">Status Update *</label><textarea id="taskStatusUpdate" rows="3" placeholder="Describe the progress..." class="w-full px-3 py-2 border rounded-lg"></textarea></div>
                         <div class="flex gap-2"><button onclick="handleSaveTask()" class="flex-1 bg-blue-600 text-white py-3 rounded-lg font-semibold">💾 Save</button><button onclick="handleCancelEdit()" class="px-6 bg-gray-500 text-white py-3 rounded-lg font-semibold">Cancel</button></div>
                     </div>
@@ -327,17 +383,28 @@
 
         function renderHistoryModal() {
             if (!viewingHistory) return '';
-            const t = viewingHistory.task, h = viewingHistory.history || [];
+            const { task, history } = viewingHistory;
             return `<div class="modal" onclick="if(event.target===this)handleCloseHistory()">
                 <div class="modal-content p-6">
                     <div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold">📜 Task History</h2><button onclick="handleCloseHistory()" class="text-2xl text-gray-500">&times;</button></div>
-                    <div class="bg-blue-50 p-3 rounded-lg mb-4"><p class="font-bold text-blue-800">${t['Client Name']} - ${t['Task Assigned']}</p><p class="text-sm text-blue-600">${t['Assignment Description']||''}</p></div>
-                    ${h.length===0?'<div class="text-center py-8 text-gray-500"><div class="text-4xl mb-2">📭</div><p>No updates yet</p></div>':`
-                    <div class="space-y-3 max-h-96 overflow-y-auto">${h.map(x=>`<div class="border rounded-lg p-3 ${x.Trail==='Edited'?'bg-gray-50 opacity-70':''}">
-                        <div class="flex justify-between items-start mb-2"><span class="font-semibold">${x['Updated By Name']||x['Updated By Email']||'-'}</span><div class="text-right"><span class="text-xs text-gray-500">${formatDateTime(x.Timestamp)}</span>${x.Trail==='Edited'?'<span class="block text-xs text-orange-500">Superseded</span>':''}</div></div>
-                        <div class="grid grid-cols-3 gap-2 text-xs mb-2"><div><span class="text-gray-500">Status:</span> ${getStatusIcon(x.Type)} ${x.Type||'-'}</div><div><span class="text-gray-500">Due:</span> ${formatDate(x['Due Date'])}</div><div><span class="text-gray-500">Assigned:</span> ${x['Assigned To']||'-'}</div></div>
-                        ${x['Status Update']?`<div class="text-sm bg-gray-50 p-2 rounded">${x['Status Update']}</div>`:''}
-                    </div>`).join('')}</div>`}
+                    <div class="bg-blue-50 p-3 rounded-lg mb-4">
+                        <p class="font-bold text-blue-800">${escapeHtml(task['Client Name'])} - ${escapeHtml(task['Task Assigned'])}</p>
+                    </div>
+                    ${history.length === 0 ? '<p class="text-gray-500 text-center py-4">No history found</p>' : `
+                    <div class="space-y-3 max-h-96 overflow-y-auto">${history.map((h, i) => `
+                        <div class="p-3 rounded-lg border ${h['Trail']==='Approved'?'bg-green-50 border-green-200':'bg-gray-50 border-gray-200'} ${h['Trail']!=='Approved'?'opacity-60':''}">
+                            <div class="flex justify-between items-start mb-2">
+                                <span class="font-semibold text-sm">${escapeHtml(h['Updated By Name'] || 'Unknown')}</span>
+                                <span class="text-xs text-gray-500">${formatDateTime(h['Timestamp'])}</span>
+                            </div>
+                            <div class="flex gap-2 mb-2">
+                                <span class="px-2 py-0.5 rounded text-xs ${getStatusClass(h['Type'] || 'To Start')}">${h['Type'] || 'To Start'}</span>
+                                ${h['Due Date'] ? `<span class="text-xs text-gray-500">Due: ${formatDate(h['Due Date'])}</span>` : ''}
+                            </div>
+                            ${h['Status Update'] ? `<p class="text-sm text-gray-700">${escapeHtml(h['Status Update'])}</p>` : ''}
+                            ${h['Trail'] !== 'Approved' ? `<p class="text-xs text-orange-600 mt-1">⚠️ ${h['Trail']}</p>` : ''}
+                        </div>
+                    `).join('')}</div>`}
                     <div class="mt-4"><button onclick="handleCloseHistory()" class="w-full bg-gray-200 py-2 rounded-lg font-semibold">Close</button></div>
                 </div></div>`;
         }
@@ -345,31 +412,40 @@
         function renderTable() {
             const { tasks: pt, total, totalPages } = getPaginatedTasks();
             if (pt.length === 0) return `<div class="bg-white rounded-xl shadow p-8 text-center text-gray-500"><div class="text-5xl mb-3">📋</div><p class="text-lg">No tasks found</p></div>`;
-            const cols = [['Client Name','Client',1],['Task Assigned','Task',1],['Assignment Description','Description',0],['Due Date','Due Date',1],['Assigned To','Assigned To',1],['Type','Status',1]];
+            
             return `<div class="bg-white rounded-xl shadow overflow-hidden">
-                <div class="overflow-x-auto"><table class="w-full text-sm">
-                    <thead class="bg-gray-100"><tr>
-                        ${cols.map(([k,l,s])=>`<th class="px-4 py-3 text-left font-semibold ${s?'sortable cursor-pointer':''}" ${s?`onclick="handleSort('${k}')"`:''}>
-                            ${l} ${s&&sortColumn===k?(sortDirection==='asc'?'▲':'▼'):''}
-                        </th>`).join('')}
-                        <th class="px-4 py-3 text-left font-semibold">Actions</th>
-                    </tr></thead>
-                    <tbody class="divide-y">${pt.map((t,idx)=>{
-                        const s=t['Type']||'To Start', od=isOverdue(t);
-                        return `<tr class="${od?'overdue':''}">
-                            <td class="px-4 py-3 font-medium">${t['Client Name']||'-'}</td>
-                            <td class="px-4 py-3 text-blue-600">${t['Task Assigned']||'-'}</td>
-                            <td class="px-4 py-3 text-gray-600 max-w-xs truncate" title="${(t['Assignment Description']||'').replace(/"/g, '&quot;')}">${t['Assignment Description']||'-'}</td>
-                            <td class="px-4 py-3 whitespace-nowrap ${od?'text-red-600 font-bold':''}">${formatDate(t['Due Date'])}${od?' 🔴':''}</td>
-                            <td class="px-4 py-3">${t['Assigned To']||'-'}</td>
-                            <td class="px-4 py-3"><span class="px-2 py-1 rounded-full text-xs font-semibold ${getStatusClass(s)}">${getStatusIcon(s)} ${s}</span></td>
-                            <td class="px-4 py-3 whitespace-nowrap">
-                                <button onclick="handleEditTask(${idx})" class="text-blue-600 font-semibold mr-2">✏️</button>
-                                <button onclick="handleViewHistory(${idx})" class="text-gray-600 font-semibold">📜</button>
-                            </td>
-                        </tr>`;
-                    }).join('')}</tbody>
-                </table></div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="col-client px-3 py-3 text-left font-semibold sortable" onclick="handleSort('Client Name')">Client ${sortColumn==='Client Name'?(sortDirection==='asc'?'▲':'▼'):''}</th>
+                                <th class="col-task px-3 py-3 text-left font-semibold sortable" onclick="handleSort('Task Assigned')">Task ${sortColumn==='Task Assigned'?(sortDirection==='asc'?'▲':'▼'):''}</th>
+                                <th class="col-desc px-3 py-3 text-left font-semibold">Description</th>
+                                <th class="col-due px-3 py-3 text-left font-semibold sortable" onclick="handleSort('Due Date')">Due Date ${sortColumn==='Due Date'?(sortDirection==='asc'?'▲':'▼'):''}</th>
+                                <th class="col-assigned px-3 py-3 text-left font-semibold sortable" onclick="handleSort('Assigned To')">Assigned To ${sortColumn==='Assigned To'?(sortDirection==='asc'?'▲':'▼'):''}</th>
+                                <th class="col-status px-3 py-3 text-left font-semibold sortable" onclick="handleSort('Type')">Status ${sortColumn==='Type'?(sortDirection==='asc'?'▲':'▼'):''}</th>
+                                <th class="col-actions px-3 py-3 text-center font-semibold">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            ${pt.map((t,idx) => {
+                                const s = t['Type'] || 'To Start', od = isOverdue(t);
+                                return `<tr class="${od?'overdue':''}">
+                                    <td class="px-3 py-3 font-medium truncate" title="${escapeHtml(t['Client Name'])}">${escapeHtml(t['Client Name']||'-')}</td>
+                                    <td class="px-3 py-3 text-blue-600 truncate" title="${escapeHtml(t['Task Assigned'])}">${escapeHtml(t['Task Assigned']||'-')}</td>
+                                    <td class="px-3 py-3 text-gray-600 truncate" title="${escapeHtml(t['Assignment Description'])}">${escapeHtml(t['Assignment Description']||'-')}</td>
+                                    <td class="px-3 py-3 whitespace-nowrap ${od?'text-red-600 font-bold':''}">${formatDate(t['Due Date'])}${od?' 🔴':''}</td>
+                                    <td class="px-3 py-3 truncate" title="${escapeHtml(t['Assigned To'])}">${escapeHtml(t['Assigned To']||'-')}</td>
+                                    <td class="px-3 py-3"><span class="px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${getStatusClass(s)}">${getStatusIcon(s)} ${s}</span></td>
+                                    <td class="px-3 py-3 text-center whitespace-nowrap">
+                                        <button onclick="handleEditTask(${idx})" class="text-blue-600 hover:text-blue-800 mx-1" title="Edit">✏️</button>
+                                        <button onclick="handleViewHistory(${idx})" class="text-gray-600 hover:text-gray-800 mx-1" title="History">📜</button>
+                                    </td>
+                                </tr>`;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
                 <div class="px-4 py-3 bg-gray-50 border-t flex flex-wrap justify-between items-center gap-2">
                     <span class="text-sm text-gray-600">Showing ${(currentPage-1)*pageSize+1}-${Math.min(currentPage*pageSize,total)} of ${total}</span>
                     <div class="flex gap-1">
@@ -383,19 +459,39 @@
             </div>`;
         }
 
-        function renderApp() {
-            return `<div class="min-h-screen bg-gray-50">
-                <div class="bg-blue-600 text-white p-4 shadow-md"><div class="max-w-7xl mx-auto flex justify-between items-center">
-                    <div><h1 class="text-2xl font-bold">📋 Task Management</h1><p class="text-blue-100 text-sm">${employeeData['Employee Name']}</p></div>
-                    <a href="home.html" class="bg-blue-700 hover:bg-blue-800 px-4 py-2 rounded-lg text-sm font-semibold">← Home</a>
-                </div></div>
-                <div class="max-w-7xl mx-auto p-4 space-y-4">
-                    <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-                        ${[['all','Total',summary.total||0,'gray'],['To Start','To Start',summary.toStart||0,'gray'],['Priority','Priority',summary.priority||0,'red'],['WIP','WIP',summary.wip||0,'blue'],['Completed','Done',summary.completed||0,'green'],['Hold','Hold',summary.hold||0,'yellow'],['overdue','Overdue',summary.overdue||0,'red']].map(([f,l,v,c])=>`
-                        <div onclick="handleFilter('${f}')" class="cursor-pointer bg-white rounded-xl shadow p-3 text-center hover:shadow-lg ${filterStatus===f?'ring-2 ring-blue-500':''}">
-                            <p class="text-2xl font-bold text-${c}-600">${v}</p><p class="text-xs text-gray-500">${l}</p>
-                        </div>`).join('')}
+        function renderSummaryCards() {
+            const cards = [
+                { filter: 'all', label: 'Total', value: summary.total || 0, color: 'gray' },
+                { filter: 'To Start', label: 'To Start', value: summary.toStart || 0, color: 'gray' },
+                { filter: 'Priority', label: 'Priority', value: summary.priority || 0, color: 'red' },
+                { filter: 'WIP', label: 'WIP', value: summary.wip || 0, color: 'blue' },
+                { filter: 'Completed', label: 'Done', value: summary.completed || 0, color: 'green' },
+                { filter: 'Hold', label: 'Hold', value: summary.hold || 0, color: 'yellow' },
+                { filter: 'overdue', label: 'Overdue', value: summary.overdue || 0, color: 'red' }
+            ];
+            
+            return `<div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+                ${cards.map(c => `
+                    <div onclick="handleFilter('${c.filter}')" class="summary-card cursor-pointer bg-white rounded-xl shadow p-3 text-center ${filterStatus===c.filter?'ring-2 ring-blue-500':''}">
+                        <p class="text-2xl font-bold" style="color: ${c.color === 'gray' ? '#4B5563' : c.color === 'red' ? '#DC2626' : c.color === 'blue' ? '#2563EB' : c.color === 'green' ? '#059669' : c.color === 'yellow' ? '#D97706' : '#4B5563'}">${c.value}</p>
+                        <p class="text-xs text-gray-500">${c.label}</p>
                     </div>
+                `).join('')}
+            </div>`;
+        }
+
+        function renderApp() {
+            const isAssignmentHead = employeeData && (employeeData['Is Assignment Head'] === 'Yes' || employeeData['Is Assignment Head'] === true);
+            
+            return `<div class="min-h-screen bg-gray-50">
+                <div class="bg-blue-600 text-white p-4 shadow-md">
+                    <div class="max-w-7xl mx-auto flex justify-between items-center">
+                        <div><h1 class="text-2xl font-bold">📋 Task Management</h1><p class="text-blue-100 text-sm">${escapeHtml(employeeData['Employee Name'])}</p></div>
+                        <a href="home.html" class="bg-blue-700 hover:bg-blue-800 px-4 py-2 rounded-lg text-sm font-semibold">← Home</a>
+                    </div>
+                </div>
+                <div class="max-w-7xl mx-auto p-4 space-y-4">
+                    ${renderSummaryCards()}
                     <div class="bg-white rounded-xl shadow p-4 flex flex-wrap gap-3 items-center justify-between">
                         <div class="flex flex-wrap gap-2 items-center">
                             <select onchange="handleFilter(this.value)" class="px-3 py-1 border rounded-lg text-sm">
@@ -411,14 +507,15 @@
                             <input type="text" id="searchBox" placeholder="🔍 Search..." value="${searchQuery}" oninput="handleSearch(event)" class="px-3 py-1 border rounded-lg text-sm w-48">
                         </div>
                         <div class="flex gap-2">
-                            <button onclick="exportToExcel()" class="px-4 py-1 bg-green-600 text-white rounded-lg text-sm font-semibold">📥 Export</button>
+                            ${isAssignmentHead ? `<button onclick="handleCreateTask()" class="px-4 py-1 bg-green-600 text-white rounded-lg text-sm font-semibold">➕ Create Task</button>` : ''}
+                            <button onclick="exportToExcel()" class="px-4 py-1 bg-emerald-600 text-white rounded-lg text-sm font-semibold">📥 Export</button>
                             <button onclick="refreshData()" class="px-4 py-1 bg-blue-100 text-blue-700 rounded-lg text-sm font-semibold">🔄 Refresh</button>
                         </div>
                     </div>
                     ${renderTable()}
-                    <div class="text-center text-gray-400 text-sm py-4">TimeWise v3.4</div>
+                    <div class="text-center text-gray-400 text-sm py-4">TimeWise v3.5</div>
                 </div>
-                ${renderEditModal()}${renderHistoryModal()}
+                ${renderCreateModal()}${renderEditModal()}${renderHistoryModal()}
             </div>`;
         }
 
@@ -431,7 +528,9 @@
                 try {
                     employeeEmail = s.employeeEmail; employeeData = s.employeeData;
                     const data = await callAPI('initTask', { email: employeeEmail });
-                    tasks = data.tasks || []; employees = data.employees || []; summary = data.summary || {};
+                    tasks = data.tasks || []; employees = data.employees || []; 
+                    clients = data.clients || []; taskTypes = data.taskTypes || [];
+                    summary = data.summary || {};
                     isLoggedIn = true; saveSession(); render();
                 } catch (e) { clearSession(); render(); }
             } else { render(); }
