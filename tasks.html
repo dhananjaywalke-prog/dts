@@ -77,6 +77,8 @@
             btn.disabled = true; btn.innerHTML = '⏳ Logging in...';
             try {
                 const data = await callAPI('initTask', { email: employeeEmail });
+                console.log('initTask response:', data); // Debug
+                console.log('taskTypes:', data.taskTypes); // Debug
                 employeeData = data.employee; tasks = data.tasks || []; employees = data.employees || []; 
                 clients = data.clients || []; taskTypes = data.taskTypes || [];
                 summary = data.summary || {};
