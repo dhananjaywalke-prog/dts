@@ -4,52 +4,74 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
     <title>TimeWise - Leave Management</title>
-    <!-- ============================================
-    TimeWise Leave Management
-    Version: 1.0
-    Last Updated: 28-Jan-2026
-    ============================================ -->
-    <script src="https://cdn.tailwindcss.com?v=1.0"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            navy: '#1F3864',
+                            blue: '#2E5FA3',
+                            mid: '#4472C4',
+                            light: '#D6E4F7',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
     <style>
-        .loading-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.5);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-        }
-        .loading-spinner {
-            width: 50px;
-            height: 50px;
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #4F46E5;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        .status-pending { background-color: #FEF3C7; color: #92400E; }
-        .status-approved { background-color: #D1FAE5; color: #065F46; }
-        .status-rejected { background-color: #FEE2E2; color: #991B1B; }
-        .status-cancelled { background-color: #F3F4F6; color: #4B5563; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        
+        /* Loading */
+        .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; z-index: 9999; }
+        .loading-spinner { width: 40px; height: 40px; border: 3px solid #D6E4F7; border-top: 3px solid #2E5FA3; border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* Components */
+        .card { @apply bg-white rounded-xl shadow-sm border border-gray-100; }
+        .btn-primary { @apply inline-flex items-center justify-center gap-2 bg-brand-blue text-white font-semibold px-4 py-2 rounded-lg hover:bg-brand-navy transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed; }
+        .btn-secondary { @apply inline-flex items-center justify-center gap-2 bg-white text-brand-blue font-semibold border border-brand-blue px-4 py-2 rounded-lg hover:bg-brand-light transition-colors duration-150; }
+        .btn-success { @apply inline-flex items-center justify-center gap-2 bg-green-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-150; }
+        .btn-danger { @apply inline-flex items-center justify-center gap-2 bg-red-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-red-700 transition-colors duration-150; }
+        .btn-warning { @apply inline-flex items-center justify-center gap-2 bg-amber-500 text-white font-semibold px-4 py-2 rounded-lg hover:bg-amber-600 transition-colors duration-150; }
+        .input { @apply w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400; }
+        .label { @apply block text-sm font-medium text-gray-700 mb-1; }
+        
+        /* Badges */
+        .badge { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium; }
+        .badge-pending { @apply badge bg-amber-100 text-amber-800; }
+        .badge-approved { @apply badge bg-green-100 text-green-800; }
+        .badge-rejected { @apply badge bg-red-100 text-red-700; }
+        .badge-cancelled { @apply badge bg-gray-100 text-gray-600; }
+        
+        /* Stat Card */
+        .stat-card { @apply card p-5 transition-all duration-200; }
+        .stat-card:hover { @apply shadow-md; }
+        
+        /* Radio/Checkbox Cards */
+        .option-card { @apply flex items-center p-3 border border-gray-200 rounded-lg hover:border-brand-blue hover:bg-brand-light/30 cursor-pointer transition-all duration-150; }
+        .option-card.selected { @apply border-brand-blue bg-brand-light/50; }
+        
+        /* Table */
+        .table-header { @apply bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider; }
+        .table-row { @apply border-b border-gray-100 hover:bg-gray-50 transition-colors; }
+        
+        /* Approval Cards */
+        .approval-card { @apply card p-5 border-l-4; }
+        .approval-card.pending { @apply border-l-amber-400 bg-amber-50/30; }
+        .approval-card.approved { @apply border-l-green-400 bg-green-50/30; }
     </style>
 </head>
-<body class="bg-gray-50">
+<body class="bg-gray-50 text-gray-800 antialiased">
     <!-- Loading Overlay -->
     <div id="loadingOverlay" class="loading-overlay" style="display: none;">
         <div class="text-center">
             <div class="loading-spinner mx-auto"></div>
-            <p class="text-white mt-4" id="loadingText">Processing...</p>
+            <p class="text-white mt-4 text-sm font-medium" id="loadingText">Processing...</p>
         </div>
     </div>
 
@@ -57,11 +79,6 @@
 
     <script src="config.js"></script>
     <script>
-        // ============================================
-        // CONFIGURATION
-        // ============================================
-        // API_URL loaded from config.js
-        
         // ============================================
         // STATE
         // ============================================
@@ -71,58 +88,37 @@
         let leaveBalance = null;
         let myLeaves = [];
         let pendingLeaves = [];
-        let recentApprovedLeaves = []; // v2.9: For approvers to reject
+        let recentApprovedLeaves = [];
         let approvers = [];
         let isApprover = false;
 
         // ============================================
-        // SESSION STORAGE (Shared between pages)
+        // SESSION MANAGEMENT
         // ============================================
         function saveSession() {
-            const session = {
-                employeeEmail: employeeEmail,
-                employeeData: employeeData,
-                isApprover: isApprover,
-                timestamp: Date.now()
-            };
-            localStorage.setItem('timewise_session', JSON.stringify(session));
+            localStorage.setItem('timewise_session', JSON.stringify({
+                employeeEmail, employeeData, isApprover, timestamp: Date.now()
+            }));
         }
 
         function loadSession() {
             try {
-                const sessionStr = localStorage.getItem('timewise_session');
-                if (!sessionStr) return null;
-                
-                const session = JSON.parse(sessionStr);
-                
-                // Check if session is expired (30 minutes)
-                const sessionAge = Date.now() - session.timestamp;
-                if (sessionAge > 30 * 60 * 1000) {
-                    localStorage.removeItem('timewise_session');
-                    return null;
-                }
-                
-                return session;
-            } catch (e) {
-                return null;
-            }
+                const session = JSON.parse(localStorage.getItem('timewise_session'));
+                if (session && (Date.now() - session.timestamp) < 30 * 60 * 1000) return session;
+            } catch (e) {}
+            return null;
         }
 
-        function clearSession() {
-            localStorage.removeItem('timewise_session');
-        }
+        function clearSession() { localStorage.removeItem('timewise_session'); }
 
         // ============================================
-        // UTILITY FUNCTIONS
+        // UTILITIES
         // ============================================
         function showLoading(text = 'Processing...') {
             document.getElementById('loadingText').textContent = text;
             document.getElementById('loadingOverlay').style.display = 'flex';
         }
-
-        function hideLoading() {
-            document.getElementById('loadingOverlay').style.display = 'none';
-        }
+        function hideLoading() { document.getElementById('loadingOverlay').style.display = 'none'; }
 
         async function callAPI(action, params = {}) {
             const response = await fetch(API_URL, {
@@ -131,28 +127,23 @@
                 body: JSON.stringify({ action, ...params })
             });
             const result = await response.json();
-            if (!result.success && result.error) {
-                throw new Error(result.error);
-            }
+            if (!result.success && result.error) throw new Error(result.error);
             return result.data !== undefined ? result.data : result;
         }
 
         function formatDate(date) {
-            if (!date) return '';
+            if (!date) return '-';
             const d = new Date(date);
             if (isNaN(d.getTime())) return date;
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            return `${d.getDate().toString().padStart(2, '0')}-${months[d.getMonth()]}-${d.getFullYear()}`;
+            return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
         }
 
-        function getStatusClass(status) {
-            const classes = {
-                'Pending': 'status-pending',
-                'Approved': 'status-approved',
-                'Rejected': 'status-rejected',
-                'Cancelled': 'status-cancelled'
-            };
-            return classes[status] || 'status-cancelled';
+        function escapeHtml(str) {
+            return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        function getBadgeClass(status) {
+            return { 'Pending': 'badge-pending', 'Approved': 'badge-approved', 'Rejected': 'badge-rejected', 'Cancelled': 'badge-cancelled' }[status] || 'badge-cancelled';
         }
 
         // ============================================
@@ -165,13 +156,12 @@
             employeeEmail = input.value.trim().toLowerCase();
 
             if (!employeeEmail || !employeeEmail.includes('@')) {
-                statusDiv.innerHTML = '<p class="text-red-600 text-sm mt-2">Please enter a valid email</p>';
+                statusDiv.innerHTML = '<p class="text-red-600 text-sm mt-3 flex items-center gap-2"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>Please enter a valid email</p>';
                 return;
             }
 
             loginBtn.disabled = true;
-            loginBtn.innerHTML = 'Logging in...';
-            statusDiv.innerHTML = '<p class="text-blue-600 text-sm mt-2">⏳ Loading...</p>';
+            loginBtn.innerHTML = '<svg class="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Signing in...';
 
             try {
                 const [empData, approversData] = await Promise.all([
@@ -184,14 +174,13 @@
                 isApprover = approvers.some(a => a['Approver Email'] === employeeEmail);
 
                 await loadLeaveData();
-
                 isLoggedIn = true;
-                saveSession(); // Save session to localStorage
+                saveSession();
                 render();
             } catch (error) {
                 loginBtn.disabled = false;
-                loginBtn.innerHTML = 'Login';
-                statusDiv.innerHTML = `<p class="text-red-600 text-sm mt-2">❌ ${error.message}</p>`;
+                loginBtn.innerHTML = 'Sign In';
+                statusDiv.innerHTML = `<p class="text-red-600 text-sm mt-3 flex items-center gap-2"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>${error.message}</p>`;
             }
         }
 
@@ -200,7 +189,6 @@
                 callAPI('getLeaveBalance', { email: employeeEmail }),
                 callAPI('getLeaves', { email: employeeEmail })
             ]);
-
             leaveBalance = balanceData;
             myLeaves = leavesData;
 
@@ -237,7 +225,6 @@
             const toDate = document.getElementById('toDate')?.value;
             const reason = document.getElementById('reason')?.value?.trim();
 
-            // Validations
             if (!leaveType) { alert('Please select leave type'); return; }
             if (!dayType) { alert('Please select day type'); return; }
             if (!fromDate) { alert('Please select from date'); return; }
@@ -249,504 +236,471 @@
 
             try {
                 const result = await callAPI('applyLeave', {
-                    leave: {
-                        employeeEmail: employeeEmail,
-                        employeeName: employeeData['Employee Name'],
-                        leaveType: leaveType,
-                        dayType: dayType,
-                        fromDate: fromDate,
-                        toDate: toDate,
-                        reason: reason
-                    }
+                    leave: { employeeEmail, employeeName: employeeData['Employee Name'], leaveType, dayType, fromDate, toDate, reason }
                 });
-
                 await loadLeaveData();
                 hideLoading();
-                
-                if (result.autoLOP === 'Yes') {
-                    alert('Leave applied successfully!\n\n⚠️ Note: Converted to LOP due to insufficient PL balance.');
-                } else {
-                    alert('Leave applied successfully!');
-                }
+                alert(result.autoLOP === 'Yes' ? 'Leave applied successfully!\n\n⚠️ Note: Converted to LOP due to insufficient PL balance.' : 'Leave applied successfully!');
                 render();
-            } catch (error) {
-                hideLoading();
-                alert('Error: ' + error.message);
-            }
+            } catch (error) { hideLoading(); alert('Error: ' + error.message); }
         }
 
         async function handleCancelLeave(rowId) {
             if (!confirm('Are you sure you want to cancel this leave application?')) return;
-
             showLoading('Cancelling...');
-
             try {
-                await callAPI('cancelLeave', { rowId: rowId, email: employeeEmail });
+                await callAPI('cancelLeave', { rowId, email: employeeEmail });
                 await loadLeaveData();
                 hideLoading();
                 render();
-            } catch (error) {
-                hideLoading();
-                alert('Error: ' + error.message);
-            }
+            } catch (error) { hideLoading(); alert('Error: ' + error.message); }
         }
 
         async function handleApproveLeave(rowId) {
             const comments = document.getElementById(`comments_${rowId}`)?.value || '';
-
             showLoading('Approving...');
-
             try {
-                await callAPI('approveLeave', {
-                    rowId: rowId,
-                    approverEmail: employeeEmail,
-                    approverName: employeeData['Employee Name'],
-                    comments: comments
-                });
-
+                await callAPI('approveLeave', { rowId, approverEmail: employeeEmail, approverName: employeeData['Employee Name'], comments });
                 await loadLeaveData();
                 hideLoading();
                 alert('Leave approved! Timesheet entries created.');
                 render();
-            } catch (error) {
-                hideLoading();
-                alert('Error: ' + error.message);
-            }
+            } catch (error) { hideLoading(); alert('Error: ' + error.message); }
         }
 
         async function handleRejectLeave(rowId) {
             const comments = document.getElementById(`comments_${rowId}`)?.value || '';
-
-            if (!comments) {
-                alert('Please provide a reason for rejection');
-                return;
-            }
-
+            if (!comments) { alert('Please provide a reason for rejection'); return; }
             if (!confirm('Are you sure you want to reject this leave?')) return;
-
             showLoading('Rejecting...');
-
             try {
-                await callAPI('rejectLeave', {
-                    rowId: rowId,
-                    approverEmail: employeeEmail,
-                    approverName: employeeData['Employee Name'],
-                    comments: comments
-                });
-
+                await callAPI('rejectLeave', { rowId, approverEmail: employeeEmail, approverName: employeeData['Employee Name'], comments });
                 await loadLeaveData();
                 hideLoading();
                 render();
-            } catch (error) {
-                hideLoading();
-                alert('Error: ' + error.message);
-            }
+            } catch (error) { hideLoading(); alert('Error: ' + error.message); }
         }
 
-        // v2.9: Reject an already approved leave (only for future dates)
         async function handleRejectApprovedLeave(rowId) {
             const comments = document.getElementById(`revoke_comments_${rowId}`)?.value || '';
-
-            if (!comments) {
-                alert('Please provide a reason for revoking this approval');
-                return;
-            }
-
-            if (!confirm('Are you sure you want to REVOKE this approved leave?\\n\\nThis will:\\n- Change status to Rejected\\n- Delete the auto-created timesheet entries')) return;
-
+            if (!comments) { alert('Please provide a reason for revoking this approval'); return; }
+            if (!confirm('Are you sure you want to REVOKE this approved leave?\n\nThis will:\n- Change status to Rejected\n- Delete the auto-created timesheet entries')) return;
             showLoading('Revoking approval...');
-
             try {
-                await callAPI('rejectApprovedLeave', {
-                    rowId: rowId,
-                    approverEmail: employeeEmail,
-                    approverName: employeeData['Employee Name'],
-                    comments: comments
-                });
-
+                await callAPI('rejectApprovedLeave', { rowId, approverEmail: employeeEmail, approverName: employeeData['Employee Name'], comments });
                 await loadLeaveData();
                 hideLoading();
                 alert('Approved leave has been revoked successfully!');
                 render();
-            } catch (error) {
-                hideLoading();
-                alert('Error: ' + error.message);
-            }
+            } catch (error) { hideLoading(); alert('Error: ' + error.message); }
         }
 
         // ============================================
-        // RENDER FUNCTIONS
+        // RENDER: LOGIN
         // ============================================
         function renderLogin() {
             return `
-                <div class="min-h-screen bg-gradient-to-br from-green-50 to-teal-100 flex items-center justify-center p-4">
-                    <div class="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
-                        <div class="text-center mb-6">
-                            <div class="text-6xl mb-4">🏖️</div>
-                            <h1 class="text-3xl font-bold text-gray-800">TimeWise</h1>
-                            <p class="text-gray-600 mt-2">Leave Management System</p>
+            <div class="min-h-screen flex flex-col" style="background: linear-gradient(135deg, #1F3864 0%, #2E5FA3 60%, #4472C4 100%)">
+                <!-- Top Bar -->
+                <div class="flex items-center justify-between px-6 py-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                         </div>
-                        <div class="mb-4">
-                            <label class="block text-gray-700 font-semibold mb-2">Email Address</label>
-                            <input type="email" id="emailInput" placeholder="your.email@company.com"
-                                class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500" 
-                                onkeypress="if(event.key === 'Enter') handleLogin()" />
+                        <span class="text-white font-bold text-lg">TimeWise</span>
+                    </div>
+                    <span class="text-white/60 text-sm hidden sm:block">Leave Management Portal</span>
+                </div>
+
+                <!-- Center Card -->
+                <div class="flex-1 flex items-center justify-center px-4 py-8">
+                    <div class="w-full max-w-md">
+                        <div class="bg-white rounded-2xl shadow-2xl overflow-hidden">
+                            <!-- Header -->
+                            <div class="bg-gradient-to-r from-brand-navy to-brand-blue px-8 py-7">
+                                <h1 class="text-white text-2xl font-bold">Welcome back</h1>
+                                <p class="text-white/70 text-sm mt-1">Sign in to manage your leaves</p>
+                            </div>
+                            
+                            <!-- Body -->
+                            <div class="px-8 py-8">
+                                <div class="mb-5">
+                                    <label class="label">Email address</label>
+                                    <div class="relative">
+                                        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"/></svg>
+                                        <input type="email" id="emailInput" placeholder="you@company.com" class="input pl-10" onkeypress="if(event.key==='Enter')handleLogin()">
+                                    </div>
+                                </div>
+                                <button id="loginBtn" onclick="handleLogin()" class="btn-primary w-full py-2.5">Sign In</button>
+                                <div id="loginStatus"></div>
+                                <div class="mt-6 text-center">
+                                    <a href="home.html" class="text-brand-blue hover:text-brand-navy text-sm font-medium">← Back to Home</a>
+                                </div>
+                            </div>
                         </div>
-                        <button id="loginBtn" onclick="handleLogin()"
-                            class="w-full bg-teal-600 text-white py-2 rounded-lg hover:bg-teal-700 font-semibold">
-                            Login
-                        </button>
-                        <div id="loginStatus"></div>
-                        <div class="mt-4 text-center">
-                            <a href="home.html" class="text-teal-600 hover:text-teal-800 text-sm">← Back to Home</a>
-                        </div>
+                        <p class="text-center text-white/50 text-xs mt-6">TimeWise Leave Management v2.0</p>
                     </div>
                 </div>
-            `;
+            </div>`;
         }
 
+        // ============================================
+        // RENDER: STAT CARD
+        // ============================================
+        function renderStatCard(title, value, subtitle, color) {
+            const colors = {
+                green: { bg: 'bg-green-50', icon: 'bg-green-100 text-green-600', value: 'text-green-700' },
+                blue: { bg: 'bg-blue-50', icon: 'bg-blue-100 text-blue-600', value: 'text-blue-700' },
+                amber: { bg: 'bg-amber-50', icon: 'bg-amber-100 text-amber-600', value: 'text-amber-700' },
+                purple: { bg: 'bg-purple-50', icon: 'bg-purple-100 text-purple-600', value: 'text-purple-700' },
+                gray: { bg: 'bg-gray-50', icon: 'bg-gray-100 text-gray-600', value: 'text-gray-700' },
+                navy: { bg: 'bg-brand-light', icon: 'bg-brand-blue/10 text-brand-blue', value: 'text-brand-navy' }
+            };
+            const c = colors[color] || colors.navy;
+            const icons = {
+                green: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+                blue: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+                amber: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"/></svg>',
+                purple: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>',
+                gray: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>'
+            };
+            return `
+            <div class="stat-card ${c.bg}">
+                <div class="flex items-start justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-500">${title}</p>
+                        <p class="text-3xl font-bold mt-1 ${c.value}">${value}</p>
+                        ${subtitle ? `<p class="text-xs text-gray-400 mt-1">${subtitle}</p>` : ''}
+                    </div>
+                    <div class="w-11 h-11 rounded-xl flex items-center justify-center ${c.icon}">${icons[color] || icons.blue}</div>
+                </div>
+            </div>`;
+        }
+
+        // ============================================
+        // RENDER: APP
+        // ============================================
         function renderApp() {
             const today = new Date().toISOString().split('T')[0];
-            const maxDate = new Date();
-            maxDate.setMonth(maxDate.getMonth() + 6);
-            const maxDateStr = maxDate.toISOString().split('T')[0];
-            const minDate = new Date();
-            minDate.setDate(minDate.getDate() - 7);
-            const minDateStr = minDate.toISOString().split('T')[0];
+            const maxDate = new Date(); maxDate.setMonth(maxDate.getMonth() + 6);
+            const minDate = new Date(); minDate.setDate(minDate.getDate() - 7);
 
             return `
-                <div class="min-h-screen bg-gray-50">
-                    <!-- Header -->
-                    <div class="bg-teal-600 text-white p-4 shadow-md">
-                        <div class="max-w-6xl mx-auto flex justify-between items-center">
-                            <div>
-                                <h1 class="text-2xl font-bold">🏖️ Leave Management</h1>
-                                <p class="text-teal-100 text-sm">${employeeData['Employee Name']} | ${employeeData['Designation'] || ''}</p>
+            <div class="min-h-screen bg-gray-50">
+                <!-- Header -->
+                <header class="bg-gradient-to-r from-brand-navy to-brand-blue text-white shadow-lg">
+                    <div class="max-w-6xl mx-auto px-4 py-4">
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                </div>
+                                <div>
+                                    <h1 class="text-xl font-bold">Leave Management</h1>
+                                    <p class="text-white/70 text-sm">${escapeHtml(employeeData['Employee Name'])}${employeeData['Designation'] ? ' · ' + escapeHtml(employeeData['Designation']) : ''}</p>
+                                </div>
                             </div>
-                            <a href="home.html" class="bg-teal-700 hover:bg-teal-800 px-4 py-2 rounded-lg text-sm font-semibold">
-                                ← Back to Home
+                            <a href="home.html" class="btn-secondary bg-white/10 border-white/30 text-white hover:bg-white/20">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                                Home
                             </a>
                         </div>
                     </div>
+                </header>
 
-                    <div class="max-w-6xl mx-auto p-4 space-y-6">
-                        
-                        <!-- Leave Balance -->
-                        <div class="bg-white rounded-lg shadow-md p-6">
-                            <h2 class="text-xl font-bold text-gray-800 mb-4">📊 My Leave Balance</h2>
-                            <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
-                                <div class="bg-green-50 rounded-lg p-4 text-center">
-                                    <p class="text-3xl font-bold text-green-600">${leaveBalance?.plBalance || 0}</p>
-                                    <p class="text-sm text-gray-600">PL Available</p>
-                                </div>
-                                <div class="bg-blue-50 rounded-lg p-4 text-center">
-                                    <p class="text-3xl font-bold text-blue-600">${leaveBalance?.plEarned || 0}</p>
-                                    <p class="text-sm text-gray-600">PL Earned</p>
-                                </div>
-                                <div class="bg-orange-50 rounded-lg p-4 text-center">
-                                    <p class="text-3xl font-bold text-orange-600">${leaveBalance?.plUsed || 0}</p>
-                                    <p class="text-sm text-gray-600">PL Used</p>
-                                </div>
-                                <div class="bg-purple-50 rounded-lg p-4 text-center">
-                                    <p class="text-3xl font-bold text-purple-600">${leaveBalance?.completedMonths || 0}</p>
-                                    <p class="text-sm text-gray-600">Months Service</p>
-                                </div>
-                                <div class="bg-gray-50 rounded-lg p-4 text-center">
-                                    <p class="text-3xl font-bold text-gray-600">${leaveBalance?.plMaxCap || 6}</p>
-                                    <p class="text-sm text-gray-600">Max PL Cap</p>
-                                </div>
-                            </div>
-                            <p class="text-xs text-gray-500 mt-3">📌 Policy: 1 PL per completed month of service, maximum cap of 6 days</p>
+                <main class="max-w-6xl mx-auto px-4 py-6 space-y-6">
+                    <!-- Leave Balance Cards -->
+                    <section>
+                        <h2 class="text-lg font-semibold text-brand-navy mb-4">My Leave Balance</h2>
+                        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                            ${renderStatCard('PL Available', leaveBalance?.plBalance || 0, 'Days remaining', 'green')}
+                            ${renderStatCard('PL Earned', leaveBalance?.plEarned || 0, 'Total earned', 'blue')}
+                            ${renderStatCard('PL Used', leaveBalance?.plUsed || 0, 'Days taken', 'amber')}
+                            ${renderStatCard('Service', leaveBalance?.completedMonths || 0, 'Months', 'purple')}
+                            ${renderStatCard('Max Cap', leaveBalance?.plMaxCap || 6, 'PL limit', 'gray')}
                         </div>
+                        <p class="text-xs text-gray-500 mt-3 flex items-center gap-1">
+                            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/></svg>
+                            Policy: 1 PL per completed month of service, maximum cap of 6 days
+                        </p>
+                    </section>
 
-                        <!-- Apply Leave Form -->
-                        <div class="bg-white rounded-lg shadow-md p-6">
-                            <h2 class="text-xl font-bold text-gray-800 mb-4">➕ Apply for Leave</h2>
-                            <div class="grid md:grid-cols-2 gap-6">
-                                <div class="space-y-4">
-                                    <div>
-                                        <label class="block text-sm font-semibold text-gray-700 mb-2">Leave Type *</label>
-                                        <div class="space-y-2">
-                                            <label class="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                                                <input type="radio" name="leaveType" value="PL" class="mr-3">
-                                                <div>
-                                                    <span class="font-medium">Paid Leave (PL)</span>
-                                                    <p class="text-xs text-gray-500">Deducted from PL balance</p>
-                                                </div>
-                                            </label>
-                                            <label class="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                                                <input type="radio" name="leaveType" value="Comp Off" class="mr-3">
-                                                <div>
-                                                    <span class="font-medium">Comp Off</span>
-                                                    <p class="text-xs text-gray-500">Compensatory off (not deducted from PL)</p>
-                                                </div>
-                                            </label>
-                                        </div>
-                                        <p class="text-xs text-yellow-600 mt-2">⚠️ If PL balance is 0, leave will be auto-converted to LOP</p>
+                    <!-- Apply Leave Form -->
+                    <section class="card p-6">
+                        <h2 class="text-lg font-semibold text-brand-navy mb-4 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-brand-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                            Apply for Leave
+                        </h2>
+                        <div class="grid lg:grid-cols-2 gap-6">
+                            <div class="space-y-5">
+                                <!-- Leave Type -->
+                                <div>
+                                    <label class="label">Leave Type</label>
+                                    <div class="space-y-2">
+                                        <label class="option-card" onclick="this.querySelector('input').checked=true;document.querySelectorAll('[name=leaveType]').forEach(r=>r.closest('.option-card').classList.remove('selected'));this.classList.add('selected')">
+                                            <input type="radio" name="leaveType" value="PL" class="mr-3 accent-brand-blue">
+                                            <div><span class="font-medium text-gray-800">Paid Leave (PL)</span><p class="text-xs text-gray-500">Deducted from PL balance</p></div>
+                                        </label>
+                                        <label class="option-card" onclick="this.querySelector('input').checked=true;document.querySelectorAll('[name=leaveType]').forEach(r=>r.closest('.option-card').classList.remove('selected'));this.classList.add('selected')">
+                                            <input type="radio" name="leaveType" value="Comp Off" class="mr-3 accent-brand-blue">
+                                            <div><span class="font-medium text-gray-800">Comp Off</span><p class="text-xs text-gray-500">Compensatory off (not deducted from PL)</p></div>
+                                        </label>
                                     </div>
-                                    
-                                    <div>
-                                        <label class="block text-sm font-semibold text-gray-700 mb-2">Day Type *</label>
-                                        <div class="flex gap-4">
-                                            <label class="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer flex-1">
-                                                <input type="radio" name="dayType" value="Full Day" class="mr-2" checked>
-                                                <span>Full Day (6 hrs)</span>
-                                            </label>
-                                            <label class="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer flex-1">
-                                                <input type="radio" name="dayType" value="Half Day" class="mr-2">
-                                                <span>Half Day (3 hrs)</span>
-                                            </label>
-                                        </div>
-                                    </div>
+                                    <p class="text-xs text-amber-600 mt-2 flex items-center gap-1">
+                                        <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                                        If PL balance is 0, leave will be auto-converted to LOP
+                                    </p>
                                 </div>
                                 
-                                <div class="space-y-4">
-                                    <div class="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label class="block text-sm font-semibold text-gray-700 mb-1">From Date *</label>
-                                            <input type="date" id="fromDate" min="${minDateStr}" max="${maxDateStr}" value="${today}"
-                                                class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500">
-                                        </div>
-                                        <div>
-                                            <label class="block text-sm font-semibold text-gray-700 mb-1">To Date *</label>
-                                            <input type="date" id="toDate" min="${minDateStr}" max="${maxDateStr}" value="${today}"
-                                                class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500">
-                                        </div>
+                                <!-- Day Type -->
+                                <div>
+                                    <label class="label">Day Type</label>
+                                    <div class="flex gap-3">
+                                        <label class="option-card flex-1 selected" onclick="this.querySelector('input').checked=true;document.querySelectorAll('[name=dayType]').forEach(r=>r.closest('.option-card').classList.remove('selected'));this.classList.add('selected')">
+                                            <input type="radio" name="dayType" value="Full Day" class="mr-2 accent-brand-blue" checked>
+                                            <span class="font-medium">Full Day</span>
+                                        </label>
+                                        <label class="option-card flex-1" onclick="this.querySelector('input').checked=true;document.querySelectorAll('[name=dayType]').forEach(r=>r.closest('.option-card').classList.remove('selected'));this.classList.add('selected')">
+                                            <input type="radio" name="dayType" value="Half Day" class="mr-2 accent-brand-blue">
+                                            <span class="font-medium">Half Day</span>
+                                        </label>
                                     </div>
-                                    <p class="text-xs text-gray-500">📅 Can apply: Past 7 days to 6 months ahead</p>
-                                    
+                                </div>
+                            </div>
+                            
+                            <div class="space-y-5">
+                                <!-- Date Range -->
+                                <div class="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label class="block text-sm font-semibold text-gray-700 mb-1">Reason * <span class="font-normal text-gray-500">(min 3 words)</span></label>
-                                        <textarea id="reason" rows="3" placeholder="Please provide reason for leave..."
-                                            class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"></textarea>
+                                        <label class="label">From Date</label>
+                                        <input type="date" id="fromDate" min="${minDate.toISOString().split('T')[0]}" max="${maxDate.toISOString().split('T')[0]}" value="${today}" class="input">
                                     </div>
-                                    
-                                    <button onclick="handleApplyLeave()" 
-                                        class="w-full bg-teal-600 text-white py-3 rounded-lg hover:bg-teal-700 font-semibold text-lg">
-                                        Submit Leave Application
+                                    <div>
+                                        <label class="label">To Date</label>
+                                        <input type="date" id="toDate" min="${minDate.toISOString().split('T')[0]}" max="${maxDate.toISOString().split('T')[0]}" value="${today}" class="input">
+                                    </div>
+                                </div>
+                                <p class="text-xs text-gray-500 -mt-3">Can apply: Past 7 days to 6 months ahead</p>
+                                
+                                <!-- Reason -->
+                                <div>
+                                    <label class="label">Reason <span class="font-normal text-gray-400">(min 3 words)</span></label>
+                                    <textarea id="reason" rows="3" placeholder="Please provide reason for leave..." class="input"></textarea>
+                                </div>
+                                
+                                <!-- Submit -->
+                                <button onclick="handleApplyLeave()" class="btn-primary w-full py-3">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                                    Submit Leave Application
+                                </button>
+                            </div>
+                        </div>
+                    </section>
+
+                    ${isApprover && pendingLeaves.length > 0 ? `
+                    <!-- Pending Approvals -->
+                    <section class="card p-6">
+                        <h2 class="text-lg font-semibold text-brand-navy mb-4 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            Pending Approvals
+                            <span class="bg-amber-500 text-white text-xs px-2 py-0.5 rounded-full">${pendingLeaves.length}</span>
+                        </h2>
+                        <div class="space-y-4">
+                            ${pendingLeaves.map(leave => `
+                            <div class="approval-card pending">
+                                <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
+                                    <div>
+                                        <p class="font-semibold text-gray-800">${escapeHtml(leave['Employee Name'])}</p>
+                                        <p class="text-sm text-gray-500">${escapeHtml(leave['Employee Email'])}</p>
+                                    </div>
+                                    <span class="badge-pending">Pending</span>
+                                </div>
+                                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                                    <div class="bg-white rounded-lg p-2 border border-gray-100">
+                                        <p class="text-xs text-gray-500">Type</p>
+                                        <p class="font-semibold text-sm">${leave['Leave Type']}</p>
+                                    </div>
+                                    <div class="bg-white rounded-lg p-2 border border-gray-100">
+                                        <p class="text-xs text-gray-500">Duration</p>
+                                        <p class="font-semibold text-sm">${leave['Total Days']} ${leave['Day Type']}</p>
+                                    </div>
+                                    <div class="bg-white rounded-lg p-2 border border-gray-100">
+                                        <p class="text-xs text-gray-500">From</p>
+                                        <p class="font-semibold text-sm">${formatDate(leave['From Date'])}</p>
+                                    </div>
+                                    <div class="bg-white rounded-lg p-2 border border-gray-100">
+                                        <p class="text-xs text-gray-500">To</p>
+                                        <p class="font-semibold text-sm">${formatDate(leave['To Date'])}</p>
+                                    </div>
+                                </div>
+                                <div class="bg-white rounded-lg p-3 border border-gray-100 mb-4">
+                                    <p class="text-xs text-gray-500 mb-1">Reason</p>
+                                    <p class="text-sm text-gray-700">${escapeHtml(leave['Reason'])}</p>
+                                </div>
+                                <div class="flex flex-col sm:flex-row gap-2">
+                                    <input type="text" id="comments_${leave['Row ID']}" placeholder="Comments (optional for approve, required for reject)" class="input flex-1">
+                                    <button onclick="handleApproveLeave('${leave['Row ID']}')" class="btn-success">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                        Approve
+                                    </button>
+                                    <button onclick="handleRejectLeave('${leave['Row ID']}')" class="btn-danger">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                        Reject
                                     </button>
                                 </div>
                             </div>
+                            `).join('')}
                         </div>
+                    </section>
+                    ` : ''}
 
-                        ${isApprover && pendingLeaves.length > 0 ? `
-                        <!-- Pending Approvals (Approvers Only) -->
-                        <div class="bg-white rounded-lg shadow-md p-6 border-2 border-yellow-200">
-                            <h2 class="text-xl font-bold text-gray-800 mb-4">
-                                ⏳ Pending Approvals 
-                                <span class="bg-yellow-500 text-white text-sm px-2 py-1 rounded-full ml-2">${pendingLeaves.length}</span>
-                            </h2>
-                            <div class="space-y-4">
-                                ${pendingLeaves.map(leave => `
-                                    <div class="border-2 border-yellow-100 rounded-lg p-4 bg-yellow-50">
-                                        <div class="flex justify-between items-start mb-3">
-                                            <div>
-                                                <p class="font-bold text-lg">${leave['Employee Name']}</p>
-                                                <p class="text-sm text-gray-600">${leave['Employee Email']}</p>
-                                            </div>
-                                            <span class="status-pending px-3 py-1 rounded-full text-sm font-semibold">Pending</span>
-                                        </div>
-                                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">
-                                            <div class="bg-white p-2 rounded">
-                                                <span class="text-gray-500">Type:</span>
-                                                <span class="font-semibold ml-1">${leave['Leave Type']}</span>
-                                            </div>
-                                            <div class="bg-white p-2 rounded">
-                                                <span class="text-gray-500">Duration:</span>
-                                                <span class="font-semibold ml-1">${leave['Total Days']} ${leave['Day Type']}</span>
-                                            </div>
-                                            <div class="bg-white p-2 rounded">
-                                                <span class="text-gray-500">From:</span>
-                                                <span class="font-semibold ml-1">${formatDate(leave['From Date'])}</span>
-                                            </div>
-                                            <div class="bg-white p-2 rounded">
-                                                <span class="text-gray-500">To:</span>
-                                                <span class="font-semibold ml-1">${formatDate(leave['To Date'])}</span>
-                                            </div>
-                                        </div>
-                                        <div class="bg-white p-2 rounded mb-3">
-                                            <span class="text-gray-500">Reason:</span>
-                                            <span class="ml-1">${leave['Reason']}</span>
-                                        </div>
-                                        <div class="flex flex-col md:flex-row gap-2">
-                                            <input type="text" id="comments_${leave['Row ID']}" 
-                                                placeholder="Comments (optional for approve, required for reject)"
-                                                class="flex-1 px-3 py-2 border rounded-lg text-sm">
-                                            <button onclick="handleApproveLeave('${leave['Row ID']}')" 
-                                                class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 font-semibold">
-                                                ✓ Approve
-                                            </button>
-                                            <button onclick="handleRejectLeave('${leave['Row ID']}')" 
-                                                class="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 font-semibold">
-                                                ✗ Reject
-                                            </button>
-                                        </div>
+                    ${isApprover && recentApprovedLeaves.length > 0 ? `
+                    <!-- Revocable Approvals -->
+                    <section class="card p-6">
+                        <h2 class="text-lg font-semibold text-brand-navy mb-2 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            Recently Approved (Revocable)
+                            <span class="bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">${recentApprovedLeaves.length}</span>
+                        </h2>
+                        <p class="text-sm text-gray-500 mb-4">Approved in last 7 days for future dates. Can be revoked if needed.</p>
+                        <div class="space-y-4">
+                            ${recentApprovedLeaves.map(leave => `
+                            <div class="approval-card approved">
+                                <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
+                                    <div>
+                                        <p class="font-semibold text-gray-800">${escapeHtml(leave['Employee Name'])}</p>
+                                        <p class="text-sm text-gray-500">${escapeHtml(leave['Employee Email'])}</p>
                                     </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                        ` : ''}
-
-                        ${isApprover && recentApprovedLeaves.length > 0 ? `
-                        <!-- Recent Approved Leaves (Can be Revoked) - Approvers Only -->
-                        <div class="bg-white rounded-lg shadow-md p-6 border-2 border-green-200">
-                            <h2 class="text-xl font-bold text-gray-800 mb-4">
-                                ✅ Recently Approved (Revocable)
-                                <span class="bg-green-500 text-white text-sm px-2 py-1 rounded-full ml-2">${recentApprovedLeaves.length}</span>
-                            </h2>
-                            <p class="text-sm text-gray-500 mb-4">These leaves were approved in the last 7 days and are for future dates. You can revoke if needed.</p>
-                            <div class="space-y-4">
-                                ${recentApprovedLeaves.map(leave => `
-                                    <div class="border-2 border-green-100 rounded-lg p-4 bg-green-50">
-                                        <div class="flex justify-between items-start mb-3">
-                                            <div>
-                                                <p class="font-bold text-lg">${leave['Employee Name']}</p>
-                                                <p class="text-sm text-gray-600">${leave['Employee Email']}</p>
-                                            </div>
-                                            <span class="status-approved px-3 py-1 rounded-full text-sm font-semibold">Approved</span>
-                                        </div>
-                                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">
-                                            <div class="bg-white p-2 rounded">
-                                                <span class="text-gray-500">Type:</span>
-                                                <span class="font-semibold ml-1">${leave['Leave Type']}</span>
-                                            </div>
-                                            <div class="bg-white p-2 rounded">
-                                                <span class="text-gray-500">Duration:</span>
-                                                <span class="font-semibold ml-1">${leave['Total Days']} ${leave['Day Type']}</span>
-                                            </div>
-                                            <div class="bg-white p-2 rounded">
-                                                <span class="text-gray-500">From:</span>
-                                                <span class="font-semibold ml-1">${formatDate(leave['From Date'])}</span>
-                                            </div>
-                                            <div class="bg-white p-2 rounded">
-                                                <span class="text-gray-500">To:</span>
-                                                <span class="font-semibold ml-1">${formatDate(leave['To Date'])}</span>
-                                            </div>
-                                        </div>
-                                        <div class="bg-white p-2 rounded mb-3">
-                                            <span class="text-gray-500">Approved by:</span>
-                                            <span class="ml-1 font-medium">${leave['Approver Name']}</span>
-                                            <span class="text-gray-400 ml-2">on ${formatDate(leave['Actioned On'])}</span>
-                                        </div>
-                                        <div class="flex flex-col md:flex-row gap-2">
-                                            <input type="text" id="revoke_comments_${leave['Row ID']}" 
-                                                placeholder="Reason for revoking approval (required)"
-                                                class="flex-1 px-3 py-2 border rounded-lg text-sm">
-                                            <button onclick="handleRejectApprovedLeave('${leave['Row ID']}')" 
-                                                class="bg-orange-600 text-white px-6 py-2 rounded-lg hover:bg-orange-700 font-semibold">
-                                                ↩️ Revoke Approval
-                                            </button>
-                                        </div>
+                                    <span class="badge-approved">Approved</span>
+                                </div>
+                                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                                    <div class="bg-white rounded-lg p-2 border border-gray-100">
+                                        <p class="text-xs text-gray-500">Type</p>
+                                        <p class="font-semibold text-sm">${leave['Leave Type']}</p>
                                     </div>
-                                `).join('')}
+                                    <div class="bg-white rounded-lg p-2 border border-gray-100">
+                                        <p class="text-xs text-gray-500">Duration</p>
+                                        <p class="font-semibold text-sm">${leave['Total Days']} ${leave['Day Type']}</p>
+                                    </div>
+                                    <div class="bg-white rounded-lg p-2 border border-gray-100">
+                                        <p class="text-xs text-gray-500">From</p>
+                                        <p class="font-semibold text-sm">${formatDate(leave['From Date'])}</p>
+                                    </div>
+                                    <div class="bg-white rounded-lg p-2 border border-gray-100">
+                                        <p class="text-xs text-gray-500">To</p>
+                                        <p class="font-semibold text-sm">${formatDate(leave['To Date'])}</p>
+                                    </div>
+                                </div>
+                                <div class="bg-white rounded-lg p-3 border border-gray-100 mb-4">
+                                    <p class="text-xs text-gray-500">Approved by <span class="font-medium text-gray-700">${escapeHtml(leave['Approver Name'])}</span> on ${formatDate(leave['Actioned On'])}</p>
+                                </div>
+                                <div class="flex flex-col sm:flex-row gap-2">
+                                    <input type="text" id="revoke_comments_${leave['Row ID']}" placeholder="Reason for revoking approval (required)" class="input flex-1">
+                                    <button onclick="handleRejectApprovedLeave('${leave['Row ID']}')" class="btn-warning">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
+                                        Revoke Approval
+                                    </button>
+                                </div>
                             </div>
+                            `).join('')}
                         </div>
-                        ` : ''}
+                    </section>
+                    ` : ''}
 
-                        <!-- My Leave Applications -->
-                        <div class="bg-white rounded-lg shadow-md p-6">
-                            <h2 class="text-xl font-bold text-gray-800 mb-4">📋 My Leave Applications</h2>
-                            ${myLeaves.length === 0 ? `
-                                <div class="text-center py-8 text-gray-500">
-                                    <div class="text-4xl mb-2">📭</div>
-                                    <p>No leave applications found</p>
-                                </div>
-                            ` : `
-                                <div class="overflow-x-auto">
-                                    <table class="w-full text-sm">
-                                        <thead class="bg-gray-100">
-                                            <tr>
-                                                <th class="text-left p-3">Date Range</th>
-                                                <th class="text-left p-3">Type</th>
-                                                <th class="text-left p-3">Days</th>
-                                                <th class="text-left p-3">Reason</th>
-                                                <th class="text-left p-3">Status</th>
-                                                <th class="text-left p-3">Actioned By</th>
-                                                <th class="text-left p-3">Action</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            ${myLeaves.map(leave => `
-                                                <tr class="border-b hover:bg-gray-50">
-                                                    <td class="p-3">
-                                                        <span class="font-medium">${formatDate(leave['From Date'])}</span>
-                                                        ${leave['From Date'] !== leave['To Date'] ? `<br><span class="text-gray-500">to ${formatDate(leave['To Date'])}</span>` : ''}
-                                                    </td>
-                                                    <td class="p-3">${leave['Leave Type']}</td>
-                                                    <td class="p-3">${leave['Total Days']} ${leave['Day Type']}</td>
-                                                    <td class="p-3 max-w-xs truncate" title="${leave['Reason']}">${leave['Reason']}</td>
-                                                    <td class="p-3">
-                                                        <span class="${getStatusClass(leave['Status'])} px-2 py-1 rounded-full text-xs font-semibold">
-                                                            ${leave['Status']}
-                                                        </span>
-                                                    </td>
-                                                    <td class="p-3">
-                                                        ${leave['Approver Name'] ? `
-                                                            <span class="font-medium">${leave['Approver Name']}</span>
-                                                            ${leave['Approver Comments'] ? `<br><span class="text-xs text-gray-500">"${leave['Approver Comments']}"</span>` : ''}
-                                                        ` : '-'}
-                                                    </td>
-                                                    <td class="p-3">
-                                                        ${leave['Status'] === 'Pending' ? `
-                                                            <button onclick="handleCancelLeave('${leave['Row ID']}')" 
-                                                                class="text-red-600 hover:text-red-800 font-semibold text-xs">
-                                                                Cancel
-                                                            </button>
-                                                        ` : '-'}
-                                                    </td>
-                                                </tr>
-                                            `).join('')}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            `}
+                    <!-- My Leave Applications -->
+                    <section class="card p-6">
+                        <h2 class="text-lg font-semibold text-brand-navy mb-4 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-brand-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                            My Leave Applications
+                        </h2>
+                        ${myLeaves.length === 0 ? `
+                        <div class="text-center py-12">
+                            <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                            </div>
+                            <p class="text-gray-500">No leave applications found</p>
+                            <p class="text-sm text-gray-400 mt-1">Your leave history will appear here</p>
                         </div>
+                        ` : `
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="table-header">
+                                        <th class="p-3 rounded-tl-lg">Date Range</th>
+                                        <th class="p-3">Type</th>
+                                        <th class="p-3">Days</th>
+                                        <th class="p-3">Reason</th>
+                                        <th class="p-3">Status</th>
+                                        <th class="p-3">Actioned By</th>
+                                        <th class="p-3 rounded-tr-lg">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${myLeaves.map(leave => `
+                                    <tr class="table-row">
+                                        <td class="p-3">
+                                            <span class="font-medium">${formatDate(leave['From Date'])}</span>
+                                            ${leave['From Date'] !== leave['To Date'] ? `<br><span class="text-gray-500 text-xs">to ${formatDate(leave['To Date'])}</span>` : ''}
+                                        </td>
+                                        <td class="p-3">${leave['Leave Type']}</td>
+                                        <td class="p-3">${leave['Total Days']} ${leave['Day Type']}</td>
+                                        <td class="p-3 max-w-[150px] truncate" title="${escapeHtml(leave['Reason'])}">${escapeHtml(leave['Reason'])}</td>
+                                        <td class="p-3"><span class="${getBadgeClass(leave['Status'])}">${leave['Status']}</span></td>
+                                        <td class="p-3">
+                                            ${leave['Approver Name'] ? `
+                                            <span class="font-medium text-gray-700">${escapeHtml(leave['Approver Name'])}</span>
+                                            ${leave['Approver Comments'] ? `<br><span class="text-xs text-gray-500 italic">"${escapeHtml(leave['Approver Comments'])}"</span>` : ''}
+                                            ` : '<span class="text-gray-400">-</span>'}
+                                        </td>
+                                        <td class="p-3">
+                                            ${leave['Status'] === 'Pending' ? `
+                                            <button onclick="handleCancelLeave('${leave['Row ID']}')" class="text-red-600 hover:text-red-800 font-medium text-xs">Cancel</button>
+                                            ` : '<span class="text-gray-400">-</span>'}
+                                        </td>
+                                    </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                        `}
+                    </section>
 
-                        <!-- Footer -->
-                        <div class="text-center text-gray-500 text-sm py-4">
-                            TimeWise Leave Management v1.0 | © 2026 DRP & Co. LLP
-                        </div>
-                    </div>
-                </div>
-            `;
+                    <!-- Footer -->
+                    <footer class="text-center text-gray-400 text-xs py-4">
+                        TimeWise Leave Management v2.0 · © ${new Date().getFullYear()} DRP & Co. LLP
+                    </footer>
+                </main>
+            </div>`;
         }
 
-        function render() {
-            document.getElementById('app').innerHTML = isLoggedIn ? renderApp() : renderLogin();
-        }
+        function render() { document.getElementById('app').innerHTML = isLoggedIn ? renderApp() : renderLogin(); }
 
-        // Initialize - Check for existing session
+        // Initialize
         async function init() {
             const session = loadSession();
             if (session && session.employeeEmail) {
-                // Restore session
                 employeeEmail = session.employeeEmail;
                 employeeData = session.employeeData;
                 isApprover = session.isApprover;
                 
-                // Show loading and load fresh data
                 document.getElementById('app').innerHTML = `
-                    <div class="min-h-screen bg-gray-50 flex items-center justify-center">
-                        <div class="text-center">
-                            <div class="loading-spinner mx-auto"></div>
-                            <p class="mt-4 text-gray-600">Loading leave data...</p>
-                        </div>
+                <div class="min-h-screen bg-gray-50 flex items-center justify-center">
+                    <div class="text-center">
+                        <div class="loading-spinner mx-auto"></div>
+                        <p class="mt-4 text-gray-500 text-sm">Loading leave data...</p>
                     </div>
-                `;
+                </div>`;
                 
                 try {
                     await loadLeaveData();
                     isLoggedIn = true;
-                    saveSession(); // Refresh timestamp
+                    saveSession();
                     render();
                 } catch (error) {
-                    // Session invalid, show login
                     clearSession();
                     render();
                 }
-            } else {
-                render();
-            }
+            } else { render(); }
         }
         
         init();
