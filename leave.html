@@ -22,51 +22,94 @@
             }
         }
     </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; }
+        * { font-family: 'Inter', sans-serif; }
         
         /* Loading */
         .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; z-index: 9999; }
         .loading-spinner { width: 40px; height: 40px; border: 3px solid #D6E4F7; border-top: 3px solid #2E5FA3; border-radius: 50%; animation: spin 0.8s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
-        /* Components */
-        .card { @apply bg-white rounded-xl shadow-sm border border-gray-100; }
-        .btn-primary { @apply inline-flex items-center justify-center gap-2 bg-brand-blue text-white font-semibold px-4 py-2 rounded-lg hover:bg-brand-navy transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed; }
-        .btn-secondary { @apply inline-flex items-center justify-center gap-2 bg-white text-brand-blue font-semibold border border-brand-blue px-4 py-2 rounded-lg hover:bg-brand-light transition-colors duration-150; }
-        .btn-success { @apply inline-flex items-center justify-center gap-2 bg-green-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-150; }
-        .btn-danger { @apply inline-flex items-center justify-center gap-2 bg-red-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-red-700 transition-colors duration-150; }
-        .btn-warning { @apply inline-flex items-center justify-center gap-2 bg-amber-500 text-white font-semibold px-4 py-2 rounded-lg hover:bg-amber-600 transition-colors duration-150; }
-        .input { @apply w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400; }
-        .label { @apply block text-sm font-medium text-gray-700 mb-1; }
+        /* Sidebar */
+        .sidebar { width: 260px; min-height: 100vh; background: #1F3864; }
+        .sidebar-link { display: flex; align-items: center; gap: 12px; padding: 12px 20px; color: rgba(255,255,255,0.6); font-size: 14px; font-weight: 500; transition: all 0.15s; border-left: 3px solid transparent; }
+        .sidebar-link:hover { background: rgba(255,255,255,0.1); color: white; }
+        .sidebar-link.active { background: rgba(255,255,255,0.15); color: white; border-left-color: #4472C4; }
+        
+        /* Cards */
+        .card { background: white; border-radius: 12px; border: 1px solid #E5E7EB; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        
+        /* Stat Cards */
+        .stat-card { padding: 20px; border-radius: 12px; border: 1px solid #E5E7EB; background: white; }
+        .stat-card .stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+        .stat-card .stat-value { font-size: 32px; font-weight: 700; line-height: 1; }
+        .stat-card .stat-label { font-size: 13px; color: #6B7280; margin-top: 4px; }
+        
+        /* Form Elements */
+        .form-label { display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px; }
+        .form-input { width: 100%; padding: 12px 16px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px; transition: all 0.15s; background: white; }
+        .form-input:focus { outline: none; border-color: #2E5FA3; box-shadow: 0 0 0 3px rgba(46,95,163,0.1); }
+        .form-input:disabled { background: #F9FAFB; color: #9CA3AF; }
+        .form-select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236B7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; background-size: 20px; padding-right: 44px; }
+        .form-textarea { resize: vertical; min-height: 100px; }
+        
+        /* Radio Cards */
+        .radio-card { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border: 2px solid #E5E7EB; border-radius: 10px; cursor: pointer; transition: all 0.15s; background: white; }
+        .radio-card:hover { border-color: #CBD5E1; background: #F8FAFC; }
+        .radio-card.selected { border-color: #2E5FA3; background: #EFF6FF; }
+        .radio-card input[type="radio"] { width: 20px; height: 20px; margin-top: 2px; accent-color: #2E5FA3; }
+        
+        /* Buttons */
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 24px; font-size: 14px; font-weight: 600; border-radius: 8px; transition: all 0.15s; cursor: pointer; border: none; }
+        .btn-primary { background: #2E5FA3; color: white; }
+        .btn-primary:hover { background: #1F3864; }
+        .btn-success { background: #059669; color: white; }
+        .btn-success:hover { background: #047857; }
+        .btn-danger { background: #DC2626; color: white; }
+        .btn-danger:hover { background: #B91C1C; }
+        .btn-warning { background: #D97706; color: white; }
+        .btn-warning:hover { background: #B45309; }
+        .btn-secondary { background: #F3F4F6; color: #374151; border: 1px solid #E5E7EB; }
+        .btn-secondary:hover { background: #E5E7EB; }
+        .btn-sm { padding: 8px 16px; font-size: 13px; }
+        .btn-lg { padding: 14px 28px; font-size: 15px; }
         
         /* Badges */
-        .badge { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium; }
-        .badge-pending { @apply badge bg-amber-100 text-amber-800; }
-        .badge-approved { @apply badge bg-green-100 text-green-800; }
-        .badge-rejected { @apply badge bg-red-100 text-red-700; }
-        .badge-cancelled { @apply badge bg-gray-100 text-gray-600; }
+        .badge { display: inline-flex; align-items: center; padding: 4px 12px; font-size: 12px; font-weight: 600; border-radius: 20px; }
+        .badge-pending { background: #FEF3C7; color: #92400E; }
+        .badge-approved { background: #D1FAE5; color: #065F46; }
+        .badge-rejected { background: #FEE2E2; color: #991B1B; }
+        .badge-cancelled { background: #F3F4F6; color: #6B7280; }
         
-        /* Stat Card */
-        .stat-card { @apply card p-5 transition-all duration-200; }
-        .stat-card:hover { @apply shadow-md; }
-        
-        /* Radio/Checkbox Cards */
-        .option-card { @apply flex items-center p-3 border border-gray-200 rounded-lg hover:border-brand-blue hover:bg-brand-light/30 cursor-pointer transition-all duration-150; }
-        .option-card.selected { @apply border-brand-blue bg-brand-light/50; }
-        
-        /* Table */
-        .table-header { @apply bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider; }
-        .table-row { @apply border-b border-gray-100 hover:bg-gray-50 transition-colors; }
+        /* Tables */
+        .table-container { overflow-x: auto; border-radius: 12px; border: 1px solid #E5E7EB; }
+        .data-table { width: 100%; border-collapse: collapse; }
+        .data-table thead { background: #F8FAFC; }
+        .data-table th { padding: 14px 16px; text-align: left; font-size: 12px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #E5E7EB; }
+        .data-table td { padding: 14px 16px; font-size: 14px; color: #374151; border-bottom: 1px solid #F3F4F6; }
+        .data-table tbody tr:nth-child(even) { background: #F9FAFB; }
+        .data-table tbody tr:hover { background: #EFF6FF; }
+        .data-table tbody tr:last-child td { border-bottom: none; }
         
         /* Approval Cards */
-        .approval-card { @apply card p-5 border-l-4; }
-        .approval-card.pending { @apply border-l-amber-400 bg-amber-50/30; }
-        .approval-card.approved { @apply border-l-green-400 bg-green-50/30; }
+        .approval-card { background: white; border-radius: 12px; border: 1px solid #E5E7EB; border-left: 4px solid #F59E0B; overflow: hidden; }
+        .approval-card.approved { border-left-color: #10B981; }
+        .approval-card-header { padding: 20px; background: linear-gradient(to right, #FFFBEB, white); }
+        .approval-card.approved .approval-card-header { background: linear-gradient(to right, #ECFDF5, white); }
+        .approval-card-body { padding: 20px; border-top: 1px solid #F3F4F6; }
+        .approval-card-footer { padding: 16px 20px; background: #F9FAFB; border-top: 1px solid #F3F4F6; }
+        
+        /* Info Box */
+        .info-box { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; font-size: 13px; color: #1E40AF; }
+        .warning-box { background: #FFFBEB; border-color: #FDE68A; color: #92400E; }
+        
+        /* Empty State */
+        .empty-state { padding: 60px 20px; text-align: center; }
+        .empty-state-icon { width: 80px; height: 80px; margin: 0 auto 20px; background: #F3F4F6; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-800 antialiased">
+<body class="bg-gray-100">
     <!-- Loading Overlay -->
     <div id="loadingOverlay" class="loading-overlay" style="display: none;">
         <div class="text-center">
@@ -156,12 +199,12 @@
             employeeEmail = input.value.trim().toLowerCase();
 
             if (!employeeEmail || !employeeEmail.includes('@')) {
-                statusDiv.innerHTML = '<p class="text-red-600 text-sm mt-3 flex items-center gap-2"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>Please enter a valid email</p>';
+                statusDiv.innerHTML = '<div class="warning-box mt-4"><svg class="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg><span>Please enter a valid email address</span></div>';
                 return;
             }
 
             loginBtn.disabled = true;
-            loginBtn.innerHTML = '<svg class="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Signing in...';
+            loginBtn.innerHTML = '<svg class="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Signing in...';
 
             try {
                 const [empData, approversData] = await Promise.all([
@@ -180,7 +223,7 @@
             } catch (error) {
                 loginBtn.disabled = false;
                 loginBtn.innerHTML = 'Sign In';
-                statusDiv.innerHTML = `<p class="text-red-600 text-sm mt-3 flex items-center gap-2"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>${error.message}</p>`;
+                statusDiv.innerHTML = `<div class="warning-box mt-4" style="background:#FEE2E2;border-color:#FECACA;color:#991B1B"><svg class="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg><span>${error.message}</span></div>`;
             }
         }
 
@@ -296,83 +339,120 @@
         }
 
         // ============================================
+        // RENDER: SIDEBAR
+        // ============================================
+        function renderSidebar() {
+            return `
+            <aside class="sidebar flex flex-col">
+                <!-- Logo -->
+                <div class="px-5 py-5 border-b border-white/10">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 bg-white/15 rounded-xl flex items-center justify-center">
+                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        </div>
+                        <div>
+                            <div class="text-white font-bold text-lg">TimeWise</div>
+                            <div class="text-white/50 text-xs">Leave Management</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Navigation -->
+                <nav class="flex-1 py-4">
+                    <a href="home.html" class="sidebar-link">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                        Dashboard
+                    </a>
+                    <a href="timesheet.html" class="sidebar-link">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                        Timesheet
+                    </a>
+                    <a href="leave.html" class="sidebar-link active">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                        Leave
+                    </a>
+                    <a href="expenses.html" class="sidebar-link">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                        Expenses
+                    </a>
+                    <a href="tasks.html" class="sidebar-link">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                        Tasks
+                    </a>
+                </nav>
+                
+                <!-- User Info -->
+                <div class="p-4 border-t border-white/10">
+                    <div class="flex items-center gap-3 mb-3">
+                        <div class="w-10 h-10 bg-brand-mid rounded-full flex items-center justify-center text-white font-bold text-sm">
+                            ${employeeData['Employee Name'].charAt(0).toUpperCase()}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-white font-medium text-sm truncate">${escapeHtml(employeeData['Employee Name'])}</div>
+                            <div class="text-white/50 text-xs truncate">${escapeHtml(employeeData['Designation'] || 'Employee')}</div>
+                        </div>
+                    </div>
+                    <button onclick="handleLogout()" class="flex items-center gap-2 text-white/50 hover:text-white text-sm transition-colors w-full">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                        Sign out
+                    </button>
+                </div>
+            </aside>`;
+        }
+
+        // ============================================
         // RENDER: LOGIN
         // ============================================
         function renderLogin() {
             return `
-            <div class="min-h-screen flex flex-col" style="background: linear-gradient(135deg, #1F3864 0%, #2E5FA3 60%, #4472C4 100%)">
-                <!-- Top Bar -->
-                <div class="flex items-center justify-between px-6 py-4">
-                    <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
-                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            <div class="min-h-screen flex" style="background: linear-gradient(135deg, #1F3864 0%, #2E5FA3 50%, #4472C4 100%)">
+                <!-- Left Side - Branding -->
+                <div class="hidden lg:flex lg:w-1/2 flex-col justify-center px-16">
+                    <div class="flex items-center gap-4 mb-8">
+                        <div class="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center">
+                            <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                         </div>
-                        <span class="text-white font-bold text-lg">TimeWise</span>
+                        <div>
+                            <h1 class="text-white text-3xl font-bold">TimeWise</h1>
+                            <p class="text-white/60">Leave Management System</p>
+                        </div>
                     </div>
-                    <span class="text-white/60 text-sm hidden sm:block">Leave Management Portal</span>
+                    <h2 class="text-white text-4xl font-bold leading-tight mb-4">Manage your leaves<br>with ease</h2>
+                    <p class="text-white/70 text-lg">Apply for leave, track balances, and manage approvals all in one place.</p>
                 </div>
-
-                <!-- Center Card -->
-                <div class="flex-1 flex items-center justify-center px-4 py-8">
+                
+                <!-- Right Side - Login Form -->
+                <div class="w-full lg:w-1/2 flex items-center justify-center p-8">
                     <div class="w-full max-w-md">
                         <div class="bg-white rounded-2xl shadow-2xl overflow-hidden">
-                            <!-- Header -->
-                            <div class="bg-gradient-to-r from-brand-navy to-brand-blue px-8 py-7">
-                                <h1 class="text-white text-2xl font-bold">Welcome back</h1>
-                                <p class="text-white/70 text-sm mt-1">Sign in to manage your leaves</p>
-                            </div>
-                            
-                            <!-- Body -->
-                            <div class="px-8 py-8">
-                                <div class="mb-5">
-                                    <label class="label">Email address</label>
-                                    <div class="relative">
-                                        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"/></svg>
-                                        <input type="email" id="emailInput" placeholder="you@company.com" class="input pl-10" onkeypress="if(event.key==='Enter')handleLogin()">
+                            <div class="px-8 py-10">
+                                <div class="lg:hidden flex items-center gap-3 mb-8">
+                                    <div class="w-12 h-12 bg-brand-navy rounded-xl flex items-center justify-center">
+                                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                    </div>
+                                    <div>
+                                        <div class="font-bold text-gray-800 text-lg">TimeWise</div>
+                                        <div class="text-gray-500 text-sm">Leave Management</div>
                                     </div>
                                 </div>
-                                <button id="loginBtn" onclick="handleLogin()" class="btn-primary w-full py-2.5">Sign In</button>
-                                <div id="loginStatus"></div>
-                                <div class="mt-6 text-center">
-                                    <a href="home.html" class="text-brand-blue hover:text-brand-navy text-sm font-medium">← Back to Home</a>
+                                
+                                <h2 class="text-2xl font-bold text-gray-800 mb-2">Welcome back</h2>
+                                <p class="text-gray-500 mb-8">Sign in to continue to your account</p>
+                                
+                                <div class="space-y-5">
+                                    <div>
+                                        <label class="form-label">Email Address</label>
+                                        <input type="email" id="emailInput" placeholder="you@company.com" class="form-input" onkeypress="if(event.key==='Enter')handleLogin()">
+                                    </div>
+                                    <button id="loginBtn" onclick="handleLogin()" class="btn btn-primary btn-lg w-full">
+                                        Sign In
+                                    </button>
                                 </div>
+                                <div id="loginStatus"></div>
                             </div>
                         </div>
-                        <p class="text-center text-white/50 text-xs mt-6">TimeWise Leave Management v2.0</p>
+                        <p class="text-center text-white/50 text-sm mt-6">© ${new Date().getFullYear()} DRP & Co. LLP. All rights reserved.</p>
                     </div>
-                </div>
-            </div>`;
-        }
-
-        // ============================================
-        // RENDER: STAT CARD
-        // ============================================
-        function renderStatCard(title, value, subtitle, color) {
-            const colors = {
-                green: { bg: 'bg-green-50', icon: 'bg-green-100 text-green-600', value: 'text-green-700' },
-                blue: { bg: 'bg-blue-50', icon: 'bg-blue-100 text-blue-600', value: 'text-blue-700' },
-                amber: { bg: 'bg-amber-50', icon: 'bg-amber-100 text-amber-600', value: 'text-amber-700' },
-                purple: { bg: 'bg-purple-50', icon: 'bg-purple-100 text-purple-600', value: 'text-purple-700' },
-                gray: { bg: 'bg-gray-50', icon: 'bg-gray-100 text-gray-600', value: 'text-gray-700' },
-                navy: { bg: 'bg-brand-light', icon: 'bg-brand-blue/10 text-brand-blue', value: 'text-brand-navy' }
-            };
-            const c = colors[color] || colors.navy;
-            const icons = {
-                green: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
-                blue: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
-                amber: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"/></svg>',
-                purple: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>',
-                gray: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>'
-            };
-            return `
-            <div class="stat-card ${c.bg}">
-                <div class="flex items-start justify-between">
-                    <div>
-                        <p class="text-sm font-medium text-gray-500">${title}</p>
-                        <p class="text-3xl font-bold mt-1 ${c.value}">${value}</p>
-                        ${subtitle ? `<p class="text-xs text-gray-400 mt-1">${subtitle}</p>` : ''}
-                    </div>
-                    <div class="w-11 h-11 rounded-xl flex items-center justify-center ${c.icon}">${icons[color] || icons.blue}</div>
                 </div>
             </div>`;
         }
@@ -386,289 +466,353 @@
             const minDate = new Date(); minDate.setDate(minDate.getDate() - 7);
 
             return `
-            <div class="min-h-screen bg-gray-50">
-                <!-- Header -->
-                <header class="bg-gradient-to-r from-brand-navy to-brand-blue text-white shadow-lg">
-                    <div class="max-w-6xl mx-auto px-4 py-4">
-                        <div class="flex justify-between items-center">
-                            <div class="flex items-center gap-4">
-                                <div class="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
-                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            <div class="min-h-screen flex bg-gray-100">
+                ${renderSidebar()}
+                
+                <!-- Main Content -->
+                <main class="flex-1 overflow-auto">
+                    <!-- Header -->
+                    <header class="bg-white border-b border-gray-200 px-8 py-4">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h1 class="text-xl font-bold text-gray-800">Leave Management</h1>
+                                <p class="text-gray-500 text-sm">Apply for leave and track your balance</p>
+                            </div>
+                            ${isApprover ? `<span class="badge badge-approved">Approver Access</span>` : ''}
+                        </div>
+                    </header>
+                    
+                    <div class="p-8 space-y-8">
+                        <!-- Leave Balance Cards -->
+                        <section>
+                            <h2 class="text-lg font-semibold text-gray-800 mb-4">My Leave Balance</h2>
+                            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                                <div class="stat-card">
+                                    <div class="flex items-start justify-between">
+                                        <div>
+                                            <div class="stat-value text-green-600">${leaveBalance?.plBalance || 0}</div>
+                                            <div class="stat-label">PL Available</div>
+                                        </div>
+                                        <div class="stat-icon bg-green-100 text-green-600">
+                                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h1 class="text-xl font-bold">Leave Management</h1>
-                                    <p class="text-white/70 text-sm">${escapeHtml(employeeData['Employee Name'])}${employeeData['Designation'] ? ' · ' + escapeHtml(employeeData['Designation']) : ''}</p>
+                                <div class="stat-card">
+                                    <div class="flex items-start justify-between">
+                                        <div>
+                                            <div class="stat-value text-blue-600">${leaveBalance?.plEarned || 0}</div>
+                                            <div class="stat-label">PL Earned</div>
+                                        </div>
+                                        <div class="stat-icon bg-blue-100 text-blue-600">
+                                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="flex items-start justify-between">
+                                        <div>
+                                            <div class="stat-value text-orange-500">${leaveBalance?.plUsed || 0}</div>
+                                            <div class="stat-label">PL Used</div>
+                                        </div>
+                                        <div class="stat-icon bg-orange-100 text-orange-500">
+                                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"/></svg>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="flex items-start justify-between">
+                                        <div>
+                                            <div class="stat-value text-purple-600">${leaveBalance?.completedMonths || 0}</div>
+                                            <div class="stat-label">Months Service</div>
+                                        </div>
+                                        <div class="stat-icon bg-purple-100 text-purple-600">
+                                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="flex items-start justify-between">
+                                        <div>
+                                            <div class="stat-value text-gray-600">${leaveBalance?.plMaxCap || 6}</div>
+                                            <div class="stat-label">Max PL Cap</div>
+                                        </div>
+                                        <div class="stat-icon bg-gray-100 text-gray-600">
+                                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                            <a href="home.html" class="btn-secondary bg-white/10 border-white/30 text-white hover:bg-white/20">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
-                                Home
-                            </a>
-                        </div>
+                            <div class="info-box mt-4">
+                                <svg class="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/></svg>
+                                <span><strong>Policy:</strong> 1 PL per completed month of service, maximum cap of 6 days</span>
+                            </div>
+                        </section>
+
+                        <!-- Apply Leave Form -->
+                        <section class="card p-6">
+                            <h2 class="text-lg font-semibold text-gray-800 mb-6 flex items-center gap-2">
+                                <svg class="w-5 h-5 text-brand-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                                Apply for Leave
+                            </h2>
+                            <div class="grid lg:grid-cols-2 gap-8">
+                                <!-- Left Column -->
+                                <div class="space-y-6">
+                                    <div>
+                                        <label class="form-label">Leave Type *</label>
+                                        <div class="space-y-3">
+                                            <label class="radio-card" onclick="this.querySelector('input').checked=true;document.querySelectorAll('[name=leaveType]').forEach(r=>r.closest('.radio-card').classList.remove('selected'));this.classList.add('selected')">
+                                                <input type="radio" name="leaveType" value="PL">
+                                                <div>
+                                                    <div class="font-semibold text-gray-800">Paid Leave (PL)</div>
+                                                    <div class="text-sm text-gray-500">Deducted from your PL balance</div>
+                                                </div>
+                                            </label>
+                                            <label class="radio-card" onclick="this.querySelector('input').checked=true;document.querySelectorAll('[name=leaveType]').forEach(r=>r.closest('.radio-card').classList.remove('selected'));this.classList.add('selected')">
+                                                <input type="radio" name="leaveType" value="Comp Off">
+                                                <div>
+                                                    <div class="font-semibold text-gray-800">Comp Off</div>
+                                                    <div class="text-sm text-gray-500">Compensatory off (not deducted from PL)</div>
+                                                </div>
+                                            </label>
+                                        </div>
+                                        <div class="warning-box mt-3">
+                                            <svg class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                                            <span>If PL balance is 0, leave will be auto-converted to LOP</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="form-label">Day Type *</label>
+                                        <div class="grid grid-cols-2 gap-3">
+                                            <label class="radio-card selected" onclick="this.querySelector('input').checked=true;document.querySelectorAll('[name=dayType]').forEach(r=>r.closest('.radio-card').classList.remove('selected'));this.classList.add('selected')">
+                                                <input type="radio" name="dayType" value="Full Day" checked>
+                                                <span class="font-semibold text-gray-800">Full Day</span>
+                                            </label>
+                                            <label class="radio-card" onclick="this.querySelector('input').checked=true;document.querySelectorAll('[name=dayType]').forEach(r=>r.closest('.radio-card').classList.remove('selected'));this.classList.add('selected')">
+                                                <input type="radio" name="dayType" value="Half Day">
+                                                <span class="font-semibold text-gray-800">Half Day</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Right Column -->
+                                <div class="space-y-6">
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="form-label">From Date *</label>
+                                            <input type="date" id="fromDate" min="${minDate.toISOString().split('T')[0]}" max="${maxDate.toISOString().split('T')[0]}" value="${today}" class="form-input">
+                                        </div>
+                                        <div>
+                                            <label class="form-label">To Date *</label>
+                                            <input type="date" id="toDate" min="${minDate.toISOString().split('T')[0]}" max="${maxDate.toISOString().split('T')[0]}" value="${today}" class="form-input">
+                                        </div>
+                                    </div>
+                                    <p class="text-sm text-gray-500 -mt-4">Can apply: Past 7 days to 6 months ahead</p>
+                                    
+                                    <div>
+                                        <label class="form-label">Reason * <span class="font-normal text-gray-400">(min 3 words)</span></label>
+                                        <textarea id="reason" placeholder="Please provide reason for leave..." class="form-input form-textarea"></textarea>
+                                    </div>
+                                    
+                                    <button onclick="handleApplyLeave()" class="btn btn-primary btn-lg w-full">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                                        Submit Leave Application
+                                    </button>
+                                </div>
+                            </div>
+                        </section>
+
+                        ${isApprover && pendingLeaves.length > 0 ? `
+                        <!-- Pending Approvals -->
+                        <section>
+                            <h2 class="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                                <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                Pending Approvals
+                                <span class="bg-amber-500 text-white text-xs font-bold px-2 py-1 rounded-full">${pendingLeaves.length}</span>
+                            </h2>
+                            <div class="space-y-4">
+                                ${pendingLeaves.map(leave => `
+                                <div class="approval-card">
+                                    <div class="approval-card-header">
+                                        <div class="flex flex-wrap justify-between items-start gap-4">
+                                            <div>
+                                                <div class="font-semibold text-gray-800 text-lg">${escapeHtml(leave['Employee Name'])}</div>
+                                                <div class="text-gray-500 text-sm">${escapeHtml(leave['Employee Email'])}</div>
+                                            </div>
+                                            <span class="badge badge-pending">Pending Approval</span>
+                                        </div>
+                                    </div>
+                                    <div class="approval-card-body">
+                                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                                            <div class="bg-gray-50 rounded-lg p-3">
+                                                <div class="text-xs text-gray-500 mb-1">Leave Type</div>
+                                                <div class="font-semibold text-gray-800">${escapeHtml(leave['Leave Type'])}</div>
+                                            </div>
+                                            <div class="bg-gray-50 rounded-lg p-3">
+                                                <div class="text-xs text-gray-500 mb-1">Duration</div>
+                                                <div class="font-semibold text-gray-800">${leave['Total Days']} ${leave['Day Type']}</div>
+                                            </div>
+                                            <div class="bg-gray-50 rounded-lg p-3">
+                                                <div class="text-xs text-gray-500 mb-1">From Date</div>
+                                                <div class="font-semibold text-gray-800">${formatDate(leave['From Date'])}</div>
+                                            </div>
+                                            <div class="bg-gray-50 rounded-lg p-3">
+                                                <div class="text-xs text-gray-500 mb-1">To Date</div>
+                                                <div class="font-semibold text-gray-800">${formatDate(leave['To Date'])}</div>
+                                            </div>
+                                        </div>
+                                        <div class="bg-gray-50 rounded-lg p-3">
+                                            <div class="text-xs text-gray-500 mb-1">Reason</div>
+                                            <div class="text-gray-800">${escapeHtml(leave['Reason'])}</div>
+                                        </div>
+                                    </div>
+                                    <div class="approval-card-footer">
+                                        <div class="flex flex-col sm:flex-row gap-3">
+                                            <input type="text" id="comments_${leave['Row ID']}" placeholder="Comments (optional for approve, required for reject)" class="form-input flex-1">
+                                            <div class="flex gap-2">
+                                                <button onclick="handleApproveLeave('${leave['Row ID']}')" class="btn btn-success">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                                    Approve
+                                                </button>
+                                                <button onclick="handleRejectLeave('${leave['Row ID']}')" class="btn btn-danger">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                                    Reject
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                `).join('')}
+                            </div>
+                        </section>
+                        ` : ''}
+
+                        ${isApprover && recentApprovedLeaves.length > 0 ? `
+                        <!-- Revocable Approvals -->
+                        <section>
+                            <h2 class="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                                <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                Recently Approved (Revocable)
+                                <span class="bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full">${recentApprovedLeaves.length}</span>
+                            </h2>
+                            <p class="text-sm text-gray-500 mb-4">Approved in last 7 days for future dates. Can be revoked if needed.</p>
+                            <div class="space-y-4">
+                                ${recentApprovedLeaves.map(leave => `
+                                <div class="approval-card approved">
+                                    <div class="approval-card-header">
+                                        <div class="flex flex-wrap justify-between items-start gap-4">
+                                            <div>
+                                                <div class="font-semibold text-gray-800 text-lg">${escapeHtml(leave['Employee Name'])}</div>
+                                                <div class="text-gray-500 text-sm">${escapeHtml(leave['Employee Email'])}</div>
+                                            </div>
+                                            <span class="badge badge-approved">Approved</span>
+                                        </div>
+                                    </div>
+                                    <div class="approval-card-body">
+                                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                                            <div class="bg-gray-50 rounded-lg p-3">
+                                                <div class="text-xs text-gray-500 mb-1">Leave Type</div>
+                                                <div class="font-semibold text-gray-800">${escapeHtml(leave['Leave Type'])}</div>
+                                            </div>
+                                            <div class="bg-gray-50 rounded-lg p-3">
+                                                <div class="text-xs text-gray-500 mb-1">Duration</div>
+                                                <div class="font-semibold text-gray-800">${leave['Total Days']} ${leave['Day Type']}</div>
+                                            </div>
+                                            <div class="bg-gray-50 rounded-lg p-3">
+                                                <div class="text-xs text-gray-500 mb-1">From Date</div>
+                                                <div class="font-semibold text-gray-800">${formatDate(leave['From Date'])}</div>
+                                            </div>
+                                            <div class="bg-gray-50 rounded-lg p-3">
+                                                <div class="text-xs text-gray-500 mb-1">To Date</div>
+                                                <div class="font-semibold text-gray-800">${formatDate(leave['To Date'])}</div>
+                                            </div>
+                                        </div>
+                                        <div class="bg-gray-50 rounded-lg p-3">
+                                            <div class="text-xs text-gray-500">Approved by <span class="font-semibold text-gray-700">${escapeHtml(leave['Approver Name'])}</span> on ${formatDate(leave['Actioned On'])}</div>
+                                        </div>
+                                    </div>
+                                    <div class="approval-card-footer">
+                                        <div class="flex flex-col sm:flex-row gap-3">
+                                            <input type="text" id="revoke_comments_${leave['Row ID']}" placeholder="Reason for revoking approval (required)" class="form-input flex-1">
+                                            <button onclick="handleRejectApprovedLeave('${leave['Row ID']}')" class="btn btn-warning">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
+                                                Revoke Approval
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                `).join('')}
+                            </div>
+                        </section>
+                        ` : ''}
+
+                        <!-- My Leave Applications -->
+                        <section>
+                            <h2 class="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                                <svg class="w-5 h-5 text-brand-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                                My Leave Applications
+                            </h2>
+                            ${myLeaves.length === 0 ? `
+                            <div class="card">
+                                <div class="empty-state">
+                                    <div class="empty-state-icon">
+                                        <svg class="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                                    </div>
+                                    <h3 class="font-semibold text-gray-800 mb-1">No leave applications</h3>
+                                    <p class="text-gray-500 text-sm">Your leave history will appear here</p>
+                                </div>
+                            </div>
+                            ` : `
+                            <div class="table-container">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Date Range</th>
+                                            <th>Type</th>
+                                            <th>Days</th>
+                                            <th>Reason</th>
+                                            <th>Status</th>
+                                            <th>Actioned By</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${myLeaves.map(leave => `
+                                        <tr>
+                                            <td>
+                                                <div class="font-medium">${formatDate(leave['From Date'])}</div>
+                                                ${leave['From Date'] !== leave['To Date'] ? `<div class="text-gray-500 text-xs">to ${formatDate(leave['To Date'])}</div>` : ''}
+                                            </td>
+                                            <td>${escapeHtml(leave['Leave Type'])}</td>
+                                            <td><span class="font-medium">${leave['Total Days']}</span> ${leave['Day Type']}</td>
+                                            <td class="max-w-[200px]"><div class="truncate" title="${escapeHtml(leave['Reason'])}">${escapeHtml(leave['Reason'])}</div></td>
+                                            <td><span class="badge ${getBadgeClass(leave['Status'])}">${leave['Status']}</span></td>
+                                            <td>
+                                                ${leave['Approver Name'] ? `
+                                                <div class="font-medium">${escapeHtml(leave['Approver Name'])}</div>
+                                                ${leave['Approver Comments'] ? `<div class="text-gray-500 text-xs italic">"${escapeHtml(leave['Approver Comments'])}"</div>` : ''}
+                                                ` : '<span class="text-gray-400">-</span>'}
+                                            </td>
+                                            <td>
+                                                ${leave['Status'] === 'Pending' ? `
+                                                <button onclick="handleCancelLeave('${leave['Row ID']}')" class="btn btn-danger btn-sm">Cancel</button>
+                                                ` : '<span class="text-gray-400">-</span>'}
+                                            </td>
+                                        </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                            `}
+                        </section>
+
+                        <!-- Footer -->
+                        <footer class="text-center text-gray-400 text-sm py-4 border-t border-gray-200">
+                            TimeWise Leave Management v2.0 · © ${new Date().getFullYear()} DRP & Co. LLP
+                        </footer>
                     </div>
-                </header>
-
-                <main class="max-w-6xl mx-auto px-4 py-6 space-y-6">
-                    <!-- Leave Balance Cards -->
-                    <section>
-                        <h2 class="text-lg font-semibold text-brand-navy mb-4">My Leave Balance</h2>
-                        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-                            ${renderStatCard('PL Available', leaveBalance?.plBalance || 0, 'Days remaining', 'green')}
-                            ${renderStatCard('PL Earned', leaveBalance?.plEarned || 0, 'Total earned', 'blue')}
-                            ${renderStatCard('PL Used', leaveBalance?.plUsed || 0, 'Days taken', 'amber')}
-                            ${renderStatCard('Service', leaveBalance?.completedMonths || 0, 'Months', 'purple')}
-                            ${renderStatCard('Max Cap', leaveBalance?.plMaxCap || 6, 'PL limit', 'gray')}
-                        </div>
-                        <p class="text-xs text-gray-500 mt-3 flex items-center gap-1">
-                            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/></svg>
-                            Policy: 1 PL per completed month of service, maximum cap of 6 days
-                        </p>
-                    </section>
-
-                    <!-- Apply Leave Form -->
-                    <section class="card p-6">
-                        <h2 class="text-lg font-semibold text-brand-navy mb-4 flex items-center gap-2">
-                            <svg class="w-5 h-5 text-brand-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-                            Apply for Leave
-                        </h2>
-                        <div class="grid lg:grid-cols-2 gap-6">
-                            <div class="space-y-5">
-                                <!-- Leave Type -->
-                                <div>
-                                    <label class="label">Leave Type</label>
-                                    <div class="space-y-2">
-                                        <label class="option-card" onclick="this.querySelector('input').checked=true;document.querySelectorAll('[name=leaveType]').forEach(r=>r.closest('.option-card').classList.remove('selected'));this.classList.add('selected')">
-                                            <input type="radio" name="leaveType" value="PL" class="mr-3 accent-brand-blue">
-                                            <div><span class="font-medium text-gray-800">Paid Leave (PL)</span><p class="text-xs text-gray-500">Deducted from PL balance</p></div>
-                                        </label>
-                                        <label class="option-card" onclick="this.querySelector('input').checked=true;document.querySelectorAll('[name=leaveType]').forEach(r=>r.closest('.option-card').classList.remove('selected'));this.classList.add('selected')">
-                                            <input type="radio" name="leaveType" value="Comp Off" class="mr-3 accent-brand-blue">
-                                            <div><span class="font-medium text-gray-800">Comp Off</span><p class="text-xs text-gray-500">Compensatory off (not deducted from PL)</p></div>
-                                        </label>
-                                    </div>
-                                    <p class="text-xs text-amber-600 mt-2 flex items-center gap-1">
-                                        <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
-                                        If PL balance is 0, leave will be auto-converted to LOP
-                                    </p>
-                                </div>
-                                
-                                <!-- Day Type -->
-                                <div>
-                                    <label class="label">Day Type</label>
-                                    <div class="flex gap-3">
-                                        <label class="option-card flex-1 selected" onclick="this.querySelector('input').checked=true;document.querySelectorAll('[name=dayType]').forEach(r=>r.closest('.option-card').classList.remove('selected'));this.classList.add('selected')">
-                                            <input type="radio" name="dayType" value="Full Day" class="mr-2 accent-brand-blue" checked>
-                                            <span class="font-medium">Full Day</span>
-                                        </label>
-                                        <label class="option-card flex-1" onclick="this.querySelector('input').checked=true;document.querySelectorAll('[name=dayType]').forEach(r=>r.closest('.option-card').classList.remove('selected'));this.classList.add('selected')">
-                                            <input type="radio" name="dayType" value="Half Day" class="mr-2 accent-brand-blue">
-                                            <span class="font-medium">Half Day</span>
-                                        </label>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="space-y-5">
-                                <!-- Date Range -->
-                                <div class="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label class="label">From Date</label>
-                                        <input type="date" id="fromDate" min="${minDate.toISOString().split('T')[0]}" max="${maxDate.toISOString().split('T')[0]}" value="${today}" class="input">
-                                    </div>
-                                    <div>
-                                        <label class="label">To Date</label>
-                                        <input type="date" id="toDate" min="${minDate.toISOString().split('T')[0]}" max="${maxDate.toISOString().split('T')[0]}" value="${today}" class="input">
-                                    </div>
-                                </div>
-                                <p class="text-xs text-gray-500 -mt-3">Can apply: Past 7 days to 6 months ahead</p>
-                                
-                                <!-- Reason -->
-                                <div>
-                                    <label class="label">Reason <span class="font-normal text-gray-400">(min 3 words)</span></label>
-                                    <textarea id="reason" rows="3" placeholder="Please provide reason for leave..." class="input"></textarea>
-                                </div>
-                                
-                                <!-- Submit -->
-                                <button onclick="handleApplyLeave()" class="btn-primary w-full py-3">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
-                                    Submit Leave Application
-                                </button>
-                            </div>
-                        </div>
-                    </section>
-
-                    ${isApprover && pendingLeaves.length > 0 ? `
-                    <!-- Pending Approvals -->
-                    <section class="card p-6">
-                        <h2 class="text-lg font-semibold text-brand-navy mb-4 flex items-center gap-2">
-                            <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                            Pending Approvals
-                            <span class="bg-amber-500 text-white text-xs px-2 py-0.5 rounded-full">${pendingLeaves.length}</span>
-                        </h2>
-                        <div class="space-y-4">
-                            ${pendingLeaves.map(leave => `
-                            <div class="approval-card pending">
-                                <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
-                                    <div>
-                                        <p class="font-semibold text-gray-800">${escapeHtml(leave['Employee Name'])}</p>
-                                        <p class="text-sm text-gray-500">${escapeHtml(leave['Employee Email'])}</p>
-                                    </div>
-                                    <span class="badge-pending">Pending</span>
-                                </div>
-                                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                                    <div class="bg-white rounded-lg p-2 border border-gray-100">
-                                        <p class="text-xs text-gray-500">Type</p>
-                                        <p class="font-semibold text-sm">${leave['Leave Type']}</p>
-                                    </div>
-                                    <div class="bg-white rounded-lg p-2 border border-gray-100">
-                                        <p class="text-xs text-gray-500">Duration</p>
-                                        <p class="font-semibold text-sm">${leave['Total Days']} ${leave['Day Type']}</p>
-                                    </div>
-                                    <div class="bg-white rounded-lg p-2 border border-gray-100">
-                                        <p class="text-xs text-gray-500">From</p>
-                                        <p class="font-semibold text-sm">${formatDate(leave['From Date'])}</p>
-                                    </div>
-                                    <div class="bg-white rounded-lg p-2 border border-gray-100">
-                                        <p class="text-xs text-gray-500">To</p>
-                                        <p class="font-semibold text-sm">${formatDate(leave['To Date'])}</p>
-                                    </div>
-                                </div>
-                                <div class="bg-white rounded-lg p-3 border border-gray-100 mb-4">
-                                    <p class="text-xs text-gray-500 mb-1">Reason</p>
-                                    <p class="text-sm text-gray-700">${escapeHtml(leave['Reason'])}</p>
-                                </div>
-                                <div class="flex flex-col sm:flex-row gap-2">
-                                    <input type="text" id="comments_${leave['Row ID']}" placeholder="Comments (optional for approve, required for reject)" class="input flex-1">
-                                    <button onclick="handleApproveLeave('${leave['Row ID']}')" class="btn-success">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                        Approve
-                                    </button>
-                                    <button onclick="handleRejectLeave('${leave['Row ID']}')" class="btn-danger">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                                        Reject
-                                    </button>
-                                </div>
-                            </div>
-                            `).join('')}
-                        </div>
-                    </section>
-                    ` : ''}
-
-                    ${isApprover && recentApprovedLeaves.length > 0 ? `
-                    <!-- Revocable Approvals -->
-                    <section class="card p-6">
-                        <h2 class="text-lg font-semibold text-brand-navy mb-2 flex items-center gap-2">
-                            <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                            Recently Approved (Revocable)
-                            <span class="bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">${recentApprovedLeaves.length}</span>
-                        </h2>
-                        <p class="text-sm text-gray-500 mb-4">Approved in last 7 days for future dates. Can be revoked if needed.</p>
-                        <div class="space-y-4">
-                            ${recentApprovedLeaves.map(leave => `
-                            <div class="approval-card approved">
-                                <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
-                                    <div>
-                                        <p class="font-semibold text-gray-800">${escapeHtml(leave['Employee Name'])}</p>
-                                        <p class="text-sm text-gray-500">${escapeHtml(leave['Employee Email'])}</p>
-                                    </div>
-                                    <span class="badge-approved">Approved</span>
-                                </div>
-                                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                                    <div class="bg-white rounded-lg p-2 border border-gray-100">
-                                        <p class="text-xs text-gray-500">Type</p>
-                                        <p class="font-semibold text-sm">${leave['Leave Type']}</p>
-                                    </div>
-                                    <div class="bg-white rounded-lg p-2 border border-gray-100">
-                                        <p class="text-xs text-gray-500">Duration</p>
-                                        <p class="font-semibold text-sm">${leave['Total Days']} ${leave['Day Type']}</p>
-                                    </div>
-                                    <div class="bg-white rounded-lg p-2 border border-gray-100">
-                                        <p class="text-xs text-gray-500">From</p>
-                                        <p class="font-semibold text-sm">${formatDate(leave['From Date'])}</p>
-                                    </div>
-                                    <div class="bg-white rounded-lg p-2 border border-gray-100">
-                                        <p class="text-xs text-gray-500">To</p>
-                                        <p class="font-semibold text-sm">${formatDate(leave['To Date'])}</p>
-                                    </div>
-                                </div>
-                                <div class="bg-white rounded-lg p-3 border border-gray-100 mb-4">
-                                    <p class="text-xs text-gray-500">Approved by <span class="font-medium text-gray-700">${escapeHtml(leave['Approver Name'])}</span> on ${formatDate(leave['Actioned On'])}</p>
-                                </div>
-                                <div class="flex flex-col sm:flex-row gap-2">
-                                    <input type="text" id="revoke_comments_${leave['Row ID']}" placeholder="Reason for revoking approval (required)" class="input flex-1">
-                                    <button onclick="handleRejectApprovedLeave('${leave['Row ID']}')" class="btn-warning">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
-                                        Revoke Approval
-                                    </button>
-                                </div>
-                            </div>
-                            `).join('')}
-                        </div>
-                    </section>
-                    ` : ''}
-
-                    <!-- My Leave Applications -->
-                    <section class="card p-6">
-                        <h2 class="text-lg font-semibold text-brand-navy mb-4 flex items-center gap-2">
-                            <svg class="w-5 h-5 text-brand-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-                            My Leave Applications
-                        </h2>
-                        ${myLeaves.length === 0 ? `
-                        <div class="text-center py-12">
-                            <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-                            </div>
-                            <p class="text-gray-500">No leave applications found</p>
-                            <p class="text-sm text-gray-400 mt-1">Your leave history will appear here</p>
-                        </div>
-                        ` : `
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-sm">
-                                <thead>
-                                    <tr class="table-header">
-                                        <th class="p-3 rounded-tl-lg">Date Range</th>
-                                        <th class="p-3">Type</th>
-                                        <th class="p-3">Days</th>
-                                        <th class="p-3">Reason</th>
-                                        <th class="p-3">Status</th>
-                                        <th class="p-3">Actioned By</th>
-                                        <th class="p-3 rounded-tr-lg">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${myLeaves.map(leave => `
-                                    <tr class="table-row">
-                                        <td class="p-3">
-                                            <span class="font-medium">${formatDate(leave['From Date'])}</span>
-                                            ${leave['From Date'] !== leave['To Date'] ? `<br><span class="text-gray-500 text-xs">to ${formatDate(leave['To Date'])}</span>` : ''}
-                                        </td>
-                                        <td class="p-3">${leave['Leave Type']}</td>
-                                        <td class="p-3">${leave['Total Days']} ${leave['Day Type']}</td>
-                                        <td class="p-3 max-w-[150px] truncate" title="${escapeHtml(leave['Reason'])}">${escapeHtml(leave['Reason'])}</td>
-                                        <td class="p-3"><span class="${getBadgeClass(leave['Status'])}">${leave['Status']}</span></td>
-                                        <td class="p-3">
-                                            ${leave['Approver Name'] ? `
-                                            <span class="font-medium text-gray-700">${escapeHtml(leave['Approver Name'])}</span>
-                                            ${leave['Approver Comments'] ? `<br><span class="text-xs text-gray-500 italic">"${escapeHtml(leave['Approver Comments'])}"</span>` : ''}
-                                            ` : '<span class="text-gray-400">-</span>'}
-                                        </td>
-                                        <td class="p-3">
-                                            ${leave['Status'] === 'Pending' ? `
-                                            <button onclick="handleCancelLeave('${leave['Row ID']}')" class="text-red-600 hover:text-red-800 font-medium text-xs">Cancel</button>
-                                            ` : '<span class="text-gray-400">-</span>'}
-                                        </td>
-                                    </tr>
-                                    `).join('')}
-                                </tbody>
-                            </table>
-                        </div>
-                        `}
-                    </section>
-
-                    <!-- Footer -->
-                    <footer class="text-center text-gray-400 text-xs py-4">
-                        TimeWise Leave Management v2.0 · © ${new Date().getFullYear()} DRP & Co. LLP
-                    </footer>
                 </main>
             </div>`;
         }
@@ -684,10 +828,10 @@
                 isApprover = session.isApprover;
                 
                 document.getElementById('app').innerHTML = `
-                <div class="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div class="min-h-screen bg-gray-100 flex items-center justify-center">
                     <div class="text-center">
                         <div class="loading-spinner mx-auto"></div>
-                        <p class="mt-4 text-gray-500 text-sm">Loading leave data...</p>
+                        <p class="mt-4 text-gray-500">Loading leave data...</p>
                     </div>
                 </div>`;
                 
