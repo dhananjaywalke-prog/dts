@@ -9,8 +9,9 @@
     <title>TimeWise - Timesheet System</title>
     <!-- ============================================
     TimeWise Web App
-    Version: 1.7
-    Last Updated: 28-Jan-2026
+    Version: 1.8
+    Last Updated: 03-Mar-2026
+    Bug Fix: Calendar now shows all months in editable range (Feb missing issue fixed)
     ============================================ -->
     <script src="https://cdn.tailwindcss.com?v=1.7"></script>
     <style>
@@ -1174,15 +1175,21 @@
             const curMonth = today.getMonth();
             const curYear = today.getFullYear();
             
+            // Calculate the date 31 days ago (editable limit)
             const ago31 = new Date(today);
             ago31.setDate(today.getDate() - 31);
-            const prevMonth = ago31.getMonth();
-            const prevYear = ago31.getFullYear();
             
-            if (prevMonth !== curMonth || prevYear !== curYear) {
-                months.push({ month: prevMonth, year: prevYear });
+            // We need to show all months from ago31 to today
+            // This handles cases where we're at the start of a month
+            let tempDate = new Date(ago31.getFullYear(), ago31.getMonth(), 1);
+            const endDate = new Date(curYear, curMonth, 1);
+            
+            while (tempDate <= endDate) {
+                months.push({ month: tempDate.getMonth(), year: tempDate.getFullYear() });
+                // Move to next month
+                tempDate.setMonth(tempDate.getMonth() + 1);
             }
-            months.push({ month: curMonth, year: curYear });
+            
             return months;
         }
 
