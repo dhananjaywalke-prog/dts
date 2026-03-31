@@ -4,66 +4,70 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <title>TimeWise - Leave Management</title>
+    <title>Leave | TimeWise EMS</title>
+    <!-- ============================================
+    TimeWise EMS - Leave Module
+    Version: 2.0
+    Last Updated: 15-Mar-2026
+    UI: Redesigned with drpca.com branding
+    Note: All JS logic preserved from original
+    ============================================ -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
             theme: {
                 extend: {
                     colors: {
-                        brand: {
-                            navy: '#1F3864',
-                            blue: '#2E5FA3',
-                            mid: '#4472C4',
-                            light: '#D6E4F7',
-                        }
-                    }
+                        navy: { 50: '#f0f4f8', 100: '#d9e2ec', 200: '#bcccdc', 700: '#334e68', 800: '#243b53', 900: '#102a43' },
+                        gold: { 50: '#fdf9ef', 100: '#faf0d7', 400: '#e3b04a', 500: '#d4a853', 600: '#c4882c' }
+                    },
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] }
                 }
             }
         }
     </script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * { font-family: 'Inter', sans-serif; }
+        body { font-size: 14px; }
         
-        /* Loading */
-        .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; z-index: 9999; }
-        .loading-spinner { width: 40px; height: 40px; border: 3px solid #D6E4F7; border-top: 3px solid #2E5FA3; border-radius: 50%; animation: spin 0.8s linear infinite; }
+        /* Loading - Navy/Gold themed */
+        .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(16,42,67,0.9); display: flex; justify-content: center; align-items: center; z-index: 9999; }
+        .loading-spinner { width: 48px; height: 48px; border: 3px solid rgba(212,168,83,0.2); border-top: 3px solid #d4a853; border-radius: 50%; animation: spin 0.8s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
-        /* Sidebar */
-        .sidebar { width: 260px; min-height: 100vh; background: #1F3864; }
-        .sidebar-link { display: flex; align-items: center; gap: 12px; padding: 12px 20px; color: rgba(255,255,255,0.6); font-size: 14px; font-weight: 500; transition: all 0.15s; border-left: 3px solid transparent; }
-        .sidebar-link:hover { background: rgba(255,255,255,0.1); color: white; }
-        .sidebar-link.active { background: rgba(255,255,255,0.15); color: white; border-left-color: #4472C4; }
+        /* Header */
+        .header-shadow { box-shadow: 0 1px 3px rgba(16,42,67,0.08); }
         
         /* Cards */
-        .card { background: white; border-radius: 12px; border: 1px solid #E5E7EB; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .card { background: white; border-radius: 12px; border: 1px solid #E5E7EB; }
         
         /* Stat Cards */
-        .stat-card { padding: 20px; border-radius: 12px; border: 1px solid #E5E7EB; background: white; }
-        .stat-card .stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
-        .stat-card .stat-value { font-size: 32px; font-weight: 700; line-height: 1; }
-        .stat-card .stat-label { font-size: 13px; color: #6B7280; margin-top: 4px; }
+        .stat-card { padding: 16px; border-radius: 12px; border: 1px solid #E5E7EB; background: white; }
+        .stat-card .stat-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+        .stat-card .stat-value { font-size: 28px; font-weight: 700; line-height: 1; }
+        .stat-card .stat-label { font-size: 12px; color: #6B7280; margin-top: 4px; }
         
-        /* Form Elements */
-        .form-label { display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px; }
-        .form-input { width: 100%; padding: 12px 16px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px; transition: all 0.15s; background: white; }
-        .form-input:focus { outline: none; border-color: #2E5FA3; box-shadow: 0 0 0 3px rgba(46,95,163,0.1); }
+        /* Form Elements with Gold focus */
+        .form-label { display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px; }
+        .form-input { width: 100%; padding: 10px 14px; border: 1px solid #E5E7EB; border-radius: 8px; font-size: 14px; transition: all 0.15s; background: white; }
+        .form-input:focus { outline: none; border-color: #d4a853; box-shadow: 0 0 0 3px rgba(212,168,83,0.15); }
         .form-input:disabled { background: #F9FAFB; color: #9CA3AF; }
         .form-select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236B7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; background-size: 20px; padding-right: 44px; }
-        .form-textarea { resize: vertical; min-height: 100px; }
+        .form-textarea { resize: vertical; min-height: 80px; }
         
-        /* Radio Cards */
-        .radio-card { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border: 2px solid #E5E7EB; border-radius: 10px; cursor: pointer; transition: all 0.15s; background: white; }
+        /* Radio Cards with Gold selection */
+        .radio-card { display: flex; align-items: flex-start; gap: 12px; padding: 14px; border: 1px solid #E5E7EB; border-radius: 10px; cursor: pointer; transition: all 0.15s; background: white; }
         .radio-card:hover { border-color: #CBD5E1; background: #F8FAFC; }
-        .radio-card.selected { border-color: #2E5FA3; background: #EFF6FF; }
-        .radio-card input[type="radio"] { width: 20px; height: 20px; margin-top: 2px; accent-color: #2E5FA3; }
+        .radio-card.selected { border-color: #d4a853; background: #fdf9ef; }
+        .radio-card input[type="radio"] { width: 18px; height: 18px; margin-top: 2px; accent-color: #d4a853; }
         
         /* Buttons */
-        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 24px; font-size: 14px; font-weight: 600; border-radius: 8px; transition: all 0.15s; cursor: pointer; border: none; }
-        .btn-primary { background: #2E5FA3; color: white; }
-        .btn-primary:hover { background: #1F3864; }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 20px; font-size: 14px; font-weight: 500; border-radius: 8px; transition: all 0.15s; cursor: pointer; border: none; }
+        .btn-primary { background: linear-gradient(135deg, #102a43 0%, #243b53 100%); color: white; }
+        .btn-primary:hover { background: linear-gradient(135deg, #243b53 0%, #334e68 100%); }
         .btn-success { background: #059669; color: white; }
         .btn-success:hover { background: #047857; }
         .btn-danger { background: #DC2626; color: white; }
@@ -72,11 +76,11 @@
         .btn-warning:hover { background: #B45309; }
         .btn-secondary { background: #F3F4F6; color: #374151; border: 1px solid #E5E7EB; }
         .btn-secondary:hover { background: #E5E7EB; }
-        .btn-sm { padding: 8px 16px; font-size: 13px; }
-        .btn-lg { padding: 14px 28px; font-size: 15px; }
+        .btn-sm { padding: 8px 14px; font-size: 13px; }
+        .btn-lg { padding: 12px 24px; font-size: 14px; }
         
         /* Badges */
-        .badge { display: inline-flex; align-items: center; padding: 4px 12px; font-size: 12px; font-weight: 600; border-radius: 20px; }
+        .badge { display: inline-flex; align-items: center; padding: 4px 10px; font-size: 12px; font-weight: 500; border-radius: 20px; }
         .badge-pending { background: #FEF3C7; color: #92400E; }
         .badge-approved { background: #D1FAE5; color: #065F46; }
         .badge-rejected { background: #FEE2E2; color: #991B1B; }
@@ -86,30 +90,46 @@
         .table-container { overflow-x: auto; border-radius: 12px; border: 1px solid #E5E7EB; }
         .data-table { width: 100%; border-collapse: collapse; }
         .data-table thead { background: #F8FAFC; }
-        .data-table th { padding: 14px 16px; text-align: left; font-size: 12px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #E5E7EB; }
-        .data-table td { padding: 14px 16px; font-size: 14px; color: #374151; border-bottom: 1px solid #F3F4F6; }
-        .data-table tbody tr:nth-child(even) { background: #F9FAFB; }
-        .data-table tbody tr:hover { background: #EFF6FF; }
+        .data-table th { padding: 12px 14px; text-align: left; font-size: 12px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #E5E7EB; }
+        .data-table td { padding: 12px 14px; font-size: 14px; color: #374151; border-bottom: 1px solid #F3F4F6; }
+        .data-table tbody tr:hover { background: #f0f4f8; }
         .data-table tbody tr:last-child td { border-bottom: none; }
         
         /* Approval Cards */
-        .approval-card { background: white; border-radius: 12px; border: 1px solid #E5E7EB; border-left: 4px solid #F59E0B; overflow: hidden; }
+        .approval-card { background: white; border-radius: 12px; border: 1px solid #E5E7EB; border-left: 4px solid #d4a853; overflow: hidden; }
         .approval-card.approved { border-left-color: #10B981; }
-        .approval-card-header { padding: 20px; background: linear-gradient(to right, #FFFBEB, white); }
+        .approval-card-header { padding: 16px; background: linear-gradient(to right, #fdf9ef, white); }
         .approval-card.approved .approval-card-header { background: linear-gradient(to right, #ECFDF5, white); }
-        .approval-card-body { padding: 20px; border-top: 1px solid #F3F4F6; }
-        .approval-card-footer { padding: 16px 20px; background: #F9FAFB; border-top: 1px solid #F3F4F6; }
+        .approval-card-body { padding: 16px; border-top: 1px solid #F3F4F6; }
+        .approval-card-footer { padding: 14px 16px; background: #F9FAFB; border-top: 1px solid #F3F4F6; }
         
         /* Info Box */
-        .info-box { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; font-size: 13px; color: #1E40AF; }
-        .warning-box { background: #FFFBEB; border-color: #FDE68A; color: #92400E; }
+        .info-box { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; background: #f0f4f8; border: 1px solid #d9e2ec; border-radius: 8px; font-size: 13px; color: #102a43; }
+        .warning-box { background: #fdf9ef; border-color: #faf0d7; color: #92400E; }
         
         /* Empty State */
-        .empty-state { padding: 60px 20px; text-align: center; }
-        .empty-state-icon { width: 80px; height: 80px; margin: 0 auto 20px; background: #F3F4F6; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+        .empty-state { padding: 48px 20px; text-align: center; }
+        .empty-state-icon { width: 72px; height: 72px; margin: 0 auto 16px; background: #F3F4F6; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+        
+        /* Searchable Dropdown */
+        .searchable-dropdown { position: relative; width: 100%; }
+        .searchable-dropdown .dd-display { width: 100%; padding: 10px 14px; padding-right: 32px; border: 1px solid #e5e7eb; border-radius: 8px; background: white; cursor: pointer; text-align: left; font-size: 14px; color: #102a43; position: relative; }
+        .searchable-dropdown .dd-display:focus { outline: none; border-color: #d4a853; box-shadow: 0 0 0 3px rgba(212,168,83,0.15); }
+        .searchable-dropdown .dd-display::after { content: ''; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); border: 5px solid transparent; border-top-color: #6b7280; }
+        .searchable-dropdown.open .dd-display::after { border-top-color: transparent; border-bottom-color: #6b7280; transform: translateY(-80%); }
+        .searchable-dropdown .dd-panel { position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); z-index: 1000; display: none; max-height: 280px; overflow: hidden; }
+        .searchable-dropdown.open .dd-panel { display: block; }
+        .searchable-dropdown .dd-search { width: 100%; padding: 10px 12px; border: none; border-bottom: 1px solid #e5e7eb; font-size: 14px; outline: none; }
+        .searchable-dropdown .dd-search:focus { background: #fdf9ef; }
+        .searchable-dropdown .dd-options { max-height: 220px; overflow-y: auto; }
+        .searchable-dropdown .dd-option { padding: 10px 12px; cursor: pointer; font-size: 14px; color: #374151; }
+        .searchable-dropdown .dd-option:hover, .searchable-dropdown .dd-option.highlighted { background: #f0f4f8; }
+        .searchable-dropdown .dd-option.selected { background: #fdf9ef; color: #102a43; font-weight: 500; }
+        .searchable-dropdown .dd-option mark { background: #faf0d7; color: #102a43; padding: 0 2px; border-radius: 2px; }
+        .searchable-dropdown .dd-empty { padding: 12px; text-align: center; color: #9ca3af; font-size: 13px; }
     </style>
 </head>
-<body class="bg-gray-100">
+<body class="bg-gray-50">
     <!-- Loading Overlay -->
     <div id="loadingOverlay" class="loading-overlay" style="display: none;">
         <div class="text-center">
@@ -405,53 +425,22 @@
         // ============================================
         function renderLogin() {
             return `
-            <div class="min-h-screen flex" style="background: linear-gradient(135deg, #1F3864 0%, #2E5FA3 50%, #4472C4 100%)">
-                <!-- Left Side - Branding -->
-                <div class="hidden lg:flex lg:w-1/2 flex-col justify-center px-16">
-                    <div class="flex items-center gap-4 mb-8">
-                        <div class="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center">
-                            <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                        </div>
-                        <div>
-                            <h1 class="text-white text-3xl font-bold">TimeWise</h1>
-                            <p class="text-white/60">Leave Management System</p>
-                        </div>
-                    </div>
-                    <h2 class="text-white text-4xl font-bold leading-tight mb-4">Manage your leaves<br>with ease</h2>
-                    <p class="text-white/70 text-lg">Apply for leave, track balances, and manage approvals all in one place.</p>
+            <div class="min-h-screen flex">
+                <div class="hidden lg:flex lg:w-1/2 flex-col justify-between p-12" style="background:#102a43">
+                    <div><img src="https://drpca.com/assets/drpca-logo.png" alt="DRP & Co. LLP" class="h-12 brightness-0 invert opacity-90" onerror="this.style.display='none'"></div>
+                    <div class="text-white"><h1 class="text-4xl font-bold mb-4">TimeWise EMS</h1><p class="text-lg opacity-60">Employee Management System</p><p class="opacity-40 text-sm mt-1">[internal portal for DRPCA]</p></div>
+                    <div class="text-white opacity-40 text-sm"><p>DRP & Co. LLP</p><p>Chartered Accountants • Wealth Managers • Valuation Professionals</p></div>
                 </div>
-                
-                <!-- Right Side - Login Form -->
-                <div class="w-full lg:w-1/2 flex items-center justify-center p-8">
+                <div class="w-full lg:w-1/2 flex items-center justify-center p-8 bg-white">
                     <div class="w-full max-w-md">
-                        <div class="bg-white rounded-2xl shadow-2xl overflow-hidden">
-                            <div class="px-8 py-10">
-                                <div class="lg:hidden flex items-center gap-3 mb-8">
-                                    <div class="w-12 h-12 bg-brand-navy rounded-xl flex items-center justify-center">
-                                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                                    </div>
-                                    <div>
-                                        <div class="font-bold text-gray-800 text-lg">TimeWise</div>
-                                        <div class="text-gray-500 text-sm">Leave Management</div>
-                                    </div>
-                                </div>
-                                
-                                <h2 class="text-2xl font-bold text-gray-800 mb-2">Welcome back</h2>
-                                <p class="text-gray-500 mb-8">Sign in to continue to your account</p>
-                                
-                                <div class="space-y-5">
-                                    <div>
-                                        <label class="form-label">Email Address</label>
-                                        <input type="email" id="emailInput" placeholder="you@company.com" class="form-input" onkeypress="if(event.key==='Enter')handleLogin()">
-                                    </div>
-                                    <button id="loginBtn" onclick="handleLogin()" class="btn btn-primary btn-lg w-full">
-                                        Sign In
-                                    </button>
-                                </div>
-                                <div id="loginStatus"></div>
-                            </div>
+                        <div class="lg:hidden text-center mb-8"><img src="https://drpca.com/assets/drpca-logo.png" alt="DRP & Co." class="h-10 mx-auto mb-4" onerror="this.style.display='none'"></div>
+                        <div class="text-center mb-8"><h2 class="text-2xl font-bold" style="color:#102a43">Leave Module</h2><p class="text-gray-500 mt-2 text-sm">Sign in to manage your leave</p></div>
+                        <div class="space-y-5">
+                            <div><label class="form-label">Email Address</label><input type="email" id="emailInput" placeholder="your.name@drpca.com" class="form-input" onkeypress="if(event.key==='Enter')handleLogin()"></div>
+                            <button id="loginBtn" onclick="handleLogin()" class="btn btn-primary btn-lg w-full">Sign In</button>
+                            <div id="loginStatus"></div>
                         </div>
-                        <p class="text-center text-white/50 text-sm mt-6">© ${new Date().getFullYear()} DRP & Co. LLP. All rights reserved.</p>
+                        <div class="mt-12 pt-8 border-t border-gray-100"><p class="text-center text-gray-400 text-sm">© 2026 DRP & Co. LLP</p></div>
                     </div>
                 </div>
             </div>`;
@@ -466,26 +455,30 @@
             const minDate = new Date(); minDate.setDate(minDate.getDate() - 7);
 
             return `
-            <div class="min-h-screen flex bg-gray-100">
-                ${renderSidebar()}
+            <div class="min-h-screen bg-gray-50">
+                <!-- Header -->
+                <header class="bg-white header-shadow sticky top-0 z-50">
+                    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div class="flex justify-between items-center h-16">
+                            <div class="flex items-center space-x-4">
+                                <img src="https://drpca.com/assets/drpca-logo.png" alt="DRP & Co." class="h-12" onerror="this.outerHTML='<span class=\\'font-bold text-lg\\' style=\\'color:#102a43\\'>drp&co.</span>'">
+                                <div class="border-l border-gray-200 pl-4"><span class="font-semibold" style="color:#102a43">Leave</span><span class="text-gray-400 text-sm ml-1">Module</span></div>
+                            </div>
+                            <div class="flex items-center space-x-6">
+                                <div class="text-right"><p class="text-sm font-medium" style="color:#102a43">${employeeData['Employee Name']}</p><p class="text-xs text-gray-500">${employeeData['Designation'] || 'Employee'}</p></div>
+                                ${isApprover ? `<span class="badge badge-approved">Approver</span>` : ''}
+                                <a href="home.html" class="flex items-center space-x-2 text-sm font-medium text-gray-600 hover:text-gray-900"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg><span>Back to Home</span></a>
+                            </div>
+                        </div>
+                    </div>
+                </header>
                 
                 <!-- Main Content -->
-                <main class="flex-1 overflow-auto">
-                    <!-- Header -->
-                    <header class="bg-white border-b border-gray-200 px-8 py-4">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <h1 class="text-xl font-bold text-gray-800">Leave Management</h1>
-                                <p class="text-gray-500 text-sm">Apply for leave and track your balance</p>
-                            </div>
-                            ${isApprover ? `<span class="badge badge-approved">Approver Access</span>` : ''}
-                        </div>
-                    </header>
-                    
-                    <div class="p-8 space-y-8">
+                <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                    <div class="space-y-6">
                         <!-- Leave Balance Cards -->
                         <section>
-                            <h2 class="text-lg font-semibold text-gray-800 mb-4">My Leave Balance</h2>
+                            <h2 class="text-lg font-semibold mb-4" style="color:#102a43">My Leave Balance</h2>
                             <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                                 <div class="stat-card">
                                     <div class="flex items-start justify-between">
@@ -807,13 +800,15 @@
                             </div>
                             `}
                         </section>
-
-                        <!-- Footer -->
-                        <footer class="text-center text-gray-400 text-sm py-4 border-t border-gray-200">
-                            TimeWise Leave Management v2.0 · © ${new Date().getFullYear()} DRP & Co. LLP
-                        </footer>
                     </div>
                 </main>
+                
+                <!-- Footer -->
+                <footer class="mt-8 border-t border-gray-100 bg-white">
+                    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                        <p class="text-center text-sm text-gray-400">TimeWise EMS v2.0 • © 2026 DRP & Co. LLP</p>
+                    </div>
+                </footer>
             </div>`;
         }
 
@@ -828,10 +823,10 @@
                 isApprover = session.isApprover;
                 
                 document.getElementById('app').innerHTML = `
-                <div class="min-h-screen bg-gray-100 flex items-center justify-center">
+                <div class="min-h-screen bg-gray-50 flex items-center justify-center">
                     <div class="text-center">
                         <div class="loading-spinner mx-auto"></div>
-                        <p class="mt-4 text-gray-500">Loading leave data...</p>
+                        <p class="mt-4 text-gray-500 text-sm">Loading leave data...</p>
                     </div>
                 </div>`;
                 

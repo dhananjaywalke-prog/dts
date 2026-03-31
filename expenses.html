@@ -4,24 +4,71 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <title>TimeWise - Expenses</title>
+    <title>Expenses | TimeWise EMS</title>
+    <!-- ============================================
+    TimeWise EMS - Expenses Module
+    Version: 2.0
+    Last Updated: 15-Mar-2026
+    UI: Redesigned with drpca.com branding
+    Note: All JS logic preserved from original
+    ============================================ -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        navy: { 50: '#f0f4f8', 100: '#d9e2ec', 200: '#bcccdc', 700: '#334e68', 800: '#243b53', 900: '#102a43' },
+                        gold: { 50: '#fdf9ef', 100: '#faf0d7', 400: '#e3b04a', 500: '#d4a853', 600: '#c4882c' }
+                    },
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
     <style>
-        .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 9999; }
-        .loading-spinner { width: 50px; height: 50px; border: 4px solid #f3f3f3; border-top: 4px solid #8B5CF6; border-radius: 50%; animation: spin 1s linear infinite; }
+        body { font-family: 'Inter', system-ui, sans-serif; font-size: 14px; }
+        .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(16,42,67,0.9); display: flex; justify-content: center; align-items: center; z-index: 9999; }
+        .loading-spinner { width: 48px; height: 48px; border: 3px solid rgba(212,168,83,0.2); border-top: 3px solid #d4a853; border-radius: 50%; animation: spin 1s linear infinite; }
+        .loading-spinner-lg { width: 64px; height: 64px; border: 4px solid rgba(212,168,83,0.2); border-top: 4px solid #d4a853; border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .status-pending { background-color: #FEF3C7; color: #92400E; }
         .status-approved { background-color: #D1FAE5; color: #065F46; }
         .status-rejected { background-color: #FEE2E2; color: #991B1B; }
         .status-cancelled { background-color: #F3F4F6; color: #4B5563; }
-        .edit-field { background-color: #FEF3C7; border: 2px solid #F59E0B !important; }
+        .edit-field { background-color: #fdf9ef; border: 2px solid #d4a853 !important; }
+        .header-shadow { box-shadow: 0 1px 3px rgba(16,42,67,0.08); }
+        .btn-primary { background: linear-gradient(135deg, #102a43 0%, #243b53 100%); color: white; }
+        .btn-primary:hover { background: linear-gradient(135deg, #243b53 0%, #334e68 100%); }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: #d4a853 !important; box-shadow: 0 0 0 3px rgba(212,168,83,0.15) !important; }
+        /* Searchable Dropdown */
+        .searchable-dropdown { position: relative; width: 100%; }
+        .searchable-dropdown .dd-display { width: 100%; padding: 8px 12px; padding-right: 32px; border: 1px solid #e5e7eb; border-radius: 8px; background: white; cursor: pointer; text-align: left; font-size: 14px; color: #102a43; position: relative; }
+        .searchable-dropdown .dd-display:focus { outline: none; border-color: #d4a853; box-shadow: 0 0 0 3px rgba(212,168,83,0.15); }
+        .searchable-dropdown .dd-display::after { content: ''; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); border: 5px solid transparent; border-top-color: #6b7280; }
+        .searchable-dropdown.open .dd-display::after { border-top-color: transparent; border-bottom-color: #6b7280; transform: translateY(-80%); }
+        .searchable-dropdown .dd-panel { position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); z-index: 1000; display: none; max-height: 280px; overflow: hidden; }
+        .searchable-dropdown.open .dd-panel { display: block; }
+        .searchable-dropdown .dd-search { width: 100%; padding: 10px 12px; border: none; border-bottom: 1px solid #e5e7eb; font-size: 14px; outline: none; }
+        .searchable-dropdown .dd-search:focus { background: #fdf9ef; }
+        .searchable-dropdown .dd-options { max-height: 220px; overflow-y: auto; }
+        .searchable-dropdown .dd-option { padding: 10px 12px; cursor: pointer; font-size: 14px; color: #374151; }
+        .searchable-dropdown .dd-option:hover, .searchable-dropdown .dd-option.highlighted { background: #f0f4f8; }
+        .searchable-dropdown .dd-option.selected { background: #fdf9ef; color: #102a43; font-weight: 500; }
+        .searchable-dropdown .dd-option mark { background: #faf0d7; color: #102a43; padding: 0 2px; border-radius: 2px; }
+        .searchable-dropdown .dd-empty { padding: 12px; text-align: center; color: #9ca3af; font-size: 13px; }
+        .searchable-dropdown.field-error .dd-display { border-color: #EF4444 !important; }
+        .searchable-dropdown.field-success .dd-display { border-color: #10B981 !important; }
     </style>
 </head>
 <body class="bg-gray-50">
     <div id="loadingOverlay" class="loading-overlay" style="display: none;">
         <div class="text-center">
             <div class="loading-spinner mx-auto"></div>
-            <p class="text-white mt-4" id="loadingText">Processing...</p>
+            <p class="text-white mt-4 font-medium" id="loadingText">Processing...</p>
         </div>
     </div>
     <div id="app"></div>
@@ -29,6 +76,7 @@
     <script src="config.js"></script>
     <script>
         let isLoggedIn = false, employeeEmail = '', employeeData = null;
+        let expenseClientDropdownRef = null;
         let expenseTypes = [], clients = [], myExpenses = [], pendingExpenses = [], allExpenses = [];
         let expenseSummary = { pending: 0, approved: 0, rejected: 0 };
         let isApprover = false, editingExpense = null, editingApproval = null;
@@ -88,7 +136,7 @@
             const date = document.getElementById('expenseDate')?.value, expenseType = document.getElementById('expenseType')?.value;
             const amount = document.getElementById('expenseAmount')?.value, description = document.getElementById('expenseDescription')?.value?.trim();
             const reimbursementBy = document.querySelector('input[name="reimbursementBy"]:checked')?.value;
-            const clientName = document.getElementById('clientSelect')?.value || '', receiptReference = document.getElementById('receiptReference')?.value?.trim();
+            const clientName = expenseClientDropdownRef ? expenseClientDropdownRef.getValue() : '', receiptReference = document.getElementById('receiptReference')?.value?.trim();
             if (!date) { alert('Please select a date'); return; }
             if (!expenseType) { alert('Please select expense type'); return; }
             if (!amount || parseFloat(amount) <= 0) { alert('Please enter a valid amount'); return; }
@@ -149,14 +197,25 @@
         function handleApprovalReimbursementChange(rowId) { const r = document.querySelector(`input[name="edit_reimburse_${rowId}"]:checked`)?.value; const d = document.getElementById(`edit_clientDiv_${rowId}`); if (d) d.style.display = r === 'Client' ? 'block' : 'none'; }
 
         function renderLogin() {
-            return `<div class="min-h-screen bg-gradient-to-br from-purple-50 to-violet-100 flex items-center justify-center p-4">
-                <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
-                    <div class="text-center mb-6"><div class="text-6xl mb-4">💰</div><h1 class="text-3xl font-bold text-gray-800">TimeWise</h1><p class="text-gray-600 mt-2">Expense Management</p></div>
-                    <div class="mb-4"><label class="block text-gray-700 font-semibold mb-2">Email Address</label><input type="email" id="emailInput" placeholder="your.email@company.com" class="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-violet-500" onkeypress="if(event.key === 'Enter') handleLogin()" /></div>
-                    <button id="loginBtn" onclick="handleLogin()" class="w-full bg-violet-600 text-white py-3 rounded-xl hover:bg-violet-700 font-semibold">Login</button>
-                    <div id="loginStatus" class="mt-4"></div>
-                    <div class="mt-4 text-center"><a href="home.html" class="text-violet-600 hover:text-violet-800 text-sm">← Back to Home</a></div>
-                </div></div>`;
+            return `<div class="min-h-screen flex">
+                <div class="hidden lg:flex lg:w-1/2 flex-col justify-between p-12" style="background:#102a43">
+                    <div><img src="https://drpca.com/assets/drpca-logo.png" alt="DRP & Co. LLP" class="h-12 brightness-0 invert opacity-90" onerror="this.style.display='none'"></div>
+                    <div class="text-white"><h1 class="text-4xl font-bold mb-4">TimeWise EMS</h1><p class="text-lg opacity-60">Employee Management System</p><p class="opacity-40 text-sm mt-1">[internal portal for DRPCA]</p></div>
+                    <div class="text-white opacity-40 text-sm"><p>DRP & Co. LLP</p><p>Chartered Accountants • Wealth Managers • Valuation Professionals</p></div>
+                </div>
+                <div class="w-full lg:w-1/2 flex items-center justify-center p-8 bg-white">
+                    <div class="w-full max-w-md">
+                        <div class="lg:hidden text-center mb-8"><img src="https://drpca.com/assets/drpca-logo.png" alt="DRP & Co." class="h-10 mx-auto mb-4" onerror="this.style.display='none'"></div>
+                        <div class="text-center mb-8"><h2 class="text-2xl font-bold" style="color:#102a43">Expenses Module</h2><p class="text-gray-500 mt-2 text-sm">Sign in to manage your expenses</p></div>
+                        <div class="space-y-5">
+                            <div><label class="block text-sm font-medium mb-2" style="color:#243b53">Email Address</label><input type="email" id="emailInput" placeholder="your.name@drpca.com" class="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm" onkeypress="if(event.key === 'Enter') handleLogin()" /></div>
+                            <button id="loginBtn" onclick="handleLogin()" class="btn-primary w-full py-3 rounded-lg font-semibold text-sm">Sign In</button>
+                            <div id="loginStatus"></div>
+                        </div>
+                        <div class="mt-12 pt-8 border-t border-gray-100"><p class="text-center text-gray-400 text-sm">© 2026 DRP & Co. LLP</p></div>
+                    </div>
+                </div>
+            </div>`;
         }
 
         function renderPendingExpenseCard(exp) {
@@ -227,43 +286,48 @@
             const minDateStr = minDate.toISOString().split('T')[0];
             const editDate = editingExpense?.Date ? (typeof editingExpense.Date === 'string' && editingExpense.Date.includes('/') ? '' : editingExpense.Date.split('T')[0]) : today;
             return `<div class="min-h-screen bg-gray-50">
-                <div class="bg-violet-600 text-white p-4 shadow-md">
-                    <div class="max-w-6xl mx-auto flex justify-between items-center">
-                        <div><h1 class="text-2xl font-bold">💰 Expense Management</h1><p class="text-violet-100 text-sm">${employeeData['Employee Name']} | ${employeeData['Designation'] || ''}</p></div>
-                        <a href="home.html" class="bg-violet-700 hover:bg-violet-800 px-4 py-2 rounded-lg text-sm font-semibold">← Home</a>
+                <header class="bg-white header-shadow sticky top-0 z-50">
+                    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div class="flex justify-between items-center h-16">
+                            <div class="flex items-center space-x-4">
+                                <img src="https://drpca.com/assets/drpca-logo.png" alt="DRP & Co." class="h-12" onerror="this.outerHTML='<span class=\\'font-bold text-lg\\' style=\\'color:#102a43\\'>drp&co.</span>'">
+                                <div class="border-l border-gray-200 pl-4"><span class="font-semibold" style="color:#102a43">Expenses</span><span class="text-gray-400 text-sm ml-1">Module</span></div>
+                            </div>
+                            <div class="flex items-center space-x-6">
+                                <div class="text-right"><p class="text-sm font-medium" style="color:#102a43">${employeeData['Employee Name']}</p><p class="text-xs text-gray-500">${employeeData['Designation'] || 'Employee'}</p></div>
+                                <a href="home.html" class="flex items-center space-x-2 text-sm font-medium text-gray-600 hover:text-gray-900"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg><span>Back to Home</span></a>
+                            </div>
+                        </div>
                     </div>
-                </div>
-                <div class="max-w-6xl mx-auto p-4 space-y-6">
+                </header>
+                <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div class="bg-white rounded-xl shadow-md p-4 text-center"><p class="text-2xl font-bold text-yellow-600">${formatCurrency(expenseSummary.pending)}</p><p class="text-sm text-gray-500">Pending</p></div>
-                        <div class="bg-white rounded-xl shadow-md p-4 text-center"><p class="text-2xl font-bold text-green-600">${formatCurrency(expenseSummary.approved)}</p><p class="text-sm text-gray-500">Approved</p></div>
-                        <div class="bg-white rounded-xl shadow-md p-4 text-center"><p class="text-2xl font-bold text-red-600">${formatCurrency(expenseSummary.rejected)}</p><p class="text-sm text-gray-500">Rejected</p></div>
-                        <div class="bg-white rounded-xl shadow-md p-4 text-center"><p class="text-2xl font-bold text-violet-600">${formatCurrency(expenseSummary.pending + expenseSummary.approved)}</p><p class="text-sm text-gray-500">Total Claims</p></div>
+                        <div class="bg-white rounded-xl border border-gray-100 p-4 text-center"><p class="text-2xl font-bold text-yellow-600">${formatCurrency(expenseSummary.pending)}</p><p class="text-sm text-gray-500">Pending</p></div>
+                        <div class="bg-white rounded-xl border border-gray-100 p-4 text-center"><p class="text-2xl font-bold text-green-600">${formatCurrency(expenseSummary.approved)}</p><p class="text-sm text-gray-500">Approved</p></div>
+                        <div class="bg-white rounded-xl border border-gray-100 p-4 text-center"><p class="text-2xl font-bold text-red-600">${formatCurrency(expenseSummary.rejected)}</p><p class="text-sm text-gray-500">Rejected</p></div>
+                        <div class="bg-white rounded-xl border border-gray-100 p-4 text-center"><p class="text-2xl font-bold" style="color:#102a43">${formatCurrency(expenseSummary.pending + expenseSummary.approved)}</p><p class="text-sm text-gray-500">Total Claims</p></div>
                     </div>
-                    <div id="expenseForm" class="bg-white rounded-xl shadow-md p-6">
-                        <h2 class="text-xl font-bold text-gray-800 mb-4">${editingExpense ? '✏️ Edit Expense' : '➕ Submit New Expense'}</h2>
+                    <div id="expenseForm" class="bg-white rounded-xl border border-gray-100 p-6">
+                        <h2 class="text-lg font-semibold mb-4" style="color:#102a43">${editingExpense ? 'Edit Expense' : 'Submit New Expense'}</h2>
                         <div class="grid md:grid-cols-2 gap-6">
                             <div class="space-y-4">
                                 <div class="grid grid-cols-2 gap-4">
-                                    <div><label class="block text-sm font-semibold text-gray-700 mb-1">Date *</label><input type="date" id="expenseDate" min="${minDateStr}" max="${today}" value="${editDate}" class="w-full px-3 py-2 border rounded-lg"></div>
-                                    <div><label class="block text-sm font-semibold text-gray-700 mb-1">Amount (₹) *</label><input type="number" id="expenseAmount" min="1" step="0.01" placeholder="0.00" value="${editingExpense ? editingExpense.Amount : ''}" class="w-full px-3 py-2 border rounded-lg"></div>
+                                    <div><label class="block text-sm font-medium text-gray-700 mb-1">Date *</label><input type="date" id="expenseDate" min="${minDateStr}" max="${today}" value="${editDate}" class="w-full px-3 py-2 border border-gray-200 rounded-lg"></div>
+                                    <div><label class="block text-sm font-medium text-gray-700 mb-1">Amount (₹) *</label><input type="number" id="expenseAmount" min="1" step="0.01" placeholder="0.00" value="${editingExpense ? editingExpense.Amount : ''}" class="w-full px-3 py-2 border border-gray-200 rounded-lg"></div>
                                 </div>
-                                <div><label class="block text-sm font-semibold text-gray-700 mb-1">Expense Type *</label>
-                                    <select id="expenseType" class="w-full px-3 py-2 border rounded-lg">
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">Expense Type *</label>
+                                    <select id="expenseType" class="w-full px-3 py-2 border border-gray-200 rounded-lg">
                                         <option value="">-- Select Type --</option>
                                         ${expenseTypes.map(e => `<option value="${e['Expense Type']}" ${editingExpense && editingExpense['Expense Type'] === e['Expense Type'] ? 'selected' : ''}>${e['Expense Type']}</option>`).join('')}
                                     </select></div>
-                                <div><label class="block text-sm font-semibold text-gray-700 mb-2">Reimbursement By *</label>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-2">Reimbursement By *</label>
                                     <div class="flex gap-4">
-                                        <label class="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer flex-1"><input type="radio" name="reimbursementBy" value="DRP & Co. LLP" ${!editingExpense || editingExpense['Reimbursement By'] === 'DRP & Co. LLP' ? 'checked' : ''} onchange="handleReimbursementChange()" class="mr-2"><span>DRP & Co. LLP</span></label>
-                                        <label class="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer flex-1"><input type="radio" name="reimbursementBy" value="Client" ${editingExpense && editingExpense['Reimbursement By'] === 'Client' ? 'checked' : ''} onchange="handleReimbursementChange()" class="mr-2"><span>Client</span></label>
+                                        <label class="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer flex-1"><input type="radio" name="reimbursementBy" value="DRP & Co. LLP" ${!editingExpense || editingExpense['Reimbursement By'] === 'DRP & Co. LLP' ? 'checked' : ''} onchange="handleReimbursementChange()" class="mr-2"><span>DRP & Co. LLP</span></label>
+                                        <label class="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer flex-1"><input type="radio" name="reimbursementBy" value="Client" ${editingExpense && editingExpense['Reimbursement By'] === 'Client' ? 'checked' : ''} onchange="handleReimbursementChange()" class="mr-2"><span>Client</span></label>
                                     </div></div>
                                 <div id="clientSelectDiv" style="display: ${editingExpense && editingExpense['Reimbursement By'] === 'Client' ? 'block' : 'none'}">
-                                    <label class="block text-sm font-semibold text-gray-700 mb-1">Select Client *</label>
-                                    <select id="clientSelect" class="w-full px-3 py-2 border rounded-lg">
-                                        <option value="">-- Select Client --</option>
-                                        ${clients.filter(c => c['Client Short Name'] !== 'SELF').map(c => `<option value="${c['Client Full Name']}" ${editingExpense && editingExpense['Client Name'] === c['Client Full Name'] ? 'selected' : ''}>${c['Client Full Name']}</option>`).join('')}
-                                    </select></div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Select Client *</label>
+                                    <div id="expenseClientDropdown" class="searchable-dropdown"></div></div>
                             </div>
                             <div class="space-y-4">
                                 <div><label class="block text-sm font-semibold text-gray-700 mb-1">Description * <span class="font-normal text-gray-500">(min 10 chars)</span></label><textarea id="expenseDescription" rows="3" placeholder="Detailed description..." class="w-full px-3 py-2 border rounded-lg">${editingExpense ? editingExpense.Description : ''}</textarea></div>
@@ -313,12 +377,151 @@
             </div>`;
         }
 
-        function render() { document.getElementById('app').innerHTML = isLoggedIn ? renderApp() : renderLogin(); }
+        function render() {
+            document.getElementById('app').innerHTML = isLoggedIn ? renderApp() : renderLogin();
+            if (isLoggedIn) setTimeout(() => initExpenseDropdowns(), 0);
+        }
+
+        function initExpenseDropdowns() {
+            const clientList = clients.filter(c => c['Client Short Name'] !== 'SELF');
+            expenseClientDropdownRef = initSearchableDropdown('expenseClientDropdown', clientList, {
+                valueKey: 'Client Full Name',
+                displayKey: 'Client Full Name',
+                placeholder: '-- Select Client --'
+            });
+            // If editing, pre-select the saved client
+            if (editingExpense && editingExpense['Reimbursement By'] === 'Client' && editingExpense['Client Name']) {
+                if (expenseClientDropdownRef) expenseClientDropdownRef.setValue(editingExpense['Client Name']);
+            }
+        }
+
+        // ============================================
+        // SEARCHABLE DROPDOWN COMPONENT
+        // ============================================
+        function initSearchableDropdown(containerId, options, config = {}) {
+            const container = document.getElementById(containerId);
+            if (!container) return null;
+            
+            const valueKey = config.valueKey || 'value';
+            const displayKey = config.displayKey || 'label';
+            const placeholder = config.placeholder || 'Select...';
+            const onChange = config.onChange || null;
+            
+            container.innerHTML = `
+                <input type="hidden" id="${containerId}Value">
+                <button type="button" class="dd-display" tabindex="0">${placeholder}</button>
+                <div class="dd-panel">
+                    <input type="text" class="dd-search" placeholder="Type to search..." autocomplete="off">
+                    <div class="dd-options"></div>
+                </div>
+            `;
+            
+            const display = container.querySelector('.dd-display');
+            const panel = container.querySelector('.dd-panel');
+            const search = container.querySelector('.dd-search');
+            const optionsList = container.querySelector('.dd-options');
+            const hidden = container.querySelector('input[type="hidden"]');
+            
+            let currentOptions = options || [];
+            let highlightedIndex = -1;
+            let selectedValue = '';
+            
+            function getValue(item) {
+                if (typeof item === 'string') return item;
+                return item[valueKey] || item['name'] || item['Client Full Name'] || String(item);
+            }
+            
+            function getDisplay(item) {
+                if (typeof item === 'string') return item;
+                return item[displayKey] || item['name'] || item['Client Full Name'] || String(item);
+            }
+            
+            function escapeHtml(str) {
+                return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+            }
+            
+            function renderOptions(filter = '') {
+                const filterLower = filter.toLowerCase();
+                let html = '';
+                let visibleCount = 0;
+                
+                currentOptions.forEach((item) => {
+                    const displayText = getDisplay(item);
+                    const value = getValue(item);
+                    
+                    if (filter && !displayText.toLowerCase().includes(filterLower)) return;
+                    
+                    let highlighted = escapeHtml(displayText);
+                    if (filter) {
+                        const regex = new RegExp(`(${filter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+                        highlighted = escapeHtml(displayText).replace(regex, '<mark>$1</mark>');
+                    }
+                    
+                    const isSelected = value === selectedValue;
+                    html += `<div class="dd-option ${isSelected ? 'selected' : ''}" data-value="${escapeHtml(value)}" data-index="${visibleCount}">${highlighted}</div>`;
+                    visibleCount++;
+                });
+                
+                if (visibleCount === 0) html = '<div class="dd-empty">No matches found</div>';
+                optionsList.innerHTML = html;
+                highlightedIndex = -1;
+            }
+            
+            function open() {
+                container.classList.add('open');
+                search.value = '';
+                renderOptions();
+                setTimeout(() => search.focus(), 10);
+            }
+            
+            function close() {
+                container.classList.remove('open');
+                highlightedIndex = -1;
+            }
+            
+            function selectOption(value, displayText) {
+                selectedValue = value;
+                hidden.value = value;
+                display.textContent = displayText || value || placeholder;
+                close();
+                if (onChange) onChange(value);
+            }
+            
+            display.addEventListener('click', (e) => { e.preventDefault(); container.classList.contains('open') ? close() : open(); });
+            search.addEventListener('input', () => renderOptions(search.value));
+            
+            optionsList.addEventListener('click', (e) => {
+                const option = e.target.closest('.dd-option');
+                if (option) selectOption(option.dataset.value, option.textContent);
+            });
+            
+            search.addEventListener('keydown', (e) => {
+                const visibleOptions = optionsList.querySelectorAll('.dd-option');
+                if (e.key === 'ArrowDown') { e.preventDefault(); highlightedIndex = Math.min(highlightedIndex + 1, visibleOptions.length - 1); updateHighlight(visibleOptions); }
+                else if (e.key === 'ArrowUp') { e.preventDefault(); highlightedIndex = Math.max(highlightedIndex - 1, 0); updateHighlight(visibleOptions); }
+                else if (e.key === 'Enter') { e.preventDefault(); if (highlightedIndex >= 0 && visibleOptions[highlightedIndex]) selectOption(visibleOptions[highlightedIndex].dataset.value, visibleOptions[highlightedIndex].textContent); }
+                else if (e.key === 'Escape') { close(); display.focus(); }
+            });
+            
+            function updateHighlight(options) {
+                options.forEach((opt, i) => { opt.classList.toggle('highlighted', i === highlightedIndex); if (i === highlightedIndex) opt.scrollIntoView({ block: 'nearest' }); });
+            }
+            
+            document.addEventListener('click', (e) => { if (!container.contains(e.target)) close(); });
+            
+            container.setOptions = (newOptions) => { currentOptions = newOptions || []; renderOptions(); };
+            container.setValue = (value) => { const item = currentOptions.find(o => getValue(o) === value); if (item) selectOption(value, getDisplay(item)); else selectOption('', ''); };
+            container.getValue = () => hidden.value;
+            container.clear = () => selectOption('', '');
+            
+            renderOptions();
+            return container;
+        }
 
         async function init() {
             const session = loadSession();
             if (session && session.employeeEmail && session.employeeData) {
-                document.getElementById('app').innerHTML = `<div class="min-h-screen bg-gray-50 flex items-center justify-center"><div class="text-center"><div class="loading-spinner mx-auto"></div><p class="mt-4 text-gray-600">Loading...</p></div></div>`;
+                document.getElementById('app').innerHTML = `<div class="min-h-screen bg-gray-50 flex items-center justify-center"><div class="text-center"><div class="loading-spinner-lg mx-auto"></div><p class="text-gray-500 mt-5 text-sm font-medium">Loading your data...</p></div></div>`;
                 try {
                     employeeEmail = session.employeeEmail; employeeData = session.employeeData; isApprover = session.isApprover || false;
                     const initData = await callAPI('initExpense', { email: employeeEmail });

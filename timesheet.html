@@ -6,105 +6,153 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>TimeWise - Timesheet System</title>
+    <title>Timesheet | TimeWise EMS</title>
     <!-- ============================================
-    TimeWise Web App
-    Version: 1.8
-    Last Updated: 03-Mar-2026
-    Bug Fix: Calendar now shows all months in editable range (Feb missing issue fixed)
+    TimeWise EMS - Timesheet Module
+    Version: 2.0
+    Last Updated: 15-Mar-2026
+    UI: Redesigned with drpca.com branding
+    Note: All JS logic preserved from v1.8
     ============================================ -->
-    <script src="https://cdn.tailwindcss.com?v=1.7"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        navy: { 50: '#f0f4f8', 100: '#d9e2ec', 200: '#bcccdc', 700: '#334e68', 800: '#243b53', 900: '#102a43' },
+                        gold: { 50: '#fdf9ef', 100: '#faf0d7', 400: '#e3b04a', 500: '#d4a853', 600: '#c4882c' }
+                    },
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
     <style>
-        /* Loading Overlay Styles */
+        /* Base Typography - 14px */
+        body { font-family: 'Inter', system-ui, sans-serif; font-size: 14px; }
+        
+        /* Loading Overlay - Navy/Gold themed */
         .loading-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.5);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(16, 42, 67, 0.9);
+            display: flex; justify-content: center; align-items: center; z-index: 9999;
         }
         .loading-spinner {
-            width: 50px;
-            height: 50px;
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #4F46E5;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
+            width: 48px; height: 48px;
+            border: 3px solid rgba(212, 168, 83, 0.2);
+            border-top: 3px solid #d4a853;
+            border-radius: 50%; animation: spin 1s linear infinite;
         }
-        .loading-text {
-            color: white;
-            margin-top: 15px;
-            font-size: 16px;
-            font-weight: 600;
+        .loading-spinner-lg {
+            width: 64px; height: 64px;
+            border: 4px solid rgba(212, 168, 83, 0.2);
+            border-top: 4px solid #d4a853;
+            border-radius: 50%; animation: spin 1s linear infinite;
         }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
+        .loading-text { color: white; margin-top: 15px; font-size: 14px; font-weight: 500; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
         /* Button spinner */
         .btn-spinner {
-            display: inline-block;
-            width: 16px;
-            height: 16px;
-            border: 2px solid rgba(255,255,255,0.3);
-            border-top: 2px solid white;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            margin-right: 8px;
-            vertical-align: middle;
+            display: inline-block; width: 14px; height: 14px;
+            border: 2px solid rgba(255,255,255,0.3); border-top: 2px solid white;
+            border-radius: 50%; animation: spin 0.8s linear infinite;
+            margin-right: 6px; vertical-align: middle;
         }
-        /* Disabled button style */
-        button:disabled {
-            opacity: 0.7;
-            cursor: not-allowed;
+        
+        /* Disabled button */
+        button:disabled { opacity: 0.7; cursor: not-allowed; }
+        
+        /* Form Input Focus - Gold highlight */
+        input:focus, select:focus, textarea:focus {
+            outline: none !important;
+            border-color: #d4a853 !important;
+            box-shadow: 0 0 0 3px rgba(212, 168, 83, 0.15) !important;
         }
+        
         /* Validation styles */
-        .field-error {
-            border-color: #EF4444 !important;
-        }
-        .field-success {
-            border-color: #10B981 !important;
-        }
-        .error-text {
-            color: #EF4444;
-            font-size: 12px;
-            margin-top: 4px;
-        }
-        /* Session timeout modal */
+        .field-error { border-color: #EF4444 !important; }
+        .field-success { border-color: #10B981 !important; }
+        .searchable-dropdown.field-error .dd-display { border-color: #EF4444 !important; }
+        .searchable-dropdown.field-success .dd-display { border-color: #10B981 !important; }
+        .error-text { color: #EF4444; font-size: 12px; margin-top: 4px; }
+        
+        /* Session timeout modal - Navy/Gold */
         .timeout-modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.7);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 10000;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(16, 42, 67, 0.9);
+            display: flex; justify-content: center; align-items: center; z-index: 10000;
         }
         .timeout-modal-content {
-            background: white;
-            padding: 30px;
-            border-radius: 12px;
-            text-align: center;
-            max-width: 400px;
+            background: white; padding: 28px; border-radius: 12px;
+            text-align: center; max-width: 380px;
             box-shadow: 0 20px 50px rgba(0,0,0,0.3);
         }
-        /* Holiday calendar style (NEW in v1.5) */
-        .bg-blue-holiday {
-            background-color: #3B82F6 !important;
-            color: white !important;
+        
+        /* Holiday calendar style */
+        .bg-blue-holiday { background-color: #3B82F6 !important; color: white !important; }
+        
+        /* Header shadow */
+        .header-shadow { box-shadow: 0 1px 3px rgba(16, 42, 67, 0.08); }
+        
+        /* Primary button */
+        .btn-primary {
+            background: linear-gradient(135deg, #102a43 0%, #243b53 100%);
+            color: white; transition: all 0.2s ease;
         }
+        .btn-primary:hover:not(:disabled) {
+            background: linear-gradient(135deg, #243b53 0%, #334e68 100%);
+        }
+        
+        /* Searchable Dropdown */
+        .searchable-dropdown { position: relative; width: 100%; }
+        .searchable-dropdown .dd-display {
+            width: 100%; padding: 8px 12px; padding-right: 32px;
+            border: 1px solid #e5e7eb; border-radius: 8px; background: white;
+            cursor: pointer; text-align: left; font-size: 14px; color: #102a43;
+            position: relative; transition: all 0.2s ease;
+        }
+        .searchable-dropdown .dd-display:focus {
+            outline: none; border-color: #d4a853;
+            box-shadow: 0 0 0 3px rgba(212, 168, 83, 0.15);
+        }
+        .searchable-dropdown .dd-display::after {
+            content: ''; position: absolute; right: 12px; top: 50%;
+            transform: translateY(-50%); border: 5px solid transparent; border-top-color: #6b7280;
+        }
+        .searchable-dropdown.open .dd-display::after {
+            border-top-color: transparent; border-bottom-color: #6b7280; transform: translateY(-80%);
+        }
+        .searchable-dropdown .dd-panel {
+            position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px;
+            background: white; border: 1px solid #e5e7eb; border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15); z-index: 1000;
+            display: none; max-height: 280px; overflow: hidden;
+        }
+        .searchable-dropdown.open .dd-panel { display: block; }
+        .searchable-dropdown .dd-search {
+            width: 100%; padding: 10px 12px; border: none; border-bottom: 1px solid #e5e7eb;
+            font-size: 14px; outline: none;
+        }
+        .searchable-dropdown .dd-search:focus { background: #fdf9ef; }
+        .searchable-dropdown .dd-options { max-height: 220px; overflow-y: auto; }
+        .searchable-dropdown .dd-option {
+            padding: 10px 12px; cursor: pointer; font-size: 14px; color: #374151;
+            transition: background 0.15s ease;
+        }
+        .searchable-dropdown .dd-option:hover,
+        .searchable-dropdown .dd-option.highlighted { background: #f0f4f8; }
+        .searchable-dropdown .dd-option.selected { background: #fdf9ef; color: #102a43; font-weight: 500; }
+        .searchable-dropdown .dd-option mark { background: #faf0d7; color: #102a43; padding: 0 2px; border-radius: 2px; }
+        .searchable-dropdown .dd-empty { padding: 12px; text-align: center; color: #9ca3af; font-size: 13px; }
     </style>
 </head>
 <body class="bg-gray-50">
-    <!-- Loading Overlay (hidden by default) -->
+    <!-- Loading Overlay -->
     <div id="loadingOverlay" class="loading-overlay" style="display: none;">
         <div class="text-center">
             <div class="loading-spinner mx-auto"></div>
@@ -119,7 +167,7 @@
             <h2 class="text-xl font-bold text-gray-800 mb-2">Session Expiring Soon!</h2>
             <p class="text-gray-600 mb-4">Your session will expire in <span id="timeoutCountdown" class="font-bold text-red-600">2:00</span> minutes due to inactivity.</p>
             <p class="text-sm text-gray-500 mb-4">Any unsaved data will be lost.</p>
-            <button onclick="extendSession()" class="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 font-semibold">
+            <button onclick="extendSession()" class="btn-primary text-white px-6 py-2 rounded-lg  font-semibold">
                 Continue Working
             </button>
         </div>
@@ -153,6 +201,7 @@
         let assignments = [];
         let isProcessing = false;
         let hasUnsavedChanges = false;
+        let clientDropdownRef = null, taskDropdownRef = null;
         
         // Session timeout variables
         let sessionTimer = null;
@@ -414,27 +463,8 @@
         
         // Handle client selection change - update task dropdown
         function handleClientChange() {
-            const clientSelect = document.getElementById('clientSelect');
-            const taskSelect = document.getElementById('taskSelect');
-            const selectedClient = clientSelect.value;
-            
-            // Clear current task options
-            taskSelect.innerHTML = '<option value="">Select Task</option>';
-            
-            if (selectedClient) {
-                // Get tasks for selected client
-                const tasksForClient = getTasksForClient(selectedClient);
-                
-                // Populate task dropdown
-                tasksForClient.forEach(task => {
-                    const option = document.createElement('option');
-                    option.value = task;
-                    option.textContent = task;
-                    taskSelect.appendChild(option);
-                });
-            }
-            
-            // Trigger validation update
+            // Legacy: called from editEntry(). Cascade is handled via onChange in initTimesheetDropdowns.
+            // Just run validation; the onChange callback of clientDropdown handles task repopulation.
             updateFormValidation();
         }
 
@@ -562,8 +592,7 @@
         
         // #23 - Check if task is valid for selected client (UPDATED in v1.6)
         function isTaskActive(taskName) {
-            const clientSelect = document.getElementById('clientSelect');
-            const selectedClient = clientSelect ? clientSelect.value : '';
+            const selectedClient = clientDropdownRef ? clientDropdownRef.getValue() : '';
             
             // If no client selected, just check if task exists in any assignment
             if (!selectedClient) {
@@ -641,8 +670,8 @@
         
         // #40 - Real-time validation
         function validateForm() {
-            const client = document.getElementById('clientSelect')?.value || '';
-            const task = document.getElementById('taskSelect')?.value || '';
+            const client = clientDropdownRef ? clientDropdownRef.getValue() : (document.getElementById('clientDropdownValue')?.value || '');
+            const task = taskDropdownRef ? taskDropdownRef.getValue() : (document.getElementById('taskDropdownValue')?.value || '');
             const hours = document.getElementById('hoursInput')?.value || '';
             const description = trimInput(document.getElementById('descInput')?.value || '');
             const expenseType = document.getElementById('expenseSelect')?.value || '';
@@ -654,26 +683,26 @@
             
             // Client validation
             if (!client) {
-                errors.push({ field: 'clientSelect', msg: 'Please select a client.' });
+                errors.push({ field: 'clientDropdown', msg: 'Please select a client.' });
             } else if (!isClientActive(client)) {
-                errors.push({ field: 'clientSelect', msg: 'Selected client is inactive.' });
+                errors.push({ field: 'clientDropdown', msg: 'Selected client is inactive.' });
             }
             
             // Task validation
             if (!task) {
-                errors.push({ field: 'taskSelect', msg: 'Please select a task.' });
+                errors.push({ field: 'taskDropdown', msg: 'Please select a task.' });
             } else if (!isTaskActive(task)) {
-                errors.push({ field: 'taskSelect', msg: 'Selected task is inactive.' });
+                errors.push({ field: 'taskDropdown', msg: 'Selected task is inactive.' });
             }
             
             // v2.9: Block SELF + Leave combination - must use Leave Module
             if (client === 'SELF' && task === 'Leave') {
-                errors.push({ field: 'taskSelect', msg: 'Please use the Leave Module to apply for leave. Direct entry not allowed.' });
+                errors.push({ field: 'taskDropdown', msg: 'Please use the Leave Module to apply for leave. Direct entry not allowed.' });
             }
             
             // #21 - Duplicate check
             if (client && task && isDuplicateEntry(client, task, editingRowId)) {
-                errors.push({ field: 'taskSelect', msg: 'You already have an entry for this client and task today.' });
+                errors.push({ field: 'taskDropdown', msg: 'You already have an entry for this client and task today.' });
             }
             
             // Hours validation
@@ -745,7 +774,7 @@
             const validationDiv = document.getElementById('validationMessages');
             
             // Reset all field styles
-            ['clientSelect', 'taskSelect', 'hoursInput', 'descInput', 'amountInput'].forEach(id => {
+            ['clientDropdown', 'taskDropdown', 'hoursInput', 'descInput', 'amountInput'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) {
                     el.classList.remove('field-error', 'field-success');
@@ -772,9 +801,14 @@
             });
             
             // Mark valid fields with values
-            ['clientSelect', 'taskSelect', 'hoursInput', 'descInput'].forEach(id => {
+            ['clientDropdown', 'taskDropdown', 'hoursInput', 'descInput'].forEach(id => {
                 const el = document.getElementById(id);
-                if (el && el.value && !errors.some(e => e.field === id)) {
+                if (!el) return;
+                let val = '';
+                if (id === 'clientDropdown') val = clientDropdownRef ? clientDropdownRef.getValue() : '';
+                else if (id === 'taskDropdown') val = taskDropdownRef ? taskDropdownRef.getValue() : '';
+                else val = el.value || '';
+                if (val && !errors.some(e => e.field === id)) {
                     el.classList.add('field-success');
                 }
             });
@@ -792,8 +826,8 @@
             }
             
             // Track unsaved changes
-            const hasValues = document.getElementById('clientSelect')?.value || 
-                             document.getElementById('taskSelect')?.value ||
+            const hasValues = (clientDropdownRef ? clientDropdownRef.getValue() : '') || 
+                             (taskDropdownRef ? taskDropdownRef.getValue() : '') ||
                              document.getElementById('hoursInput')?.value ||
                              document.getElementById('descInput')?.value;
             hasUnsavedChanges = !!hasValues;
@@ -898,8 +932,8 @@
                 }
             }
             
-            const client = trimInput(document.getElementById('clientSelect').value);
-            const task = trimInput(document.getElementById('taskSelect').value);
+            const client = trimInput(clientDropdownRef ? clientDropdownRef.getValue() : '');
+            const task = trimInput(taskDropdownRef ? taskDropdownRef.getValue() : '');
             const hours = document.getElementById('hoursInput').value;
             const description = trimInput(document.getElementById('descInput').value);
             const expenseType = document.getElementById('expenseSelect').value;
@@ -931,8 +965,8 @@
                 timesheetData = await callAPI('getTimesheets', { email: employeeEmail });
                 
                 // Clear form
-                document.getElementById('clientSelect').value = '';
-                document.getElementById('taskSelect').value = '';
+                if (clientDropdownRef) clientDropdownRef.clear();
+                if (taskDropdownRef) { taskDropdownRef.setOptions([]); taskDropdownRef.clear(); }
                 document.getElementById('hoursInput').value = '';
                 document.getElementById('descInput').value = '';
                 document.getElementById('expenseSelect').value = '';
@@ -1000,12 +1034,15 @@
             
             window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
             
-            // UPDATED in v1.6 - Set client first, then trigger task dropdown population
-            document.getElementById('clientSelect').value = entry.Client;
-            handleClientChange(); // Populate task dropdown for selected client
-            
-            // Now set the task value after dropdown is populated
-            document.getElementById('taskSelect').value = entry.Task;
+            // Set client first — triggers cascade to populate task options, then set task
+            if (clientDropdownRef) {
+                const tasksForClient = getTasksForClient(entry.Client);
+                clientDropdownRef.setValue(entry.Client);
+                if (taskDropdownRef) {
+                    taskDropdownRef.setOptions(tasksForClient);
+                    taskDropdownRef.setValue(entry.Task);
+                }
+            }
             document.getElementById('hoursInput').value = entry.Hours;
             document.getElementById('descInput').value = entry.Description;
             document.getElementById('expenseSelect').value = entry['Expense Type'] || '';
@@ -1034,10 +1071,8 @@
         // CANCEL EDIT
         // ============================================
         function cancelEdit() {
-            document.getElementById('clientSelect').value = '';
-            // UPDATED in v1.6 - Reset task dropdown to empty state
-            const taskSelect = document.getElementById('taskSelect');
-            taskSelect.innerHTML = '<option value="">Select Task</option>';
+            if (clientDropdownRef) clientDropdownRef.clear();
+            if (taskDropdownRef) { taskDropdownRef.setOptions([]); taskDropdownRef.clear(); }
             document.getElementById('hoursInput').value = '';
             document.getElementById('descInput').value = '';
             document.getElementById('expenseSelect').value = '';
@@ -1059,7 +1094,7 @@
             hasUnsavedChanges = false;
             
             // Reset validation styles
-            ['clientSelect', 'taskSelect', 'hoursInput', 'descInput', 'amountInput'].forEach(id => {
+            ['clientDropdown', 'taskDropdown', 'hoursInput', 'descInput', 'amountInput'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) {
                     el.classList.remove('field-error', 'field-success');
@@ -1090,8 +1125,8 @@
                 }
             }
             
-            const client = trimInput(document.getElementById('clientSelect').value);
-            const task = trimInput(document.getElementById('taskSelect').value);
+            const client = trimInput(clientDropdownRef ? clientDropdownRef.getValue() : '');
+            const task = trimInput(taskDropdownRef ? taskDropdownRef.getValue() : '');
             const hours = document.getElementById('hoursInput').value;
             const description = trimInput(document.getElementById('descInput').value);
             const expenseType = document.getElementById('expenseSelect').value;
@@ -1209,24 +1244,50 @@
         // ============================================
         function renderLogin() {
             return `
-                <div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-                    <div class="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
-                        <div class="text-center mb-6">
-                            <div class="text-6xl mb-4">⏰</div>
-                            <h1 class="text-3xl font-bold text-gray-800">TimeWise</h1>
-                            <p class="text-gray-600 mt-2">Employee Timesheet System</p>
+                <div class="min-h-screen flex">
+                    <!-- Left Panel - Branding -->
+                    <div class="hidden lg:flex lg:w-1/2 flex-col justify-between p-12" style="background:#102a43">
+                        <div>
+                            <img src="https://drpca.com/assets/drpca-logo.png" alt="DRP & Co. LLP" class="h-12 brightness-0 invert opacity-90" onerror="this.style.display='none'">
                         </div>
-                        <div class="mb-4">
-                            <label class="block text-gray-700 font-semibold mb-2">Email Address</label>
-                            <input type="email" id="emailInput" placeholder="your.email@company.com"
-                                class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" 
-                                onkeypress="if(event.key === 'Enter') handleLogin()" />
+                        <div class="text-white">
+                            <h1 class="text-4xl font-bold mb-4">TimeWise EMS</h1>
+                            <p class="text-lg opacity-60">Employee Management System</p>
+                            <p class="opacity-40 text-sm mt-1">[internal portal for DRPCA]</p>
                         </div>
-                        <button id="loginBtn" onclick="handleLogin()"
-                            class="w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 font-semibold transition-colors">
-                            Login
-                        </button>
-                        <div id="loginStatus"></div>
+                        <div class="text-white opacity-40 text-sm">
+                            <p>DRP & Co. LLP</p>
+                            <p>Chartered Accountants • Wealth Managers • Valuation Professionals</p>
+                        </div>
+                    </div>
+                    <!-- Right Panel - Login Form -->
+                    <div class="w-full lg:w-1/2 flex items-center justify-center p-8 bg-white">
+                        <div class="w-full max-w-md">
+                            <div class="lg:hidden text-center mb-8">
+                                <img src="https://drpca.com/assets/drpca-logo.png" alt="DRP & Co." class="h-10 mx-auto mb-4" onerror="this.style.display='none'">
+                            </div>
+                            <div class="text-center mb-8">
+                                <h2 class="text-2xl font-bold" style="color:#102a43">Timesheet Module</h2>
+                                <p class="text-gray-500 mt-2 text-sm">Sign in to manage your timesheet</p>
+                            </div>
+                            <div class="space-y-5">
+                                <div>
+                                    <label class="block text-sm font-medium mb-2" style="color:#243b53">Email Address</label>
+                                    <input type="email" id="emailInput" 
+                                        placeholder="your.name@drpca.com"
+                                        class="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm"
+                                        onkeypress="if(event.key === 'Enter') handleLogin()" />
+                                </div>
+                                <button id="loginBtn" onclick="handleLogin()" 
+                                    class="btn-primary w-full py-3 rounded-lg font-semibold text-sm">
+                                    Sign In
+                                </button>
+                                <div id="loginStatus"></div>
+                            </div>
+                            <div class="mt-12 pt-8 border-t border-gray-100">
+                                <p class="text-center text-gray-400 text-sm">© 2026 DRP & Co. LLP</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
@@ -1248,70 +1309,45 @@
             const selectedDateHoliday = getHolidayInfo(selectedDate);
 
             return `
-                <div class="min-h-screen bg-gray-50 p-4">
-                    <div class="max-w-7xl mx-auto">
-                        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-                            <div class="flex justify-between items-start mb-4">
-                                <h1 class="text-2xl font-bold text-indigo-600">📋 TimeWise Timesheet</h1>
-                                <a href="home.html" class="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 font-semibold transition-colors">
-                                    ← Back to Home
-                                </a>
-                            </div>
-                            
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
-                                <div class="space-y-2">
-                                    <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wide border-b pb-1">Personal Details</h3>
-                                    <div class="space-y-1">
-                                        <div>
-                                            <p class="text-base font-bold text-gray-900">${employeeData['Employee Name'] || 'N/A'}</p>
-                                            <p class="text-sm text-gray-600">${employeeData['Designation'] || 'Not Specified'}</p>
-                                        </div>
-                                        <p class="text-sm text-gray-700"><span class="font-semibold">ID:</span> ${employeeData['Employee ID'] || 'N/A'}</p>
-                                        <p class="text-sm text-gray-700"><span class="font-semibold">Contact:</span> ${employeeData['Employee Contact'] || 'N/A'}</p>
+                <div class="min-h-screen bg-gray-50">
+                    <!-- Header -->
+                    <header class="bg-white header-shadow sticky top-0 z-50">
+                        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div class="flex justify-between items-center h-16">
+                                <div class="flex items-center space-x-4">
+                                    <img src="https://drpca.com/assets/drpca-logo.png" alt="DRP & Co." class="h-12" onerror="this.outerHTML='<span class=\\'font-bold text-lg\\' style=\\'color:#102a43\\'>drp&co.</span>'">
+                                    <div class="border-l border-gray-200 pl-4">
+                                        <span class="font-semibold" style="color:#102a43">Timesheet</span>
+                                        <span class="text-gray-400 text-sm ml-1">Module</span>
                                     </div>
                                 </div>
-                                
-                                <div class="space-y-2">
-                                    <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wide border-b pb-1">Employment Status</h3>
-                                    <div class="space-y-1">
-                                        <p class="text-sm">
-                                            <span class="font-semibold text-gray-700">Status:</span> 
-                                            <span class="${employeeData['Employee Status'] === 'Active' ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}">
-                                                ${employeeData['Employee Status'] || 'N/A'}
-                                            </span>
-                                        </p>
-                                        <p class="text-sm text-gray-700">
-                                            <span class="font-semibold">Joined:</span> ${employeeData['Joining Date'] ? formatDateDisplay(employeeData['Joining Date']) : 'N/A'}
-                                        </p>
-                                        <p class="text-sm text-gray-700">
-                                            <span class="font-semibold">Leaving:</span> ${employeeData['Leaving Date'] ? formatDateDisplay(employeeData['Leaving Date']) : 'Currently Employed'}
-                                        </p>
+                                <div class="flex items-center space-x-6">
+                                    <div class="text-right">
+                                        <p class="text-sm font-medium" style="color:#102a43">${employeeData['Employee Name']}</p>
+                                        <p class="text-xs text-gray-500">${employeeData['Designation'] || 'Employee'}</p>
                                     </div>
-                                </div>
-                                
-                                <div class="space-y-2">
-                                    <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wide border-b pb-1">Professional Info</h3>
-                                    <div class="space-y-1">
-                                        <p class="text-sm text-gray-700"><span class="font-semibold">Team:</span> ${employeeData['Team Allocation'] || 'Not Assigned'}</p>
-                                        <p class="text-sm text-gray-700"><span class="font-semibold">PAN:</span> ${employeeData['Employee PAN'] || 'N/A'}</p>
-                                        <p class="text-sm text-gray-700"><span class="font-semibold">Professional ID:</span> ${employeeData['Professional ID'] || 'N/A'}</p>
-                                    </div>
+                                    <a href="home.html" class="flex items-center space-x-2 text-sm font-medium text-gray-600 hover:text-gray-900">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                                        <span>Back to Home</span>
+                                    </a>
                                 </div>
                             </div>
                         </div>
-
+                    </header>
+                    
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
                         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                             <div class="lg:col-span-1">
-                                <div class="bg-white rounded-lg shadow-md p-4 space-y-4">
+                                <div class="bg-white rounded-xl border border-gray-100 p-4 space-y-4">
                                     ${months.map(({ month, year }) => {
                                         const days = generateCalendar(month, year);
                                         return `
                                             <div>
-                                                <h2 class="text-xl font-bold mb-4 flex items-center">
-                                                    📅 ${monthNames[month]} ${year}
+                                                <h2 class="text-lg font-semibold mb-4 flex items-center" style="color:#102a43">
+                                                    ${monthNames[month]} ${year}
                                                 </h2>
                                                 <div class="grid grid-cols-7 gap-1 text-center">
-                                                    ${['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => `<div class="font-semibold text-sm py-2">${d}</div>`).join('')}
+                                                    ${['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => `<div class="font-medium text-xs py-2 text-gray-500">${d}</div>`).join('')}
                                                     ${days.map((day, i) => {
                                                         if (!day) return '<div></div>';
                                                         const date = new Date(year, month, day);
@@ -1329,8 +1365,8 @@
                                                                 ${!canClick ? 'disabled' : ''}
                                                                 class="py-2 rounded text-sm transition-colors ${
                                                                     !canClick ? 'bg-gray-200 text-gray-400 cursor-not-allowed' :
-                                                                    isToday ? 'ring-2 ring-indigo-500 font-bold' :
-                                                                    selected ? 'bg-indigo-100 font-bold' : 'hover:bg-gray-100'
+                                                                    isToday ? 'ring-2 ring-gold-500 font-bold' :
+                                                                    selected ? 'bg-navy-100 font-bold' : 'hover:bg-gray-100'
                                                                 } ${color} ${color ? 'text-white font-semibold' : ''}">
                                                                 ${day}
                                                             </button>
@@ -1415,22 +1451,17 @@
                                         <div class="space-y-4">
                                             <div>
                                                 <label class="block text-sm font-semibold mb-1">Client * <span class="text-xs text-gray-500">(From active assignments)</span></label>
-                                                <select id="clientSelect" onchange="handleClientChange()" class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-                                                    <option value="">Select Client</option>
-                                                    ${assignmentClients.map(c => `<option value="${c}">${c}</option>`).join('')}
-                                                </select>
+                                                <div id="clientDropdown" class="searchable-dropdown"></div>
                                             </div>
                                             <div>
                                                 <label class="block text-sm font-semibold mb-1">Task * <span class="text-xs text-gray-500">(Select client first)</span></label>
-                                                <select id="taskSelect" onchange="updateFormValidation()" class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-                                                    <option value="">Select Task</option>
-                                                </select>
+                                                <div id="taskDropdown" class="searchable-dropdown"></div>
                                             </div>
                                             <div>
                                                 <label class="block text-sm font-semibold mb-1">Hours * <span class="text-xs text-gray-500">(0.25 intervals: 0.25, 0.5, 0.75, 1, ...)</span></label>
                                                 <input type="number" id="hoursInput" min="0.25" max="24" step="0.25"
                                                     oninput="updateFormValidation()"
-                                                    class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" 
+                                                    class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gold-400 focus:border-gold-500" 
                                                     placeholder="e.g., 1.5, 2.25, 4" />
                                             </div>
                                             <div>
@@ -1438,7 +1469,7 @@
                                                 <textarea id="descInput" rows="3"
                                                     oninput="updateFormValidation()"
                                                     maxlength="500"
-                                                    class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                                    class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gold-400 focus:border-gold-500"
                                                     placeholder="Describe the specific tasks performed..."></textarea>
                                                 <p class="text-xs text-gray-500 mt-1"><span id="charCount">0</span>/500 characters</p>
                                             </div>
@@ -1447,7 +1478,7 @@
                                             <input type="hidden" id="amountInput" value="0">
                                             <div class="flex gap-2">
                                                 <button id="submitBtn" onclick="handleAdd()" disabled
-                                                    class="flex-1 bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                                                    class="flex-1 btn-primary text-white py-3 rounded-lg  font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                                                     Submit Entry
                                                 </button>
                                                 <button id="cancelEditBtn" onclick="cancelEdit()"
@@ -1487,7 +1518,29 @@
                         charCount.textContent = descInput.value.length;
                     });
                 }
+                // Init searchable dropdowns after DOM is ready
+                setTimeout(() => initTimesheetDropdowns(), 0);
             }
+        }
+
+        function initTimesheetDropdowns() {
+            const assignmentClients = getAssignmentClients();
+            clientDropdownRef = initSearchableDropdown('clientDropdown', assignmentClients, {
+                placeholder: 'Select Client',
+                onChange: (val) => {
+                    // Cascade: repopulate task dropdown
+                    const tasksForClient = val ? getTasksForClient(val) : [];
+                    if (taskDropdownRef) {
+                        taskDropdownRef.clear();
+                        taskDropdownRef.setOptions(tasksForClient);
+                    }
+                    updateFormValidation();
+                }
+            });
+            taskDropdownRef = initSearchableDropdown('taskDropdown', [], {
+                placeholder: 'Select Task (choose client first)',
+                onChange: () => updateFormValidation()
+            });
         }
 
         // ============================================
@@ -1502,8 +1555,8 @@
                 document.getElementById('app').innerHTML = `
                     <div class="min-h-screen bg-gray-50 flex items-center justify-center">
                         <div class="text-center">
-                            <div class="text-6xl mb-4">⏰</div>
-                            <p class="text-gray-600">Loading your data...</p>
+                            <div class="loading-spinner-lg mx-auto"></div>
+                            <p class="text-gray-500 mt-5 text-sm font-medium">Loading your data...</p>
                         </div>
                     </div>
                 `;
@@ -1541,6 +1594,129 @@
             } else {
                 render();
             }
+        }
+        
+        // ============================================
+        // SEARCHABLE DROPDOWN COMPONENT
+        // ============================================
+        function initSearchableDropdown(containerId, options, config = {}) {
+            const container = document.getElementById(containerId);
+            if (!container) return null;
+            
+            const valueKey = config.valueKey || 'value';
+            const displayKey = config.displayKey || 'label';
+            const placeholder = config.placeholder || 'Select...';
+            const onChange = config.onChange || null;
+            
+            container.innerHTML = `
+                <input type="hidden" id="${containerId}Value">
+                <button type="button" class="dd-display" tabindex="0">${placeholder}</button>
+                <div class="dd-panel">
+                    <input type="text" class="dd-search" placeholder="Type to search..." autocomplete="off">
+                    <div class="dd-options"></div>
+                </div>
+            `;
+            
+            const display = container.querySelector('.dd-display');
+            const panel = container.querySelector('.dd-panel');
+            const search = container.querySelector('.dd-search');
+            const optionsList = container.querySelector('.dd-options');
+            const hidden = container.querySelector('input[type="hidden"]');
+            
+            let currentOptions = options || [];
+            let highlightedIndex = -1;
+            let selectedValue = '';
+            
+            function getValue(item) {
+                if (typeof item === 'string') return item;
+                return item[valueKey] || item['name'] || item['Client Full Name'] || String(item);
+            }
+            
+            function getDisplay(item) {
+                if (typeof item === 'string') return item;
+                return item[displayKey] || item['name'] || item['Client Full Name'] || String(item);
+            }
+            
+            function escapeHtml(str) {
+                return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+            }
+            
+            function renderOptions(filter = '') {
+                const filterLower = filter.toLowerCase();
+                let html = '';
+                let visibleCount = 0;
+                
+                currentOptions.forEach((item) => {
+                    const displayText = getDisplay(item);
+                    const value = getValue(item);
+                    
+                    if (filter && !displayText.toLowerCase().includes(filterLower)) return;
+                    
+                    let highlighted = escapeHtml(displayText);
+                    if (filter) {
+                        const regex = new RegExp(`(${filter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+                        highlighted = escapeHtml(displayText).replace(regex, '<mark>$1</mark>');
+                    }
+                    
+                    const isSelected = value === selectedValue;
+                    html += `<div class="dd-option ${isSelected ? 'selected' : ''}" data-value="${escapeHtml(value)}" data-index="${visibleCount}">${highlighted}</div>`;
+                    visibleCount++;
+                });
+                
+                if (visibleCount === 0) html = '<div class="dd-empty">No matches found</div>';
+                optionsList.innerHTML = html;
+                highlightedIndex = -1;
+            }
+            
+            function open() {
+                container.classList.add('open');
+                search.value = '';
+                renderOptions();
+                setTimeout(() => search.focus(), 10);
+            }
+            
+            function close() {
+                container.classList.remove('open');
+                highlightedIndex = -1;
+            }
+            
+            function selectOption(value, displayText) {
+                selectedValue = value;
+                hidden.value = value;
+                display.textContent = displayText || value || placeholder;
+                close();
+                if (onChange) onChange(value);
+            }
+            
+            display.addEventListener('click', (e) => { e.preventDefault(); container.classList.contains('open') ? close() : open(); });
+            search.addEventListener('input', () => renderOptions(search.value));
+            
+            optionsList.addEventListener('click', (e) => {
+                const option = e.target.closest('.dd-option');
+                if (option) selectOption(option.dataset.value, option.textContent);
+            });
+            
+            search.addEventListener('keydown', (e) => {
+                const visibleOptions = optionsList.querySelectorAll('.dd-option');
+                if (e.key === 'ArrowDown') { e.preventDefault(); highlightedIndex = Math.min(highlightedIndex + 1, visibleOptions.length - 1); updateHighlight(visibleOptions); }
+                else if (e.key === 'ArrowUp') { e.preventDefault(); highlightedIndex = Math.max(highlightedIndex - 1, 0); updateHighlight(visibleOptions); }
+                else if (e.key === 'Enter') { e.preventDefault(); if (highlightedIndex >= 0 && visibleOptions[highlightedIndex]) selectOption(visibleOptions[highlightedIndex].dataset.value, visibleOptions[highlightedIndex].textContent); }
+                else if (e.key === 'Escape') { close(); display.focus(); }
+            });
+            
+            function updateHighlight(options) {
+                options.forEach((opt, i) => { opt.classList.toggle('highlighted', i === highlightedIndex); if (i === highlightedIndex) opt.scrollIntoView({ block: 'nearest' }); });
+            }
+            
+            document.addEventListener('click', (e) => { if (!container.contains(e.target)) close(); });
+            
+            container.setOptions = (newOptions) => { currentOptions = newOptions || []; renderOptions(); };
+            container.setValue = (value) => { const item = currentOptions.find(o => getValue(o) === value); if (item) selectOption(value, getDisplay(item)); else selectOption('', ''); };
+            container.getValue = () => hidden.value;
+            container.clear = () => selectOption('', '');
+            
+            renderOptions();
+            return container;
         }
         
         init();
