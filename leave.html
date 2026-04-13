@@ -227,16 +227,16 @@
             loginBtn.innerHTML = '<svg class="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Signing in...';
 
             try {
-                const [empData, approversData] = await Promise.all([
-                    callAPI('getEmployee', { email: employeeEmail }),
-                    callAPI('getApprovers')
-                ]);
+                // v3.4.1 - Single initLeave call replaces 4-6 separate calls
+                const initData = await callAPI('initLeave', { email: employeeEmail });
 
-                employeeData = empData;
-                approvers = approversData;
-                isApprover = approvers.some(a => a['Approver Email'] === employeeEmail);
+                employeeData = initData.employee;
+                isApprover = initData.isApprover;
+                leaveBalance = initData.leaveBalance;
+                myLeaves = initData.leaves;
+                pendingLeaves = initData.pendingLeaves || [];
+                recentApprovedLeaves = initData.recentApprovedLeaves || [];
 
-                await loadLeaveData();
                 isLoggedIn = true;
                 saveSession();
                 render();
@@ -248,20 +248,13 @@
         }
 
         async function loadLeaveData() {
-            const [balanceData, leavesData] = await Promise.all([
-                callAPI('getLeaveBalance', { email: employeeEmail }),
-                callAPI('getLeaves', { email: employeeEmail })
-            ]);
-            leaveBalance = balanceData;
-            myLeaves = leavesData;
-
+            // v3.4.1 - Single initLeave call replaces 2-4 separate calls
+            const initData = await callAPI('initLeave', { email: employeeEmail });
+            leaveBalance = initData.leaveBalance;
+            myLeaves = initData.leaves;
             if (isApprover) {
-                const [pending, recentApproved] = await Promise.all([
-                    callAPI('getPendingLeaves'),
-                    callAPI('getRecentApprovedLeaves')
-                ]);
-                pendingLeaves = pending;
-                recentApprovedLeaves = recentApproved;
+                pendingLeaves = initData.pendingLeaves || [];
+                recentApprovedLeaves = initData.recentApprovedLeaves || [];
             }
         }
 

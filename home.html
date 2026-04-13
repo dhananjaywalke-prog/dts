@@ -306,19 +306,17 @@
                 employeeData = session.employeeData;
                 isApprover = session.isApprover || false;
 
-                // Get pending count for approvers
-                if (isApprover) {
-                    try {
-                        const [pendingLeaves, pendingExpenses] = await Promise.all([
-                            callAPI('getPendingLeaves'),
-                            callAPI('getPendingExpenses')
-                        ]);
-                        pendingLeavesCount = pendingLeaves.length;
-                        pendingExpensesCount = pendingExpenses.length;
-                    } catch (e) {
-                        pendingLeavesCount = 0;
-                        pendingExpensesCount = 0;
-                    }
+                // v3.4.1 - Single initHome call replaces separate pending counts calls
+                try {
+                    const initData = await callAPI('initHome', { email: employeeEmail });
+                    employeeData = initData.employee;
+                    isApprover = initData.isApprover;
+                    pendingLeavesCount = initData.pendingLeavesCount || 0;
+                    pendingExpensesCount = initData.pendingExpensesCount || 0;
+                    taskCounts = initData.taskCounts || { total: 0, pending: 0, overdue: 0 };
+                } catch (e) {
+                    pendingLeavesCount = 0;
+                    pendingExpensesCount = 0;
                 }
 
                 isLoggedIn = true;

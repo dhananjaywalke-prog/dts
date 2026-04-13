@@ -859,24 +859,16 @@
             statusDiv.innerHTML = '<p class="text-blue-600 text-sm mt-2">⏳ Loading your data...</p>';
 
             try {
-                // UPDATED in v1.6 - Added getAssignments call
-                const [clientsData, tasksData, expensesData, empData, timesheetsData, holidaysData, assignmentsData] = await Promise.all([
-                    callAPI('getClients'),
-                    callAPI('getTasks'),
-                    callAPI('getExpenses'),
-                    callAPI('getEmployee', { email: employeeEmail }),
-                    callAPI('getTimesheets', { email: employeeEmail }),
-                    callAPI('getHolidays'),
-                    callAPI('getAssignments')
-                ]);
+                // v3.4.1 - Single initTimesheet call replaces 7 separate calls
+                const initData = await callAPI('initTimesheet', { email: employeeEmail });
                 
-                clients = clientsData;
-                tasks = tasksData;
-                expenseTypes = expensesData;
-                employeeData = empData;
-                timesheetData = timesheetsData;
-                holidays = holidaysData;
-                assignments = assignmentsData; // NEW in v1.6
+                clients = initData.clients;
+                tasks = initData.tasks;
+                expenseTypes = initData.expenseTypes;
+                employeeData = initData.employee;
+                timesheetData = initData.timesheets;
+                holidays = initData.holidays;
+                assignments = initData.assignments;
                 
                 isLoggedIn = true;
                 hasUnsavedChanges = false;
@@ -1565,22 +1557,16 @@
                     employeeEmail = session.employeeEmail;
                     employeeData = session.employeeData;
                     
-                    // Load fresh data
-                    const [clientsData, tasksData, expensesData, timesheetsData, holidaysData, assignmentsData] = await Promise.all([
-                        callAPI('getClients'),
-                        callAPI('getTasks'),
-                        callAPI('getExpenses'),
-                        callAPI('getTimesheets', { email: employeeEmail }),
-                        callAPI('getHolidays'),
-                        callAPI('getAssignments')
-                    ]);
+                    // v3.4.1 - Single initTimesheet call replaces 6 separate calls
+                    const initData = await callAPI('initTimesheet', { email: employeeEmail });
                     
-                    clients = clientsData;
-                    tasks = tasksData;
-                    expenseTypes = expensesData;
-                    timesheetData = timesheetsData;
-                    holidays = holidaysData;
-                    assignments = assignmentsData;
+                    clients = initData.clients;
+                    tasks = initData.tasks;
+                    expenseTypes = initData.expenseTypes;
+                    employeeData = initData.employee;
+                    timesheetData = initData.timesheets;
+                    holidays = initData.holidays;
+                    assignments = initData.assignments;
                     
                     isLoggedIn = true;
                     saveSession(); // Refresh timestamp
