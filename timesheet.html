@@ -939,7 +939,7 @@
             statusDiv.innerHTML = '<p class="text-blue-600 text-sm">⏳ Saving entry...</p>';
 
             try {
-                await callAPI('addTimesheet', {
+                const addResult = await callAPI('addTimesheet', {
                     timesheet: {
                         employeeEmail: employeeEmail,
                         date: formatDate(selectedDate),
@@ -954,7 +954,20 @@
                 
                 statusDiv.innerHTML = '<p class="text-green-600 text-sm">✅ Entry saved successfully!</p>';
                 
-                timesheetData = await callAPI('getTimesheets', { email: employeeEmail });
+                // v3.4.1 - Update local array instead of re-fetching from server (saves ~4s)
+                timesheetData = [...(timesheetData || []), {
+                    'Row ID': addResult.rowId,
+                    'Date': formatDate(selectedDate),
+                    'Employee Email': employeeEmail,
+                    'Client': client,
+                    'Task': task,
+                    'Hours': parseFloat(hours),
+                    'Description': description,
+                    'Expense Type': expenseType || 'Not Applicable',
+                    'Expense Amount': parseFloat(amount) || 0,
+                    'Audit Trail': 'Approved',
+                    'Timestamp': new Date().toLocaleString('en-IN')
+                }];
                 
                 // Clear form
                 if (clientDropdownRef) clientDropdownRef.clear();
@@ -1001,7 +1014,8 @@
 
             try {
                 await callAPI('deleteTimesheet', { rowId });
-                timesheetData = await callAPI('getTimesheets', { email: employeeEmail });
+                // v3.4.1 - Remove from local array instead of re-fetching from server (saves ~4s)
+                timesheetData = timesheetData.filter(e => e['Row ID'] !== rowId);
                 hideLoading();
                 render();
             } catch (error) {
@@ -1149,7 +1163,21 @@
                 
                 statusDiv.innerHTML = '<p class="text-green-600 text-sm">✅ Entry updated successfully!</p>';
                 
-                timesheetData = await callAPI('getTimesheets', { email: employeeEmail });
+                // v3.4.1 - Update local array instead of re-fetching from server (saves ~4s)
+                timesheetData = timesheetData.filter(e => e['Row ID'] !== rowId);
+                timesheetData = [...timesheetData, {
+                    'Row ID': rowId,
+                    'Date': formatDate(selectedDate),
+                    'Employee Email': employeeEmail,
+                    'Client': client,
+                    'Task': task,
+                    'Hours': parseFloat(hours),
+                    'Description': description,
+                    'Expense Type': expenseType || 'Not Applicable',
+                    'Expense Amount': parseFloat(amount) || 0,
+                    'Audit Trail': 'Approved',
+                    'Timestamp': new Date().toLocaleString('en-IN')
+                }];
                 
                 cancelEdit();
                 hasUnsavedChanges = false;
