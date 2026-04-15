@@ -956,7 +956,7 @@
                 
                 // v3.4.1 - Update local array instead of re-fetching from server (saves ~4s)
                 timesheetData = [...(timesheetData || []), {
-                    'Row ID': addResult.rowId,
+                    'Row ID': (addResult && addResult.rowId) ? addResult.rowId : ('temp_' + Date.now()),
                     'Date': formatDate(selectedDate),
                     'Employee Email': employeeEmail,
                     'Client': client,
