@@ -63,6 +63,12 @@
         .cell-blue { background: #dbeafe; color: #1e40af; font-weight: 500; }
         .cell-grey { background: #f3f4f6; color: #9ca3af; }
 
+        /* Filter toggle button */
+        .filter-toggle { padding: 8px 16px; font-size: 14px; font-weight: 500; border-radius: 999px; border: 1.5px solid #e5e7eb; background: white; color: #6b7280; cursor: pointer; transition: all 0.15s ease; white-space: nowrap; }
+        .filter-toggle:hover { border-color: #d4a853; color: #102a43; }
+        .filter-toggle.active { background: #102a43; color: white; border-color: #102a43; }
+        .filter-toggle.active:hover { background: #243b53; }
+
         /* Legend */
         .legend-swatch { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: middle; margin-right: 6px; border: 1px solid rgba(0,0,0,0.05); }
     </style>
@@ -84,6 +90,7 @@
         let isLoggedIn = false;
         let attendanceData = null;
         let activeReport = 'attendance';
+        let excludeNonWork = false; // Filter toggle: excludes Leave/LOP/Idle/Sunday/Holiday from cells & totals
 
         function showLoading() { document.getElementById('loadingOverlay').style.display = 'flex'; }
         function hideLoading() { document.getElementById('loadingOverlay').style.display = 'none'; }
@@ -159,36 +166,90 @@
             }
         }
 
-        // ==================== CELL COLOR LOGIC ====================
-        function getCellClass(dateInfo, dayData, dateStr, todayStr) {
-            // Grey for Sunday or Holiday
+        // ==================== CELL VALUES WITH FILTER ====================
+        // Returns the "effective" cell data after filter is applied
+        // When filter is ON: excludes leave hours AND idle hours
+        function getEffectiveCellData(dateInfo, dayData) {
+            if (excludeNonWork) {
+                // Filter ON: pure client work only (no leave, no idle, no weekend)
+                const pureWorkHours = Math.max(0, (dayData.workHours || 0) - (dayData.idleHours || 0));
+                return {
+                    workHours: pureWorkHours,
+                    leaveHours: 0,
+                    idleHours: 0,
+                    totalHours: pureWorkHours,
+                    isExcluded: dateInfo.isSunday || dateInfo.isHoliday
+                };
+            }
+            // Filter OFF: show everything (Idle counts as work)
+            return {
+                workHours: dayData.workHours || 0,
+                leaveHours: dayData.leaveHours || 0,
+                idleHours: dayData.idleHours || 0,
+                totalHours: dayData.totalHours || 0,
+                isExcluded: false
+            };
+        }
+
+        function getCellClass(dateInfo, effective, dateStr, todayStr) {
+            // Grey for Sunday or Holiday (always, regardless of filter)
             if (dateInfo.isSunday || dateInfo.isHoliday) return 'cell-grey';
 
-            const { workHours, leaveHours, totalHours } = dayData;
+            const { workHours, leaveHours, totalHours } = effective;
 
             // Red: zero hours (only within recent 7 days per business rule)
             if (totalHours === 0) {
                 const daysDiff = Math.floor((new Date(todayStr) - new Date(dateStr)) / (1000 * 60 * 60 * 24));
                 if (daysDiff <= 7) return 'cell-red';
-                return 'cell-blue'; // Edge case: should have auto-filled
+                return 'cell-blue'; // beyond 7 days → auto-filled system
             }
 
             // Blue: pure leave day (all hours are leave/LOP/auto)
             if (leaveHours > 0 && workHours === 0) return 'cell-blue';
 
-            // Green: full day (6+ hours, with at least some real work)
+            // Green: full day (6+ hours)
             if (totalHours >= 6) return 'cell-green';
 
             // Yellow: partial day (1-5 hours)
             return 'cell-yellow';
         }
 
-        function formatCellValue(dateInfo, dayData) {
-            const { totalHours } = dayData;
-            if (totalHours === 0 && (dateInfo.isSunday || dateInfo.isHoliday)) return '-';
+        function formatCellValue(dateInfo, effective) {
+            const { totalHours } = effective;
+            if (dateInfo.isSunday || dateInfo.isHoliday) return '-';
             if (totalHours === 0) return '0';
-            // Remove trailing zeros (6 not 6.0)
             return totalHours % 1 === 0 ? String(totalHours) : totalHours.toFixed(2);
+        }
+
+        // ==================== EMPLOYEE ROW TOTALS (filter-aware) ====================
+        function computeEmployeeTotals(emp, dates) {
+            let work = 0, leave = 0, idle = 0, netWorkDays = 0, leaveDays = 0;
+            emp.days.forEach((d, i) => {
+                const dateInfo = dates[i];
+                const isWeekendOrHoliday = dateInfo.isSunday || dateInfo.isHoliday;
+
+                if (excludeNonWork) {
+                    // Only count pure client work on non-weekend, non-holiday days
+                    if (isWeekendOrHoliday) return;
+                    const pureWork = Math.max(0, (d.workHours || 0) - (d.idleHours || 0));
+                    work += pureWork;
+                    if (pureWork > 0) netWorkDays++;
+                } else {
+                    work += d.workHours || 0;
+                    leave += d.leaveHours || 0;
+                    idle += d.idleHours || 0;
+                    if ((d.workHours || 0) > 0) netWorkDays++;
+                    if ((d.leaveHours || 0) > 0) leaveDays++;
+                }
+            });
+            const round = (x) => Math.round(x * 100) / 100;
+            return {
+                work: round(work),
+                leave: round(leave),
+                idle: round(idle),
+                netWorkDays: netWorkDays,
+                leaveDays: leaveDays
+            };
         }
 
         // ==================== RENDER ====================
@@ -320,31 +381,71 @@
             const rows = employees.map(emp => {
                 const cells = emp.days.map((day, i) => {
                     const dateInfo = dates[i];
-                    const cls = getCellClass(dateInfo, day, dateInfo.dateStr, todayStr);
-                    const val = formatCellValue(dateInfo, day);
-                    const tooltip = `${emp.name} • ${dateInfo.dateStr}\nWork: ${day.workHours} | Leave: ${day.leaveHours} | Total: ${day.totalHours}`;
+                    const effective = getEffectiveCellData(dateInfo, day);
+                    const cls = getCellClass(dateInfo, effective, dateInfo.dateStr, todayStr);
+                    const val = formatCellValue(dateInfo, effective);
+                    const tooltip = excludeNonWork
+                        ? `${emp.name} • ${dateInfo.dateStr}\nPure client work: ${effective.workHours}`
+                        : `${emp.name} • ${dateInfo.dateStr}\nWork: ${day.workHours} | Leave: ${day.leaveHours} | Idle: ${day.idleHours || 0} | Total: ${day.totalHours}`;
                     return `<td class="${cls}" title="${tooltip}">${val}</td>`;
                 }).join('');
+
+                const totals = computeEmployeeTotals(emp, dates);
+
+                // Show different summary columns based on filter state
+                let summaryCells;
+                if (excludeNonWork) {
+                    summaryCells = `
+                        <td class="total-col">${totals.work}</td>
+                        <td class="total-col">${totals.netWorkDays}</td>`;
+                } else {
+                    summaryCells = `
+                        <td class="total-col">${totals.work}</td>
+                        <td class="total-col">${totals.leave}</td>
+                        <td class="total-col">${totals.netWorkDays}</td>`;
+                }
 
                 return `<tr>
                     <td class="sticky-col">${emp.name}</td>
                     ${cells}
-                    <td class="total-col">${emp.totalWorkHours}</td>
-                    <td class="total-col">${emp.totalLeaveHours}</td>
-                    <td class="total-col">${emp.workingDays}</td>
+                    ${summaryCells}
                 </tr>`;
             }).join('');
 
             const monthLabel = `${dates[0].dayNum} ${dates[0].monthShort} – ${dates[dates.length-1].dayNum} ${dates[dates.length-1].monthShort}`;
+
+            // Dynamic summary column headers based on filter state
+            const summaryHeaders = excludeNonWork
+                ? `<th class="total-col" title="Pure client work hours">Work</th>
+                   <th class="total-col" title="Net working days (days with pure work hours)">Net Days</th>`
+                : `<th class="total-col" title="Total work hours (incl. Idle)">Work</th>
+                   <th class="total-col" title="Total leave/LOP hours">Leave</th>
+                   <th class="total-col" title="Days with any work hours logged">Days</th>`;
+
+            // Legend changes slightly based on filter state
+            const legendHTML = excludeNonWork
+                ? `<span><span class="legend-swatch" style="background:#d1fae5"></span>6+ hrs client work</span>
+                   <span><span class="legend-swatch" style="background:#fef3c7"></span>1-5 hrs client work</span>
+                   <span><span class="legend-swatch" style="background:#fee2e2"></span>No client work (recent 7 days)</span>
+                   <span><span class="legend-swatch" style="background:#dbeafe"></span>No client work (older days)</span>
+                   <span><span class="legend-swatch" style="background:#f3f4f6"></span>Sunday / Holiday</span>`
+                : `<span><span class="legend-swatch" style="background:#d1fae5"></span>6+ hrs (full day)</span>
+                   <span><span class="legend-swatch" style="background:#fef3c7"></span>1-5 hrs (partial)</span>
+                   <span><span class="legend-swatch" style="background:#fee2e2"></span>0 hrs (absent, recent 7 days)</span>
+                   <span><span class="legend-swatch" style="background:#dbeafe"></span>Leave / LOP / Auto-leave</span>
+                   <span><span class="legend-swatch" style="background:#f3f4f6"></span>Sunday / Holiday</span>`;
 
             return `
                 <!-- Report header -->
                 <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
                     <div>
                         <h2 class="text-xl font-bold" style="color:#102a43">Attendance Summary</h2>
-                        <p class="text-sm text-gray-500">Last 30 days: ${monthLabel} • ${employees.length} active employees</p>
+                        <p class="text-sm text-gray-500">Last 30 days: ${monthLabel} • ${employees.length} active employees${excludeNonWork ? ' • <strong class="text-gold-600">Showing client work only</strong>' : ''}</p>
                     </div>
-                    <div class="flex gap-2">
+                    <div class="flex gap-2 flex-wrap">
+                        <button onclick="toggleExcludeNonWork()" class="filter-toggle ${excludeNonWork ? 'active' : ''}" title="Toggle: Exclude Leave, LOP, Idle, Sunday & Holiday">
+                            ${excludeNonWork ? '✓ Non-work excluded' : 'Exclude non-work'}
+                        </button>
                         <button onclick="refreshDashboard()" class="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 bg-white hover:bg-gray-50" style="color:#102a43">
                             🔄 Refresh
                         </button>
@@ -356,11 +457,7 @@
 
                 <!-- Legend -->
                 <div class="bg-white border border-gray-200 rounded-lg p-3 mb-4 flex flex-wrap gap-4 text-xs text-gray-700">
-                    <span><span class="legend-swatch" style="background:#d1fae5"></span>6+ hrs (full day)</span>
-                    <span><span class="legend-swatch" style="background:#fef3c7"></span>1-5 hrs (partial)</span>
-                    <span><span class="legend-swatch" style="background:#fee2e2"></span>0 hrs (absent, recent 7 days)</span>
-                    <span><span class="legend-swatch" style="background:#dbeafe"></span>Leave / LOP / Auto-leave</span>
-                    <span><span class="legend-swatch" style="background:#f3f4f6"></span>Sunday / Holiday</span>
+                    ${legendHTML}
                 </div>
 
                 <!-- Grid -->
@@ -370,15 +467,18 @@
                             <tr>
                                 <th class="sticky-col" style="text-align:left;">Employee</th>
                                 ${dateHeaders}
-                                <th class="total-col" title="Total Work Hours">Work</th>
-                                <th class="total-col" title="Total Leave/LOP/Idle Hours">Leave</th>
-                                <th class="total-col" title="Days with any work hours logged">Days</th>
+                                ${summaryHeaders}
                             </tr>
                         </thead>
                         <tbody>${rows}</tbody>
                     </table>
                 </div>
-                <p class="text-xs text-gray-400 mt-3">Hover any cell for detailed breakdown. Data refreshes on page load and when you click Refresh.</p>`;
+                <p class="text-xs text-gray-400 mt-3">Hover any cell for detailed breakdown. Toggle "Exclude non-work" to see pure client-billable hours only.</p>`;
+        }
+
+        function toggleExcludeNonWork() {
+            excludeNonWork = !excludeNonWork;
+            renderActiveReport();
         }
 
         // ==================== CSV EXPORT ====================
@@ -386,16 +486,40 @@
             if (!attendanceData) return;
             const { dates, employees } = attendanceData;
 
-            // Header row
-            const header = ['Employee', ...dates.map(d => `${d.dayNum}-${d.monthShort}-${d.dayName}`), 'Total Work Hours', 'Total Leave Hours', 'Working Days'];
+            // Header row — differs based on filter state
+            const baseHeader = ['Employee', ...dates.map(d => `${d.dayNum}-${d.monthShort}-${d.dayName}`)];
+            const summaryHeader = excludeNonWork
+                ? ['Total Work Hours', 'Net Working Days']
+                : ['Total Work Hours', 'Total Leave Hours', 'Working Days'];
+            const header = [...baseHeader, ...summaryHeader];
 
             const csvRows = [header.join(',')];
+
             employees.forEach(emp => {
                 const row = [`"${(emp.name || '').replace(/"/g,'""')}"`];
-                emp.days.forEach(d => row.push(d.totalHours));
-                row.push(emp.totalWorkHours);
-                row.push(emp.totalLeaveHours);
-                row.push(emp.workingDays);
+
+                // Day cells — use effective value based on filter
+                emp.days.forEach((d, i) => {
+                    const effective = getEffectiveCellData(dates[i], d);
+                    // For weekend/holiday cells when filter is ON, export blank
+                    if (excludeNonWork && effective.isExcluded) {
+                        row.push('');
+                    } else {
+                        row.push(effective.totalHours);
+                    }
+                });
+
+                // Summary columns — use filter-aware totals
+                const totals = computeEmployeeTotals(emp, dates);
+                if (excludeNonWork) {
+                    row.push(totals.work);
+                    row.push(totals.netWorkDays);
+                } else {
+                    row.push(totals.work);
+                    row.push(totals.leave);
+                    row.push(totals.netWorkDays);
+                }
+
                 csvRows.push(row.join(','));
             });
 
@@ -406,7 +530,8 @@
             a.href = url;
             const today = new Date();
             const stamp = `${today.getFullYear()}${String(today.getMonth()+1).padStart(2,'0')}${String(today.getDate()).padStart(2,'0')}`;
-            a.download = `Attendance_Summary_${stamp}.csv`;
+            const suffix = excludeNonWork ? '_ClientWorkOnly' : '';
+            a.download = `Attendance_Summary_${stamp}${suffix}.csv`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
