@@ -1,0 +1,1540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Work Plan | TimeWise EMS</title>
+    <!-- ============================================
+    TimeWise EMS - Work Plan Module
+    Version: 1.0
+    Last Updated: 06-May-2026
+    UI: Matches drpca.com navy/gold branding from timesheet.html
+    Backend: v3.5.0 — initWorkPlan / initWorkPlanDashboard / addWorkPlanEntry /
+             updateWorkPlanEntry / deleteWorkPlanEntry / getTeamWorkPlanGrid
+    ============================================ -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        navy: { 50: '#f0f4f8', 100: '#d9e2ec', 200: '#bcccdc', 700: '#334e68', 800: '#243b53', 900: '#102a43' },
+                        gold: { 50: '#fdf9ef', 100: '#faf0d7', 400: '#e3b04a', 500: '#d4a853', 600: '#c4882c' }
+                    },
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', system-ui, sans-serif; font-size: 14px; }
+        
+        /* Loading */
+        .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(16,42,67,0.9); display: flex; justify-content: center; align-items: center; z-index: 9999; }
+        .loading-spinner { width: 48px; height: 48px; border: 3px solid rgba(212,168,83,0.2); border-top: 3px solid #d4a853; border-radius: 50%; animation: spin 1s linear infinite; }
+        .loading-spinner-lg { width: 64px; height: 64px; border: 4px solid rgba(212,168,83,0.2); border-top: 4px solid #d4a853; border-radius: 50%; animation: spin 1s linear infinite; }
+        .loading-text { color: white; margin-top: 15px; font-size: 14px; font-weight: 500; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .btn-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top: 2px solid white; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 6px; vertical-align: middle; }
+        button:disabled { opacity: 0.7; cursor: not-allowed; }
+        
+        /* Focus */
+        input:focus, select:focus, textarea:focus { outline: none !important; border-color: #d4a853 !important; box-shadow: 0 0 0 3px rgba(212,168,83,0.15) !important; }
+        
+        /* Validation */
+        .field-error { border-color: #EF4444 !important; }
+        .error-text { color: #EF4444; font-size: 12px; margin-top: 4px; }
+        
+        /* Session timeout modal */
+        .timeout-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(16,42,67,0.9); display: flex; justify-content: center; align-items: center; z-index: 10000; }
+        .timeout-modal-content { background: white; padding: 28px; border-radius: 12px; text-align: center; max-width: 380px; box-shadow: 0 20px 50px rgba(0,0,0,0.3); }
+        
+        .header-shadow { box-shadow: 0 1px 3px rgba(16,42,67,0.08); }
+        
+        /* Primary button */
+        .btn-primary { background: linear-gradient(135deg, #102a43 0%, #243b53 100%); color: white; transition: all 0.2s ease; }
+        .btn-primary:hover:not(:disabled) { background: linear-gradient(135deg, #243b53 0%, #334e68 100%); }
+        
+        /* Searchable Dropdown */
+        .searchable-dropdown { position: relative; width: 100%; }
+        .searchable-dropdown .dd-display { width: 100%; padding: 8px 12px; padding-right: 32px; border: 1px solid #e5e7eb; border-radius: 8px; background: white; cursor: pointer; text-align: left; font-size: 14px; color: #102a43; position: relative; transition: all 0.2s ease; }
+        .searchable-dropdown .dd-display:focus { outline: none; border-color: #d4a853; box-shadow: 0 0 0 3px rgba(212, 168, 83, 0.15); }
+        .searchable-dropdown .dd-display::after { content: ''; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); border: 5px solid transparent; border-top-color: #6b7280; }
+        .searchable-dropdown.open .dd-display::after { border-top-color: transparent; border-bottom-color: #6b7280; transform: translateY(-80%); }
+        .searchable-dropdown .dd-panel { position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); z-index: 1000; display: none; max-height: 280px; overflow: hidden; }
+        .searchable-dropdown.open .dd-panel { display: block; }
+        .searchable-dropdown .dd-search { width: 100%; padding: 10px 12px; border: none; border-bottom: 1px solid #e5e7eb; font-size: 14px; outline: none; }
+        .searchable-dropdown .dd-search:focus { background: #fdf9ef; }
+        .searchable-dropdown .dd-options { max-height: 220px; overflow-y: auto; }
+        .searchable-dropdown .dd-option { padding: 10px 12px; cursor: pointer; font-size: 14px; color: #374151; transition: background 0.15s ease; }
+        .searchable-dropdown .dd-option:hover, .searchable-dropdown .dd-option.highlighted { background: #f0f4f8; }
+        .searchable-dropdown .dd-option.selected { background: #fdf9ef; color: #102a43; font-weight: 500; }
+        .searchable-dropdown .dd-option mark { background: #faf0d7; color: #102a43; padding: 0 2px; border-radius: 2px; }
+        .searchable-dropdown .dd-empty { padding: 12px; text-align: center; color: #9ca3af; font-size: 13px; }
+        
+        /* Modal */
+        .modal-backdrop { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(16,42,67,0.6); display: flex; justify-content: center; align-items: center; z-index: 9000; padding: 20px; }
+        .modal-content { background: white; border-radius: 12px; max-width: 500px; width: 100%; max-height: 90vh; overflow-y: auto; box-shadow: 0 25px 50px rgba(0,0,0,0.25); }
+        
+        /* Calendar cells - planned hours color coding */
+        .plan-cell { min-height: 64px; padding: 6px 4px; text-align: center; border-radius: 6px; position: relative; transition: all 0.15s ease; }
+        .plan-cell.empty { background: #f9fafb; color: #9ca3af; }
+        .plan-cell.partial { background: #fef3c7; color: #92400e; }
+        .plan-cell.full { background: #bbf7d0; color: #166534; }
+        .plan-cell.over { background: #fecaca; color: #991b1b; font-weight: 600; }
+        .plan-cell.sunday { background: #e5e7eb; color: #9ca3af; }
+        .plan-cell.holiday { background: #dbeafe; color: #1e40af; }
+        .plan-cell.leave { background: #ede9fe; color: #6b21a8; }
+        .plan-cell.outside { background: transparent; color: transparent; }
+        .plan-cell.today { border: 2px solid #d4a853; }
+        .plan-cell .day-num { font-size: 11px; font-weight: 600; }
+        .plan-cell .day-hours { font-size: 13px; font-weight: 700; margin-top: 2px; }
+        .plan-cell .day-clients { font-size: 10px; opacity: 0.8; margin-top: 1px; }
+        
+        /* Tooltip on calendar cells */
+        .cell-tooltip { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: #102a43; color: white; padding: 8px 12px; border-radius: 6px; font-size: 12px; white-space: nowrap; max-width: 250px; white-space: normal; min-width: 180px; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.2); margin-bottom: 6px; }
+        .plan-cell:hover .cell-tooltip { opacity: 1; }
+        
+        /* Capacity progress bar */
+        .capacity-bar-bg { background: #e5e7eb; border-radius: 999px; height: 8px; overflow: hidden; }
+        .capacity-bar-fill { background: linear-gradient(90deg, #d4a853, #c4882c); height: 100%; border-radius: 999px; transition: width 0.4s ease; }
+        .capacity-bar-fill.over { background: linear-gradient(90deg, #ef4444, #dc2626); }
+        
+        /* Toast */
+        .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #102a43; color: white; padding: 12px 24px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); z-index: 9500; opacity: 0; transition: opacity 0.3s, transform 0.3s; max-width: 90%; font-size: 14px; }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+        .toast.error { background: #b91c1c; }
+        .toast.success { background: #065f46; }
+        
+        /* View toggle */
+        .view-toggle button { padding: 8px 16px; font-size: 14px; font-weight: 500; border: 1px solid #e5e7eb; background: white; color: #6b7280; transition: all 0.2s; }
+        .view-toggle button:first-child { border-radius: 8px 0 0 8px; border-right: none; }
+        .view-toggle button:last-child { border-radius: 0 8px 8px 0; }
+        .view-toggle button.active { background: #102a43; color: white; border-color: #102a43; }
+        
+        /* Team view grid */
+        .team-grid { border-collapse: separate; border-spacing: 2px; }
+        .team-grid th, .team-grid td { padding: 0; }
+        .team-grid .name-col { position: sticky; left: 0; background: white; z-index: 5; min-width: 160px; max-width: 200px; padding: 8px 12px; font-weight: 500; color: #102a43; border-right: 2px solid #e5e7eb; }
+        .team-grid thead .name-col { background: #f9fafb; z-index: 6; }
+        .team-grid th { background: #f9fafb; padding: 6px 4px; font-size: 11px; font-weight: 500; color: #6b7280; min-width: 44px; }
+        .team-grid th.weekend { background: #f3f4f6; color: #9ca3af; }
+        .team-grid td { min-width: 44px; height: 36px; vertical-align: middle; }
+        .team-cell { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; border-radius: 4px; cursor: pointer; transition: transform 0.15s; }
+        .team-cell:hover { transform: scale(1.1); z-index: 10; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+        .team-cell.empty { background: #f9fafb; color: #d1d5db; cursor: default; }
+        .team-cell.empty:hover { transform: none; box-shadow: none; }
+        .team-cell.partial { background: #fef3c7; color: #92400e; }
+        .team-cell.full { background: #bbf7d0; color: #166534; }
+        .team-cell.over { background: #fecaca; color: #991b1b; }
+        .team-cell.sunday { background: #e5e7eb; color: transparent; cursor: default; }
+        .team-cell.sunday:hover { transform: none; box-shadow: none; }
+        .team-cell.holiday { background: #dbeafe; color: transparent; cursor: default; }
+        .team-cell.holiday:hover { transform: none; box-shadow: none; }
+        .team-cell.leave { background: #ede9fe; color: #6b21a8; }
+        
+        /* Plan entry card */
+        .entry-card { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 16px; transition: all 0.2s; }
+        .entry-card:hover { border-color: #d4a853; box-shadow: 0 2px 8px rgba(16,42,67,0.06); }
+        .entry-card.past { background: #f9fafb; opacity: 0.7; }
+        
+        /* Mobile: collapse calendar to list */
+        @media (max-width: 640px) {
+            .calendar-grid { display: none; }
+            .calendar-mobile-list { display: block; }
+        }
+        @media (min-width: 641px) {
+            .calendar-mobile-list { display: none; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="text-center">
+            <div class="loading-spinner mx-auto"></div>
+            <p id="loadingText" class="loading-text">Processing...</p>
+        </div>
+    </div>
+
+    <!-- Session Timeout Warning Modal -->
+    <div id="timeoutModal" class="timeout-modal" style="display: none;">
+        <div class="timeout-modal-content">
+            <div class="text-5xl mb-4">⏰</div>
+            <h2 class="text-xl font-bold text-gray-800 mb-2">Session Expiring Soon!</h2>
+            <p class="text-gray-600 mb-4">Your session will expire in <span id="timeoutCountdown" class="font-bold text-red-600">2:00</span> minutes due to inactivity.</p>
+            <p class="text-sm text-gray-500 mb-4">Any unsaved data will be lost.</p>
+            <button onclick="extendSession()" class="btn-primary text-white px-6 py-2 rounded-lg font-semibold">
+                Continue Working
+            </button>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toastContainer"></div>
+
+    <div id="app"></div>
+
+    <script src="config.js"></script>
+    <script>
+        // ============================================
+        // CONFIGURATION
+        // ============================================
+        const SESSION_TIMEOUT = 30 * 60 * 1000;
+        const SESSION_WARNING = 2 * 60 * 1000;
+        const MAX_WORKPLAN_DAYS = 30;
+        const MAX_DAILY_HOURS = 6;
+        const WORKING_DAYS_PER_WEEK = 6; // Mon-Sat
+        const LOCATIONS = ['Office', 'Client Place', 'WFH', 'Travel'];
+
+        // ============================================
+        // STATE
+        // ============================================
+        let isLoggedIn = false;
+        let employeeEmail = '';
+        let employeeData = null;
+        let isApprover = false;
+        let currentView = 'myplan'; // 'myplan' or 'team'
+
+        // Data state
+        let myPlan = [];
+        let clients = [];
+        let taskTypes = [];
+        let holidays = [];
+        let myApprovedLeaves = [];
+        let teamGridData = null;
+
+        // Editing state
+        let editingEntry = null; // null = adding; entry obj = editing
+        let isProcessing = false;
+        let clientDropdownRef = null;
+        let taskDropdownRef = null;
+
+        // Filters (partner view)
+        let filterEmployee = '';
+        let filterClient = '';
+        let filterLocation = '';
+
+        // Session timeout
+        let sessionTimer = null, warningTimer = null, countdownInterval = null, countdownSeconds = 120;
+
+        // ============================================
+        // SESSION
+        // ============================================
+        function saveSession() {
+            const session = {
+                employeeEmail: employeeEmail,
+                employeeData: employeeData,
+                isApprover: isApprover,
+                timestamp: Date.now()
+            };
+            localStorage.setItem('timewise_session', JSON.stringify(session));
+        }
+
+        function loadSession() {
+            try {
+                const s = localStorage.getItem('timewise_session');
+                if (!s) return null;
+                const session = JSON.parse(s);
+                if (Date.now() - session.timestamp > SESSION_TIMEOUT) {
+                    localStorage.removeItem('timewise_session');
+                    return null;
+                }
+                return session;
+            } catch (e) { return null; }
+        }
+
+        function clearSession() { localStorage.removeItem('timewise_session'); }
+
+        function resetSessionTimer() {
+            if (sessionTimer) clearTimeout(sessionTimer);
+            if (warningTimer) clearTimeout(warningTimer);
+            if (countdownInterval) clearInterval(countdownInterval);
+            document.getElementById('timeoutModal').style.display = 'none';
+            if (!isLoggedIn) return;
+            warningTimer = setTimeout(showTimeoutWarning, SESSION_TIMEOUT - SESSION_WARNING);
+            sessionTimer = setTimeout(sessionLogout, SESSION_TIMEOUT);
+        }
+
+        function showTimeoutWarning() {
+            countdownSeconds = 120;
+            document.getElementById('timeoutModal').style.display = 'flex';
+            updateCountdown();
+            countdownInterval = setInterval(() => {
+                countdownSeconds--;
+                updateCountdown();
+                if (countdownSeconds <= 0) clearInterval(countdownInterval);
+            }, 1000);
+        }
+
+        function updateCountdown() {
+            const m = Math.floor(countdownSeconds / 60);
+            const s = countdownSeconds % 60;
+            document.getElementById('timeoutCountdown').textContent = `${m}:${s.toString().padStart(2, '0')}`;
+        }
+
+        function extendSession() { resetSessionTimer(); }
+
+        function sessionLogout() {
+            clearInterval(countdownInterval);
+            document.getElementById('timeoutModal').style.display = 'none';
+            alert('Your session has expired due to inactivity. Please login again.');
+            handleLogout(true);
+        }
+
+        function setupActivityListeners() {
+            ['click', 'keypress', 'scroll', 'mousemove'].forEach(event => {
+                document.addEventListener(event, () => {
+                    if (isLoggedIn && document.getElementById('timeoutModal').style.display === 'none') {
+                        resetSessionTimer();
+                    }
+                }, { passive: true });
+            });
+        }
+
+        // ============================================
+        // UI HELPERS
+        // ============================================
+        function showLoading(message = 'Processing...') {
+            document.getElementById('loadingText').textContent = message;
+            document.getElementById('loadingOverlay').style.display = 'flex';
+            isProcessing = true;
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingOverlay').style.display = 'none';
+            isProcessing = false;
+        }
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => toast.classList.add('show'), 10);
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        function escapeHtml(str) {
+            return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        // ============================================
+        // DATE HELPERS (DD/MM/YYYY-safe)
+        // ============================================
+        function getTodayIST() {
+            const now = new Date();
+            const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+            const istOffset = 5.5 * 60 * 60 * 1000;
+            const t = new Date(utc + istOffset);
+            t.setHours(0, 0, 0, 0);
+            return t;
+        }
+
+        function formatDate(date) {
+            let d;
+            if (typeof date === 'string' && /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(date)) {
+                const [day, month, year] = date.split('/').map(s => parseInt(s, 10));
+                d = new Date(year, month - 1, day);
+            } else {
+                d = new Date(date);
+            }
+            d.setHours(0, 0, 0, 0);
+            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        }
+
+        function formatDateDisplay(date) {
+            let d;
+            if (typeof date === 'string' && /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(date)) {
+                const [day, month, year] = date.split('/').map(s => parseInt(s, 10));
+                d = new Date(year, month - 1, day);
+            } else {
+                d = new Date(date);
+            }
+            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            return `${String(d.getDate()).padStart(2,'0')}-${months[d.getMonth()]}-${d.getFullYear()}`;
+        }
+
+        function parseDateStr(s) {
+            // Parse 'yyyy-mm-dd' to Date at local midnight
+            if (!s) return null;
+            if (typeof s !== 'string') return new Date(s);
+            const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+            if (m) {
+                return new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]));
+            }
+            return new Date(s);
+        }
+
+        function daysBetween(d1Str, d2Str) {
+            const d1 = parseDateStr(d1Str);
+            const d2 = parseDateStr(d2Str);
+            return Math.floor((d2 - d1) / (1000 * 60 * 60 * 24));
+        }
+
+        // ============================================
+        // API
+        // ============================================
+        async function callAPI(action, params = {}) {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ action, ...params })
+            });
+            const result = await response.json();
+            if (!result.success) throw new Error(result.error || 'API call failed');
+            return result.data !== undefined ? result.data : result;
+        }
+
+        // ============================================
+        // PLAN LOGIC
+        // ============================================
+        function isSunday(date) {
+            return date.getDay() === 0;
+        }
+
+        function isHolidayDate(dateStr) {
+            return holidays.some(h => formatDate(h.Date) === dateStr && (h['Employee Email'] === 'All' || h['Employee Email'] === employeeEmail));
+        }
+
+        function getHolidayName(dateStr) {
+            const h = holidays.find(h => formatDate(h.Date) === dateStr && (h['Employee Email'] === 'All' || h['Employee Email'] === employeeEmail));
+            return h ? (h.Description || 'Holiday') : '';
+        }
+
+        function isLeaveDate(dateStr) {
+            return myApprovedLeaves.some(lv => dateStr >= lv.fromDate && dateStr <= lv.toDate);
+        }
+
+        function isWorkingDay(date) {
+            const dateStr = formatDate(date);
+            if (isSunday(date)) return false;
+            if (isHolidayDate(dateStr)) return false;
+            if (isLeaveDate(dateStr)) return false;
+            return true;
+        }
+
+        // For a given date string, what's the user's total planned hours and breakdown?
+        function getDayAllocation(dateStr) {
+            const entries = [];
+            let totalHours = 0;
+            myPlan.forEach(e => {
+                const from = formatDate(e['From Date']);
+                const to = formatDate(e['To Date']);
+                if (dateStr >= from && dateStr <= to) {
+                    const date = parseDateStr(dateStr);
+                    if (!isSunday(date) && !isHolidayDate(dateStr) && !isLeaveDate(dateStr)) {
+                        const hrs = parseFloat(e['Daily Hours']) || 0;
+                        totalHours += hrs;
+                        entries.push({
+                            rowId: e['Row ID'],
+                            client: e.Client,
+                            task: e.Task,
+                            hours: hrs,
+                            location: e.Location
+                        });
+                    }
+                }
+            });
+            return { totalHours, entries };
+        }
+
+        // Build 30-day window starting today
+        function buildPlanWindow() {
+            const today = getTodayIST();
+            const days = [];
+            for (let i = 0; i < MAX_WORKPLAN_DAYS; i++) {
+                const d = new Date(today);
+                d.setDate(today.getDate() + i);
+                const dateStr = formatDate(d);
+                const isSun = isSunday(d);
+                const isHol = isHolidayDate(dateStr);
+                const isLv = isLeaveDate(dateStr);
+                const isToday = i === 0;
+                const alloc = (isSun || isHol || isLv) ? { totalHours: 0, entries: [] } : getDayAllocation(dateStr);
+
+                days.push({
+                    date: d,
+                    dateStr: dateStr,
+                    isSunday: isSun,
+                    isHoliday: isHol,
+                    isLeave: isLv,
+                    isToday: isToday,
+                    holidayName: isHol ? getHolidayName(dateStr) : '',
+                    totalHours: alloc.totalHours,
+                    entries: alloc.entries
+                });
+            }
+            return days;
+        }
+
+        // Capacity summary
+        function getCapacitySummary() {
+            const days = buildPlanWindow();
+            const today = getTodayIST();
+            const dayOfWeek = today.getDay(); // 0=Sun, 1=Mon, ... 6=Sat
+
+            // This week = today to end of week (Saturday)
+            const daysToSat = dayOfWeek === 0 ? 6 : (6 - dayOfWeek);
+            const thisWeekDays = days.slice(0, daysToSat + 1);
+
+            // Next week = Mon-Sat of next week (days daysToSat+2 through daysToSat+7)
+            const nextWeekStart = daysToSat + 2; // skip Sunday
+            const nextWeekDays = days.slice(nextWeekStart, nextWeekStart + 6);
+
+            function summarize(daysList) {
+                let workingDaysCount = 0, plannedHours = 0;
+                daysList.forEach(d => {
+                    if (!d.isSunday && !d.isHoliday && !d.isLeave) {
+                        workingDaysCount++;
+                        plannedHours += d.totalHours;
+                    }
+                });
+                const capacity = workingDaysCount * MAX_DAILY_HOURS;
+                return { plannedHours, capacity, workingDaysCount };
+            }
+
+            return {
+                thisWeek: summarize(thisWeekDays),
+                nextWeek: summarize(nextWeekDays),
+                total30: summarize(days)
+            };
+        }
+
+        // Entry is in the past if From Date < today (cannot edit)
+        function isEntryStarted(entry) {
+            const todayStr = formatDate(getTodayIST());
+            return formatDate(entry['From Date']) < todayStr;
+        }
+
+        // ============================================
+        // LOGIN / LOGOUT
+        // ============================================
+        async function handleLogin() {
+            const input = document.getElementById('emailInput');
+            const statusDiv = document.getElementById('loginStatus');
+            const loginBtn = document.getElementById('loginBtn');
+            employeeEmail = input.value.trim().toLowerCase();
+
+            if (!employeeEmail || !employeeEmail.includes('@')) {
+                statusDiv.innerHTML = '<p class="text-red-600 text-sm mt-2">Please enter a valid email</p>';
+                return;
+            }
+
+            loginBtn.disabled = true;
+            loginBtn.innerHTML = '<span class="btn-spinner"></span> Logging in...';
+            statusDiv.innerHTML = '<p class="text-blue-600 text-sm mt-2">⏳ Loading...</p>';
+
+            try {
+                const data = await callAPI('initWorkPlan', { email: employeeEmail });
+                employeeData = data.employee;
+                isApprover = data.isApprover || false;
+                clients = data.clients || [];
+                taskTypes = data.taskTypes || [];
+                holidays = data.holidays || [];
+                myApprovedLeaves = data.myApprovedLeaves || [];
+                myPlan = data.myPlan || [];
+
+                isLoggedIn = true;
+                saveSession();
+                resetSessionTimer();
+                render();
+            } catch (e) {
+                loginBtn.disabled = false;
+                loginBtn.innerHTML = 'Sign In';
+                statusDiv.innerHTML = `<p class="text-red-600 text-sm mt-2">❌ ${escapeHtml(e.message)}</p>`;
+            }
+        }
+
+        function handleLogout(forced = false) {
+            if (!forced && !confirm('Sign out?')) return;
+            clearSession();
+            isLoggedIn = false;
+            employeeEmail = '';
+            employeeData = null;
+            isApprover = false;
+            myPlan = []; clients = []; taskTypes = []; holidays = []; myApprovedLeaves = [];
+            teamGridData = null;
+            window.location.href = 'home.html';
+        }
+
+        // ============================================
+        // VIEW SWITCH
+        // ============================================
+        async function switchView(view) {
+            if (view === currentView) return;
+            if (view === 'team' && !isApprover) return;
+
+            currentView = view;
+            if (view === 'team' && !teamGridData) {
+                showLoading('Loading team plan...');
+                try {
+                    const data = await callAPI('initWorkPlanDashboard', { email: employeeEmail });
+                    teamGridData = data.gridData;
+                } catch (e) {
+                    showToast(e.message, 'error');
+                    currentView = 'myplan';
+                } finally {
+                    hideLoading();
+                }
+            }
+            render();
+        }
+
+        async function refreshTeamGrid() {
+            showLoading('Refreshing...');
+            try {
+                const data = await callAPI('initWorkPlanDashboard', { email: employeeEmail });
+                teamGridData = data.gridData;
+                render();
+            } catch (e) {
+                showToast(e.message, 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // ============================================
+        // ENTRY CRUD
+        // ============================================
+        function openAddModal() {
+            editingEntry = null;
+            renderModal();
+        }
+
+        function openEditModal(rowId) {
+            const entry = myPlan.find(e => e['Row ID'] === rowId);
+            if (!entry) { showToast('Entry not found', 'error'); return; }
+            if (isEntryStarted(entry)) { showToast('Cannot edit a plan entry that has already started', 'error'); return; }
+            editingEntry = entry;
+            renderModal();
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('entryModal');
+            if (modal) modal.remove();
+            editingEntry = null;
+            clientDropdownRef = null;
+            taskDropdownRef = null;
+        }
+
+        async function handleDelete(rowId) {
+            const entry = myPlan.find(e => e['Row ID'] === rowId);
+            if (!entry) return;
+            if (isEntryStarted(entry)) { showToast('Cannot delete a plan entry that has already started', 'error'); return; }
+            const range = `${formatDateDisplay(entry['From Date'])} to ${formatDateDisplay(entry['To Date'])}`;
+            if (!confirm(`Delete this plan entry?\n\nClient: ${entry.Client}\nTask: ${entry.Task}\nRange: ${range}\n\nThis cannot be undone.`)) return;
+
+            showLoading('Deleting...');
+            try {
+                await callAPI('deleteWorkPlanEntry', { rowId, email: employeeEmail });
+                // Update local state instead of full refresh
+                myPlan = myPlan.filter(e => e['Row ID'] !== rowId);
+                teamGridData = null; // force team grid refresh on next view
+                showToast('Plan entry deleted', 'success');
+                render();
+            } catch (e) {
+                showToast(e.message, 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function validateAndCollect() {
+            const client = clientDropdownRef ? clientDropdownRef.getValue() : '';
+            const task = taskDropdownRef ? taskDropdownRef.getValue() : '';
+            const fromDate = document.getElementById('mp_from').value;
+            const toDate = document.getElementById('mp_to').value;
+            const dailyHours = parseFloat(document.getElementById('mp_hours').value);
+            const locationEl = document.querySelector('input[name="mp_location"]:checked');
+            const location = locationEl ? locationEl.value : '';
+
+            const errors = [];
+            if (!client) errors.push('Client is required');
+            if (!task) errors.push('Task is required');
+            if (!fromDate) errors.push('From Date is required');
+            if (!toDate) errors.push('To Date is required');
+            if (!location) errors.push('Location is required');
+            if (isNaN(dailyHours) || dailyHours <= 0) errors.push('Daily hours must be greater than 0');
+            if (dailyHours > MAX_DAILY_HOURS) errors.push(`Daily hours cannot exceed ${MAX_DAILY_HOURS}`);
+
+            const todayStr = formatDate(getTodayIST());
+            if (fromDate && fromDate < todayStr) errors.push('From Date cannot be in the past');
+            if (fromDate && toDate && toDate < fromDate) errors.push('To Date must be on or after From Date');
+
+            if (fromDate && toDate) {
+                const horizon = new Date(getTodayIST());
+                horizon.setDate(horizon.getDate() + MAX_WORKPLAN_DAYS);
+                const horizonStr = formatDate(horizon);
+                if (toDate > horizonStr) errors.push(`To Date cannot be more than ${MAX_WORKPLAN_DAYS} days from today`);
+            }
+
+            return { errors, payload: { client, task, fromDate, toDate, dailyHours, location } };
+        }
+
+        function countSkippedDays(fromStr, toStr) {
+            let sundays = 0, hols = 0, leaves = 0, working = 0;
+            let d = parseDateStr(fromStr);
+            const end = parseDateStr(toStr);
+            while (d <= end) {
+                const dStr = formatDate(d);
+                if (isSunday(d)) sundays++;
+                else if (isHolidayDate(dStr)) hols++;
+                else if (isLeaveDate(dStr)) leaves++;
+                else working++;
+                d.setDate(d.getDate() + 1);
+            }
+            return { sundays, hols, leaves, working };
+        }
+
+        async function handleSave() {
+            const errBox = document.getElementById('mp_errors');
+            const saveBtn = document.getElementById('mp_save');
+
+            const { errors, payload } = validateAndCollect();
+            if (errors.length > 0) {
+                errBox.innerHTML = errors.map(e => `<div class="error-text">• ${escapeHtml(e)}</div>`).join('');
+                return;
+            }
+            errBox.innerHTML = '';
+
+            const skipped = countSkippedDays(payload.fromDate, payload.toDate);
+            if (skipped.working === 0) {
+                errBox.innerHTML = '<div class="error-text">• No working days in the selected range (all are Sundays, holidays, or your approved leaves)</div>';
+                return;
+            }
+
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<span class="btn-spinner"></span> Saving...';
+            try {
+                const entry = {
+                    employeeEmail,
+                    client: payload.client,
+                    task: payload.task,
+                    fromDate: payload.fromDate,
+                    toDate: payload.toDate,
+                    dailyHours: payload.dailyHours,
+                    location: payload.location
+                };
+
+                if (editingEntry) {
+                    entry.rowId = editingEntry['Row ID'];
+                    await callAPI('updateWorkPlanEntry', { entry });
+                } else {
+                    await callAPI('addWorkPlanEntry', { entry });
+                }
+
+                // Refresh from server to get accurate state
+                const data = await callAPI('getMyWorkPlan', { email: employeeEmail });
+                myPlan = data || [];
+                teamGridData = null; // invalidate team grid cache
+
+                closeModal();
+
+                // Compose skipped-days message
+                let skipBits = [];
+                if (skipped.sundays) skipBits.push(`${skipped.sundays} Sunday${skipped.sundays>1?'s':''}`);
+                if (skipped.hols) skipBits.push(`${skipped.hols} holiday${skipped.hols>1?'s':''}`);
+                if (skipped.leaves) skipBits.push(`${skipped.leaves} leave day${skipped.leaves>1?'s':''}`);
+                const skipMsg = skipBits.length ? `. Skipped ${skipBits.join(', ')}.` : '.';
+                showToast(`${editingEntry ? 'Updated' : 'Added'}: plan covers ${skipped.working} working day${skipped.working>1?'s':''}${skipMsg}`, 'success');
+                render();
+            } catch (e) {
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = editingEntry ? 'Update Entry' : 'Add Entry';
+                errBox.innerHTML = `<div class="error-text">• ${escapeHtml(e.message)}</div>`;
+            }
+        }
+
+        // ============================================
+        // RENDER — Main router
+        // ============================================
+        function render() {
+            const app = document.getElementById('app');
+            if (!isLoggedIn) {
+                app.innerHTML = renderLogin();
+                return;
+            }
+            if (currentView === 'team' && isApprover) {
+                app.innerHTML = renderHeader() + renderTeamView();
+            } else {
+                app.innerHTML = renderHeader() + renderMyPlan();
+            }
+        }
+
+        // ============================================
+        // RENDER — Login
+        // ============================================
+        function renderLogin() {
+            return `
+                <div class="min-h-screen flex">
+                    <div class="hidden lg:flex lg:w-1/2 flex-col justify-between p-12" style="background:#102a43">
+                        <div><img src="https://drpca.com/assets/drpca-logo.png" alt="DRP & Co. LLP" class="h-12 brightness-0 invert opacity-90" onerror="this.style.display='none'"></div>
+                        <div class="text-white"><h1 class="text-4xl font-bold mb-4">TimeWise EMS</h1><p class="text-lg opacity-60">Work Plan Module</p><p class="opacity-40 text-sm mt-1">Forward-looking 30-day capacity planning</p></div>
+                        <div class="text-white opacity-40 text-sm"><p>DRP &amp; Co. LLP</p><p>Chartered Accountants • Wealth Managers • Valuation Professionals</p></div>
+                    </div>
+                    <div class="w-full lg:w-1/2 flex items-center justify-center p-8 bg-white">
+                        <div class="w-full max-w-md">
+                            <div class="lg:hidden text-center mb-8"><img src="https://drpca.com/assets/drpca-logo.png" alt="DRP &amp; Co." class="h-10 mx-auto mb-4" onerror="this.style.display='none'"></div>
+                            <div class="text-center mb-8"><h2 class="text-2xl font-bold" style="color:#102a43">Work Plan</h2><p class="text-gray-500 mt-2 text-sm">Sign in to continue</p></div>
+                            <div class="space-y-5">
+                                <div><label class="block text-sm font-medium mb-2" style="color:#243b53">Email Address</label><input type="email" id="emailInput" placeholder="your.name@drpca.com" class="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm" onkeypress="if(event.key === 'Enter') handleLogin()"></div>
+                                <button id="loginBtn" onclick="handleLogin()" class="btn-primary w-full py-3 rounded-lg font-semibold text-sm">Sign In</button>
+                                <div id="loginStatus"></div>
+                            </div>
+                            <div class="mt-12 pt-8 border-t border-gray-100"><p class="text-center text-gray-400 text-sm">© 2026 DRP &amp; Co. LLP</p></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // ============================================
+        // RENDER — Header
+        // ============================================
+        function renderHeader() {
+            return `
+                <header class="bg-white header-shadow sticky top-0 z-50">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div class="flex justify-between items-center h-16">
+                            <div class="flex items-center space-x-4">
+                                <img src="https://drpca.com/assets/drpca-logo.png" alt="DRP &amp; Co." class="h-12" onerror="this.outerHTML='<span class=\\'font-bold text-lg\\' style=\\'color:#102a43\\'>drp&amp;co.</span>'">
+                                <div class="border-l border-gray-200 pl-4">
+                                    <span class="font-semibold" style="color:#102a43">Work Plan</span>
+                                    <span class="text-gray-400 text-sm ml-1">Module</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-6">
+                                <div class="text-right">
+                                    <p class="text-sm font-medium" style="color:#102a43">${escapeHtml(employeeData['Employee Name'])}</p>
+                                    <p class="text-xs text-gray-500">${escapeHtml(employeeData['Designation'] || 'Employee')}</p>
+                                </div>
+                                <a href="home.html" class="flex items-center space-x-2 text-sm font-medium text-gray-600 hover:text-gray-900">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                                    <span>Back to Home</span>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </header>
+            `;
+        }
+
+        // ============================================
+        // RENDER — My Plan View
+        // ============================================
+        function renderMyPlan() {
+            const days = buildPlanWindow();
+            const cap = getCapacitySummary();
+
+            return `
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                    ${isApprover ? renderViewToggle() : ''}
+
+                    <!-- Summary Tiles -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        ${renderSummaryTile('This Week', cap.thisWeek)}
+                        ${renderSummaryTile('Next Week', cap.nextWeek)}
+                        ${renderSummaryTile('Next 30 Days', cap.total30)}
+                    </div>
+
+                    <!-- Action bar -->
+                    <div class="bg-white rounded-xl border border-gray-100 p-4 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                        <div>
+                            <h2 class="font-semibold" style="color:#102a43">My 30-Day Work Plan</h2>
+                            <p class="text-xs text-gray-500 mt-1">${myPlan.length} active entr${myPlan.length===1?'y':'ies'} · Working days: Mon-Sat (6 hrs/day)</p>
+                        </div>
+                        <button onclick="openAddModal()" class="btn-primary px-5 py-2 rounded-lg font-semibold text-sm flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                            Add Plan Entry
+                        </button>
+                    </div>
+
+                    <!-- Calendar Grid (desktop) -->
+                    <div class="bg-white rounded-xl border border-gray-100 p-4 mb-6 calendar-grid">
+                        <h3 class="font-semibold mb-3" style="color:#102a43">Calendar View</h3>
+                        ${renderCalendarGrid(days)}
+                        ${renderCalendarLegend()}
+                    </div>
+
+                    <!-- Mobile: List of days -->
+                    <div class="bg-white rounded-xl border border-gray-100 p-4 mb-6 calendar-mobile-list">
+                        <h3 class="font-semibold mb-3" style="color:#102a43">Day-by-Day View</h3>
+                        ${renderMobileDayList(days)}
+                        ${renderCalendarLegend()}
+                    </div>
+
+                    <!-- Plan Entries List -->
+                    <div class="bg-white rounded-xl border border-gray-100 p-4">
+                        <h3 class="font-semibold mb-3" style="color:#102a43">Plan Entries</h3>
+                        ${renderEntriesList()}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderViewToggle() {
+            return `
+                <div class="view-toggle inline-flex mb-6">
+                    <button onclick="switchView('myplan')" class="${currentView==='myplan'?'active':''}">My Plan</button>
+                    <button onclick="switchView('team')" class="${currentView==='team'?'active':''}">Team View</button>
+                </div>
+            `;
+        }
+
+        function renderSummaryTile(label, data) {
+            const pct = data.capacity > 0 ? Math.round((data.plannedHours / data.capacity) * 100) : 0;
+            const over = data.plannedHours > data.capacity;
+            return `
+                <div class="bg-white rounded-xl border border-gray-100 p-4">
+                    <p class="text-xs text-gray-500 mb-1">${label}</p>
+                    <div class="flex items-baseline gap-2">
+                        <p class="text-2xl font-bold" style="color:#102a43">${data.plannedHours}</p>
+                        <p class="text-sm text-gray-500">/ ${data.capacity} hrs</p>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">${pct}% allocated${over?' <span class="text-red-600 font-medium">(over)</span>':''}</p>
+                    <div class="capacity-bar-bg mt-3">
+                        <div class="capacity-bar-fill ${over?'over':''}" style="width: ${Math.min(pct, 100)}%"></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function getCellClass(day) {
+            if (day.isSunday) return 'sunday';
+            if (day.isHoliday) return 'holiday';
+            if (day.isLeave) return 'leave';
+            if (day.totalHours > MAX_DAILY_HOURS) return 'over';
+            if (day.totalHours >= MAX_DAILY_HOURS) return 'full';
+            if (day.totalHours > 0) return 'partial';
+            return 'empty';
+        }
+
+        function renderCalendarGrid(days) {
+            // Group into weeks (Sun start), aligning the first day with day-of-week
+            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            const today = getTodayIST();
+            const startDow = today.getDay();
+
+            // Create cells with empty placeholders before today, then 30 days
+            const cells = [];
+            for (let i = 0; i < startDow; i++) cells.push(null);
+            days.forEach(d => cells.push(d));
+
+            // Pad to multiple of 7
+            while (cells.length % 7 !== 0) cells.push(null);
+
+            // Render header row
+            let html = `
+                <div class="grid grid-cols-7 gap-1 mb-2">
+                    ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d => `<div class="text-center text-xs font-medium text-gray-500 py-1">${d}</div>`).join('')}
+                </div>
+                <div class="grid grid-cols-7 gap-1">
+            `;
+
+            cells.forEach(d => {
+                if (!d) {
+                    html += `<div class="plan-cell outside"></div>`;
+                    return;
+                }
+                const cls = getCellClass(d);
+                const todayCls = d.isToday ? ' today' : '';
+                let labelHours = '';
+                let labelClients = '';
+
+                if (d.isSunday) {
+                    labelHours = '—';
+                    labelClients = 'Sunday';
+                } else if (d.isHoliday) {
+                    labelHours = '—';
+                    labelClients = 'Holiday';
+                } else if (d.isLeave) {
+                    labelHours = '—';
+                    labelClients = 'Leave';
+                } else if (d.totalHours > 0) {
+                    labelHours = `${d.totalHours}h`;
+                    labelClients = `${d.entries.length} ${d.entries.length === 1 ? 'plan' : 'plans'}`;
+                } else {
+                    labelHours = '0h';
+                    labelClients = 'Free';
+                }
+
+                const tooltip = renderCellTooltip(d);
+
+                html += `
+                    <div class="plan-cell ${cls}${todayCls}">
+                        <div class="day-num">${d.date.getDate()} ${months[d.date.getMonth()]}</div>
+                        <div class="day-hours">${labelHours}</div>
+                        <div class="day-clients">${escapeHtml(labelClients)}</div>
+                        ${tooltip}
+                    </div>
+                `;
+            });
+
+            html += `</div>`;
+            return html;
+        }
+
+        function renderCellTooltip(d) {
+            if (d.isSunday) return `<div class="cell-tooltip">Sunday — Weekly Off</div>`;
+            if (d.isHoliday) return `<div class="cell-tooltip">${escapeHtml(d.holidayName)}</div>`;
+            if (d.isLeave) return `<div class="cell-tooltip">Approved Leave</div>`;
+            if (d.entries.length === 0) return `<div class="cell-tooltip">No plans yet for ${formatDateDisplay(d.date)}</div>`;
+            const lines = d.entries.map(e => `${escapeHtml(e.client)} — ${escapeHtml(e.task)} (${e.hours}h, ${escapeHtml(e.location)})`).join('<br>');
+            return `<div class="cell-tooltip"><strong>${formatDateDisplay(d.date)}</strong><br>${lines}<br><span style="opacity:0.7">Total: ${d.totalHours}h</span></div>`;
+        }
+
+        function renderCalendarLegend() {
+            return `
+                <div class="pt-4 mt-4 border-t flex flex-wrap gap-x-4 gap-y-2 text-xs">
+                    <div class="flex items-center gap-2"><div class="w-3 h-3 rounded" style="background:#bbf7d0"></div>Full (6 hrs)</div>
+                    <div class="flex items-center gap-2"><div class="w-3 h-3 rounded" style="background:#fef3c7"></div>Partial (&lt; 6 hrs)</div>
+                    <div class="flex items-center gap-2"><div class="w-3 h-3 rounded" style="background:#fecaca"></div>Over-allocated (&gt; 6 hrs)</div>
+                    <div class="flex items-center gap-2"><div class="w-3 h-3 rounded" style="background:#f9fafb;border:1px solid #e5e7eb"></div>Empty</div>
+                    <div class="flex items-center gap-2"><div class="w-3 h-3 rounded" style="background:#e5e7eb"></div>Sunday</div>
+                    <div class="flex items-center gap-2"><div class="w-3 h-3 rounded" style="background:#dbeafe"></div>Holiday</div>
+                    <div class="flex items-center gap-2"><div class="w-3 h-3 rounded" style="background:#ede9fe"></div>Leave</div>
+                    <div class="flex items-center gap-2"><div class="w-3 h-3 rounded border-2 border-yellow-500"></div>Today</div>
+                </div>
+            `;
+        }
+
+        function renderMobileDayList(days) {
+            const items = days.map(d => {
+                const cls = getCellClass(d);
+                let detail = '';
+                if (d.isSunday) detail = 'Sunday — Weekly Off';
+                else if (d.isHoliday) detail = `Holiday: ${escapeHtml(d.holidayName)}`;
+                else if (d.isLeave) detail = 'Approved Leave';
+                else if (d.entries.length === 0) detail = '<span class="text-gray-400">No plans yet</span>';
+                else detail = d.entries.map(e => `${escapeHtml(e.client)} — ${escapeHtml(e.task)} (${e.hours}h)`).join('<br>');
+                const todayBadge = d.isToday ? ' <span class="text-xs px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 ml-1">Today</span>' : '';
+                return `
+                    <div class="flex items-start gap-3 py-2 border-b border-gray-100 last:border-0">
+                        <div class="plan-cell ${cls}" style="min-width: 60px; min-height: 56px; max-width:60px;">
+                            <div class="day-num">${d.date.getDate()}</div>
+                            <div class="day-hours">${(d.isSunday || d.isHoliday || d.isLeave) ? '—' : d.totalHours + 'h'}</div>
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-sm font-medium" style="color:#102a43">${formatDateDisplay(d.date)}${todayBadge}</p>
+                            <p class="text-xs text-gray-600 mt-1">${detail}</p>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            return `<div class="divide-y divide-gray-100">${items}</div>`;
+        }
+
+        function renderEntriesList() {
+            if (myPlan.length === 0) {
+                return `
+                    <div class="text-center py-10">
+                        <div class="text-5xl mb-3">📋</div>
+                        <h4 class="font-semibold text-gray-700">No plan entries yet</h4>
+                        <p class="text-sm text-gray-500 mt-1">Click "Add Plan Entry" above to start planning your next 30 days.</p>
+                    </div>
+                `;
+            }
+
+            return `<div class="space-y-2">${myPlan.map(e => renderEntryCard(e)).join('')}</div>`;
+        }
+
+        function renderEntryCard(entry) {
+            const started = isEntryStarted(entry);
+            const fromStr = formatDateDisplay(entry['From Date']);
+            const toStr = formatDateDisplay(entry['To Date']);
+            const rangeText = entry['From Date'] === entry['To Date'] ? fromStr : `${fromStr} → ${toStr}`;
+            return `
+                <div class="entry-card ${started ? 'past' : ''} flex flex-col sm:flex-row sm:items-center gap-3">
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="font-semibold" style="color:#102a43">${escapeHtml(entry.Client)}</span>
+                            <span class="text-gray-400">·</span>
+                            <span class="text-sm" style="color:#243b53">${escapeHtml(entry.Task)}</span>
+                            ${started ? '<span class="text-xs px-2 py-0.5 rounded bg-gray-200 text-gray-600">Started</span>' : ''}
+                        </div>
+                        <div class="flex flex-wrap items-center gap-3 text-xs text-gray-500 mt-1">
+                            <span>📅 ${rangeText}</span>
+                            <span>⏱ ${entry['Daily Hours']} hrs/day</span>
+                            <span>📍 ${escapeHtml(entry.Location)}</span>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="openEditModal('${escapeHtml(entry['Row ID'])}')" ${started ? 'disabled' : ''} class="px-3 py-1.5 text-xs font-medium rounded ${started ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}">Edit</button>
+                        <button onclick="handleDelete('${escapeHtml(entry['Row ID'])}')" ${started ? 'disabled' : ''} class="px-3 py-1.5 text-xs font-medium rounded ${started ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-red-50 hover:bg-red-100 text-red-700'}">Delete</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // ============================================
+        // RENDER — Team View (Partner)
+        // ============================================
+        function renderTeamView() {
+            if (!teamGridData) {
+                return `<div class="text-center py-20"><div class="loading-spinner-lg mx-auto"></div><p class="text-gray-500 mt-4">Loading team plan...</p></div>`;
+            }
+
+            // Apply filters
+            const employees = teamGridData.employees.filter(e => {
+                if (filterEmployee && !e.name.toLowerCase().includes(filterEmployee.toLowerCase())) return false;
+                if (filterClient || filterLocation) {
+                    // employee passes if any of their day entries matches
+                    return e.days.some(d => d.entries.some(en => {
+                        if (filterClient && en.client !== filterClient) return false;
+                        if (filterLocation && en.location !== filterLocation) return false;
+                        return true;
+                    }));
+                }
+                return true;
+            });
+
+            const dates = teamGridData.dates;
+
+            // Build unique client list for filter dropdown
+            const uniqClients = new Set();
+            teamGridData.employees.forEach(e => e.days.forEach(d => d.entries.forEach(en => uniqClients.add(en.client))));
+            const clientList = Array.from(uniqClients).sort();
+
+            return `
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                    ${renderViewToggle()}
+
+                    <div class="bg-white rounded-xl border border-gray-100 p-4 mb-6 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+                        <div>
+                            <h2 class="font-semibold" style="color:#102a43">Team Work Plan · Next 30 Days</h2>
+                            <p class="text-xs text-gray-500 mt-1">${employees.length} of ${teamGridData.employees.length} employees shown</p>
+                        </div>
+                        <button onclick="exportTeamCSV()" class="btn-primary px-4 py-2 rounded-lg font-semibold text-sm flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                            Export CSV
+                        </button>
+                    </div>
+
+                    <!-- Filters -->
+                    <div class="bg-white rounded-xl border border-gray-100 p-4 mb-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Filter by Employee</label>
+                            <input type="text" value="${escapeHtml(filterEmployee)}" oninput="filterEmployee=this.value; render()" placeholder="Type name..." class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Filter by Client</label>
+                            <select onchange="filterClient=this.value; render()" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm">
+                                <option value="">All clients</option>
+                                ${clientList.map(c => `<option value="${escapeHtml(c)}" ${filterClient === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Filter by Location</label>
+                            <select onchange="filterLocation=this.value; render()" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm">
+                                <option value="">All locations</option>
+                                ${LOCATIONS.map(l => `<option value="${l}" ${filterLocation === l ? 'selected' : ''}>${l}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Grid table -->
+                    <div class="bg-white rounded-xl border border-gray-100 p-3 overflow-x-auto">
+                        ${renderTeamGrid(employees, dates)}
+                    </div>
+
+                    <div class="bg-white rounded-xl border border-gray-100 p-4 mt-4">
+                        <p class="text-xs text-gray-500 mb-2 font-medium">Colour code:</p>
+                        <div class="flex flex-wrap gap-x-4 gap-y-2 text-xs">
+                            <div class="flex items-center gap-2"><div class="w-3 h-3 rounded" style="background:#bbf7d0"></div>Full (5-6 hrs)</div>
+                            <div class="flex items-center gap-2"><div class="w-3 h-3 rounded" style="background:#fef3c7"></div>Partial (1-4 hrs)</div>
+                            <div class="flex items-center gap-2"><div class="w-3 h-3 rounded" style="background:#fecaca"></div>Over (&gt;6 hrs)</div>
+                            <div class="flex items-center gap-2"><div class="w-3 h-3 rounded" style="background:#f9fafb;border:1px solid #e5e7eb"></div>Empty</div>
+                            <div class="flex items-center gap-2"><div class="w-3 h-3 rounded" style="background:#e5e7eb"></div>Sun/Hol</div>
+                            <div class="flex items-center gap-2"><div class="w-3 h-3 rounded" style="background:#ede9fe"></div>Leave</div>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-3">Click any cell to see what that user is doing that day.</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        function getTeamCellClass(cell, dateInfo) {
+            if (cell.isLeave) return 'leave';
+            if (dateInfo.isSunday) return 'sunday';
+            if (dateInfo.isHoliday) return 'holiday';
+            if (cell.totalHours > MAX_DAILY_HOURS) return 'over';
+            if (cell.totalHours >= MAX_DAILY_HOURS) return 'full';
+            if (cell.totalHours > 0) return 'partial';
+            return 'empty';
+        }
+
+        function renderTeamGrid(employees, dates) {
+            let html = `<table class="team-grid w-full">
+                <thead>
+                    <tr>
+                        <th class="name-col text-left">Employee</th>
+                        ${dates.map(d => {
+                            const isWk = d.isSunday || d.isHoliday;
+                            return `<th class="${isWk?'weekend':''}">
+                                <div>${d.dayName}</div>
+                                <div class="font-bold text-gray-700">${d.dayNum}</div>
+                                <div class="text-gray-400" style="font-size:9px">${d.monthShort}</div>
+                            </th>`;
+                        }).join('')}
+                    </tr>
+                </thead>
+                <tbody>`;
+
+            employees.forEach(emp => {
+                html += `<tr><td class="name-col">${escapeHtml(emp.name)}<div class="text-xs text-gray-400 font-normal">${emp.totalPlanned} hrs · ${emp.plannedDays} days</div></td>`;
+                emp.days.forEach((cell, i) => {
+                    const dateInfo = dates[i];
+                    const cls = getTeamCellClass(cell, dateInfo);
+                    const displayHours = (dateInfo.isSunday || dateInfo.isHoliday) ? '' : (cell.isLeave ? 'L' : (cell.totalHours > 0 ? cell.totalHours : ''));
+                    const clickable = !(dateInfo.isSunday || dateInfo.isHoliday) && (cell.entries.length > 0 || cell.isLeave);
+                    const onClickAttr = clickable ? `onclick="showCellDetail('${escapeHtml(emp.name)}', '${dateInfo.dateStr}', '${dateInfo.dayName}', '${dateInfo.dayNum}', '${dateInfo.monthShort}', ${JSON.stringify(cell).replace(/"/g, '&quot;')})"` : '';
+                    html += `<td><div class="team-cell ${cls}" ${onClickAttr}>${displayHours}</div></td>`;
+                });
+                html += `</tr>`;
+            });
+
+            html += `</tbody></table>`;
+            return html;
+        }
+
+        function showCellDetail(empName, dateStr, dayName, dayNum, monthShort, cellData) {
+            const cell = typeof cellData === 'string' ? JSON.parse(cellData.replace(/&quot;/g, '"')) : cellData;
+            let body = '';
+            if (cell.isLeave) {
+                body = '<p class="text-sm text-gray-700">📅 Approved leave</p>';
+            } else if (cell.entries.length === 0) {
+                body = '<p class="text-sm text-gray-500">No plans</p>';
+            } else {
+                body = cell.entries.map(e => `
+                    <div class="border-b border-gray-100 last:border-0 py-2">
+                        <p class="font-medium" style="color:#102a43">${escapeHtml(e.client)}</p>
+                        <p class="text-xs text-gray-600">${escapeHtml(e.task)} · ${e.hours} hrs · ${escapeHtml(e.location)}</p>
+                    </div>
+                `).join('');
+                body += `<div class="pt-2 mt-2 border-t text-sm font-semibold" style="color:#102a43">Total: ${cell.totalHours} hrs</div>`;
+            }
+
+            const modal = document.createElement('div');
+            modal.className = 'modal-backdrop';
+            modal.id = 'cellDetailModal';
+            modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <div class="p-5">
+                        <div class="flex items-start justify-between mb-3">
+                            <div>
+                                <p class="font-semibold" style="color:#102a43">${escapeHtml(empName)}</p>
+                                <p class="text-xs text-gray-500">${dayName}, ${dayNum} ${monthShort}</p>
+                            </div>
+                            <button onclick="document.getElementById('cellDetailModal').remove()" class="text-gray-400 hover:text-gray-600">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                            </button>
+                        </div>
+                        ${body}
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        function exportTeamCSV() {
+            if (!teamGridData) return;
+            const dates = teamGridData.dates;
+            const rows = [];
+            // Header row
+            rows.push(['Employee', ...dates.map(d => `${d.dayNum}-${d.monthShort} (${d.dayName})`), 'Total Hours', 'Planned Days'].map(csvEscape).join(','));
+            teamGridData.employees.forEach(emp => {
+                const row = [emp.name];
+                emp.days.forEach((cell, i) => {
+                    const d = dates[i];
+                    if (d.isSunday || d.isHoliday) row.push('');
+                    else if (cell.isLeave) row.push('LEAVE');
+                    else row.push(cell.totalHours > 0 ? cell.totalHours : '');
+                });
+                row.push(emp.totalPlanned);
+                row.push(emp.plannedDays);
+                rows.push(row.map(csvEscape).join(','));
+            });
+
+            const csv = rows.join('\n');
+            const filename = `Team_Work_Plan_${formatDate(getTodayIST()).replace(/-/g,'')}.csv`;
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.setAttribute('download', filename);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function csvEscape(val) {
+            if (val === null || val === undefined) return '';
+            const s = String(val);
+            if (s.includes(',') || s.includes('"') || s.includes('\n')) return '"' + s.replace(/"/g, '""') + '"';
+            return s;
+        }
+
+        // ============================================
+        // RENDER — Entry Modal
+        // ============================================
+        function renderModal() {
+            // Pre-fill if editing
+            const e = editingEntry || {};
+            const clientVal = e.Client || '';
+            const taskVal = e.Task || '';
+            const fromVal = e['From Date'] ? formatDate(e['From Date']) : formatDate(getTodayIST());
+            const toVal = e['To Date'] ? formatDate(e['To Date']) : formatDate(getTodayIST());
+            const hoursVal = e['Daily Hours'] || '';
+            const locVal = e.Location || '';
+
+            const today = getTodayIST();
+            const todayStr = formatDate(today);
+            const horizon = new Date(today);
+            horizon.setDate(horizon.getDate() + MAX_WORKPLAN_DAYS);
+            const horizonStr = formatDate(horizon);
+
+            const modal = document.createElement('div');
+            modal.className = 'modal-backdrop';
+            modal.id = 'entryModal';
+            modal.onclick = (ev) => { if (ev.target === modal) closeModal(); };
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <div class="p-5 border-b border-gray-100 flex items-center justify-between">
+                        <h3 class="font-semibold text-lg" style="color:#102a43">${editingEntry ? 'Edit Plan Entry' : 'Add Plan Entry'}</h3>
+                        <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                    </div>
+                    <div class="p-5 space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-1" style="color:#243b53">Client *</label>
+                            <div id="mp_client" class="searchable-dropdown"></div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1" style="color:#243b53">Task *</label>
+                            <div id="mp_task" class="searchable-dropdown"></div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-sm font-medium mb-1" style="color:#243b53">From Date *</label>
+                                <input type="date" id="mp_from" value="${fromVal}" min="${todayStr}" max="${horizonStr}" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1" style="color:#243b53">To Date *</label>
+                                <input type="date" id="mp_to" value="${toVal}" min="${todayStr}" max="${horizonStr}" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1" style="color:#243b53">Daily Hours * <span class="text-xs text-gray-400">(max ${MAX_DAILY_HOURS})</span></label>
+                            <input type="number" id="mp_hours" value="${hoursVal}" min="0.25" max="${MAX_DAILY_HOURS}" step="0.25" placeholder="e.g. 4" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2" style="color:#243b53">Location *</label>
+                            <div class="grid grid-cols-2 gap-2">
+                                ${LOCATIONS.map(loc => `
+                                    <label class="flex items-center px-3 py-2 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 text-sm">
+                                        <input type="radio" name="mp_location" value="${loc}" ${locVal === loc ? 'checked' : ''} class="mr-2">
+                                        ${loc}
+                                    </label>
+                                `).join('')}
+                            </div>
+                        </div>
+                        <div id="mp_errors"></div>
+                    </div>
+                    <div class="p-5 border-t border-gray-100 flex justify-end gap-2">
+                        <button onclick="closeModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg">Cancel</button>
+                        <button id="mp_save" onclick="handleSave()" class="btn-primary px-5 py-2 rounded-lg font-semibold text-sm">${editingEntry ? 'Update Entry' : 'Add Entry'}</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            // Init dropdowns after the modal is in DOM
+            setTimeout(() => {
+                const clientNames = clients.map(c => c['Client Full Name'] || c['Client Short Name']).filter(Boolean).sort();
+                clientDropdownRef = initSearchableDropdown('mp_client', clientNames, { placeholder: 'Select Client' });
+                taskDropdownRef = initSearchableDropdown('mp_task', taskTypes || [], { placeholder: 'Select Task' });
+                if (clientVal) clientDropdownRef.setValue(clientVal);
+                if (taskVal) taskDropdownRef.setValue(taskVal);
+            }, 0);
+        }
+
+        // ============================================
+        // INITIALIZE
+        // ============================================
+        async function init() {
+            setupActivityListeners();
+            const session = loadSession();
+            if (session && session.employeeEmail && session.employeeData) {
+                document.getElementById('app').innerHTML = `
+                    <div class="min-h-screen bg-gray-50 flex items-center justify-center">
+                        <div class="text-center">
+                            <div class="loading-spinner-lg mx-auto"></div>
+                            <p class="text-gray-500 mt-5 text-sm font-medium">Loading your work plan...</p>
+                        </div>
+                    </div>
+                `;
+                try {
+                    employeeEmail = session.employeeEmail;
+                    employeeData = session.employeeData;
+                    const data = await callAPI('initWorkPlan', { email: employeeEmail });
+                    employeeData = data.employee;
+                    isApprover = data.isApprover || false;
+                    clients = data.clients || [];
+                    taskTypes = data.taskTypes || [];
+                    holidays = data.holidays || [];
+                    myApprovedLeaves = data.myApprovedLeaves || [];
+                    myPlan = data.myPlan || [];
+                    isLoggedIn = true;
+                    saveSession();
+                    resetSessionTimer();
+                    render();
+                } catch (e) {
+                    console.error('Session restore error:', e);
+                    clearSession();
+                    render();
+                }
+            } else {
+                render();
+            }
+        }
+
+        // ============================================
+        // SEARCHABLE DROPDOWN COMPONENT (matches timesheet.html)
+        // ============================================
+        function initSearchableDropdown(containerId, options, config = {}) {
+            const container = document.getElementById(containerId);
+            if (!container) return null;
+            
+            const valueKey = config.valueKey || 'value';
+            const displayKey = config.displayKey || 'label';
+            const placeholder = config.placeholder || 'Select...';
+            const onChange = config.onChange || null;
+            
+            container.innerHTML = `
+                <input type="hidden" id="${containerId}Value">
+                <button type="button" class="dd-display" tabindex="0">${placeholder}</button>
+                <div class="dd-panel">
+                    <input type="text" class="dd-search" placeholder="Type to search..." autocomplete="off">
+                    <div class="dd-options"></div>
+                </div>
+            `;
+            
+            const display = container.querySelector('.dd-display');
+            const panel = container.querySelector('.dd-panel');
+            const search = container.querySelector('.dd-search');
+            const optionsList = container.querySelector('.dd-options');
+            const hidden = container.querySelector('input[type="hidden"]');
+            
+            let currentOptions = options || [];
+            let highlightedIndex = -1;
+            let selectedValue = '';
+            
+            function getValue(item) {
+                if (typeof item === 'string') return item;
+                return item[valueKey] || item['name'] || item['Client Full Name'] || String(item);
+            }
+            
+            function getDisplay(item) {
+                if (typeof item === 'string') return item;
+                return item[displayKey] || item['name'] || item['Client Full Name'] || String(item);
+            }
+            
+            function escapeHtmlInner(str) {
+                return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+            }
+            
+            function renderOptions(filter = '') {
+                const filterLower = filter.toLowerCase();
+                let html = '';
+                let visibleCount = 0;
+                
+                currentOptions.forEach((item) => {
+                    const displayText = getDisplay(item);
+                    const value = getValue(item);
+                    
+                    if (filter && !displayText.toLowerCase().includes(filterLower)) return;
+                    
+                    let highlighted = escapeHtmlInner(displayText);
+                    if (filter) {
+                        const regex = new RegExp(`(${filter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+                        highlighted = escapeHtmlInner(displayText).replace(regex, '<mark>$1</mark>');
+                    }
+                    
+                    const isSelected = value === selectedValue;
+                    html += `<div class="dd-option ${isSelected ? 'selected' : ''}" data-value="${escapeHtmlInner(value)}" data-index="${visibleCount}">${highlighted}</div>`;
+                    visibleCount++;
+                });
+                
+                if (visibleCount === 0) html = '<div class="dd-empty">No matches found</div>';
+                optionsList.innerHTML = html;
+                highlightedIndex = -1;
+            }
+            
+            function open() {
+                container.classList.add('open');
+                search.value = '';
+                renderOptions();
+                setTimeout(() => search.focus(), 10);
+            }
+            
+            function close() {
+                container.classList.remove('open');
+                highlightedIndex = -1;
+            }
+            
+            function selectOption(value, displayText) {
+                selectedValue = value;
+                hidden.value = value;
+                display.textContent = displayText || value || placeholder;
+                close();
+                if (onChange) onChange(value);
+            }
+            
+            display.addEventListener('click', (ev) => { ev.preventDefault(); container.classList.contains('open') ? close() : open(); });
+            search.addEventListener('input', () => renderOptions(search.value));
+            
+            optionsList.addEventListener('click', (ev) => {
+                const option = ev.target.closest('.dd-option');
+                if (option) selectOption(option.dataset.value, option.textContent);
+            });
+            
+            search.addEventListener('keydown', (ev) => {
+                const visibleOptions = optionsList.querySelectorAll('.dd-option');
+                if (ev.key === 'ArrowDown') { ev.preventDefault(); highlightedIndex = Math.min(highlightedIndex + 1, visibleOptions.length - 1); updateHighlight(visibleOptions); }
+                else if (ev.key === 'ArrowUp') { ev.preventDefault(); highlightedIndex = Math.max(highlightedIndex - 1, 0); updateHighlight(visibleOptions); }
+                else if (ev.key === 'Enter') { ev.preventDefault(); if (highlightedIndex >= 0 && visibleOptions[highlightedIndex]) selectOption(visibleOptions[highlightedIndex].dataset.value, visibleOptions[highlightedIndex].textContent); }
+                else if (ev.key === 'Escape') { close(); display.focus(); }
+            });
+            
+            function updateHighlight(options) {
+                options.forEach((opt, i) => { opt.classList.toggle('highlighted', i === highlightedIndex); if (i === highlightedIndex) opt.scrollIntoView({ block: 'nearest' }); });
+            }
+            
+            document.addEventListener('click', (ev) => { if (!container.contains(ev.target)) close(); });
+            
+            container.setOptions = (newOptions) => { currentOptions = newOptions || []; renderOptions(); };
+            container.setValue = (value) => { const item = currentOptions.find(o => getValue(o) === value); if (item) selectOption(value, getDisplay(item)); else selectOption('', ''); };
+            container.getValue = () => hidden.value;
+            container.clear = () => selectOption('', '');
+            
+            renderOptions();
+            return container;
+        }
+
+        init();
+    </script>
+</body>
+</html>
