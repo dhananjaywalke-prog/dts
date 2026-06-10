@@ -9,11 +9,11 @@
     <title>Work Plan | TimeWise EMS</title>
     <!-- ============================================
     TimeWise EMS - Work Plan Module
-    Version: 1.0
-    Last Updated: 06-May-2026
+    Version: 2.0
+    Last Updated: 09-Jun-2026
     UI: Matches drpca.com navy/gold branding from timesheet.html
-    Backend: v3.5.0 — initWorkPlan / initWorkPlanDashboard / addWorkPlanEntry /
-             updateWorkPlanEntry / deleteWorkPlanEntry / getTeamWorkPlanGrid
+    Backend: v3.6.0 — adds "Include Off Days" toggle + mandatory Description
+             (needs WorkPlan columns "Description" and "Include Off Days")
     ============================================ -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -425,25 +425,36 @@
         }
 
         // For a given date string, what's the user's total planned hours and breakdown?
+        // True if this plan entry opted to include Sundays & holidays
+        function isIncludeOff(e) {
+            const v = e['Include Off Days'];
+            return v === 'Yes' || v === true || v === 'TRUE' || v === 'yes';
+        }
+
         function getDayAllocation(dateStr) {
             const entries = [];
             let totalHours = 0;
+            // Approved leave always blocks the whole day, regardless of entries
+            if (isLeaveDate(dateStr)) return { totalHours: 0, entries: [] };
+            const date = parseDateStr(dateStr);
+            const offDay = isSunday(date) || isHolidayDate(dateStr);
             myPlan.forEach(e => {
                 const from = formatDate(e['From Date']);
                 const to = formatDate(e['To Date']);
                 if (dateStr >= from && dateStr <= to) {
-                    const date = parseDateStr(dateStr);
-                    if (!isSunday(date) && !isHolidayDate(dateStr) && !isLeaveDate(dateStr)) {
-                        const hrs = parseFloat(e['Daily Hours']) || 0;
-                        totalHours += hrs;
-                        entries.push({
-                            rowId: e['Row ID'],
-                            client: e.Client,
-                            task: e.Task,
-                            hours: hrs,
-                            location: e.Location
-                        });
-                    }
+                    // On Sundays/holidays, only entries that opted in count
+                    if (offDay && !isIncludeOff(e)) return;
+                    const hrs = parseFloat(e['Daily Hours']) || 0;
+                    totalHours += hrs;
+                    entries.push({
+                        rowId: e['Row ID'],
+                        client: e.Client,
+                        task: e.Task,
+                        hours: hrs,
+                        location: e.Location,
+                        description: e.Description || '',
+                        includeOff: isIncludeOff(e)
+                    });
                 }
             });
             return { totalHours, entries };
@@ -461,7 +472,9 @@
                 const isHol = isHolidayDate(dateStr);
                 const isLv = isLeaveDate(dateStr);
                 const isToday = i === 0;
-                const alloc = (isSun || isHol || isLv) ? { totalHours: 0, entries: [] } : getDayAllocation(dateStr);
+                // Leave days are always empty; otherwise getDayAllocation handles
+                // off-day inclusion per entry (so planned Sundays/holidays show hours)
+                const alloc = isLv ? { totalHours: 0, entries: [] } : getDayAllocation(dateStr);
 
                 days.push({
                     date: d,
@@ -472,7 +485,8 @@
                     isToday: isToday,
                     holidayName: isHol ? getHolidayName(dateStr) : '',
                     totalHours: alloc.totalHours,
-                    entries: alloc.entries
+                    entries: alloc.entries,
+                    plannedOnOff: (isSun || isHol) && alloc.totalHours > 0
                 });
             }
             return days;
@@ -495,9 +509,11 @@
             function summarize(daysList) {
                 let workingDaysCount = 0, plannedHours = 0;
                 daysList.forEach(d => {
+                    // Count every planned hour, including hours deliberately
+                    // planned on Sundays/holidays (off-day entries)
+                    plannedHours += d.totalHours;
                     if (!d.isSunday && !d.isHoliday && !d.isLeave) {
                         workingDaysCount++;
-                        plannedHours += d.totalHours;
                     }
                 });
                 const capacity = workingDaysCount * MAX_DAILY_HOURS;
@@ -658,6 +674,10 @@
             const dailyHours = parseFloat(document.getElementById('mp_hours').value);
             const locationEl = document.querySelector('input[name="mp_location"]:checked');
             const location = locationEl ? locationEl.value : '';
+            const descEl = document.getElementById('mp_desc');
+            const description = descEl ? descEl.value.trim() : '';
+            const offEl = document.getElementById('mp_includeoff');
+            const includeOffDays = offEl ? offEl.checked : false;
 
             const errors = [];
             if (!client) errors.push('Client is required');
@@ -667,6 +687,8 @@
             if (!location) errors.push('Location is required');
             if (isNaN(dailyHours) || dailyHours <= 0) errors.push('Daily hours must be greater than 0');
             if (dailyHours > MAX_DAILY_HOURS) errors.push(`Daily hours cannot exceed ${MAX_DAILY_HOURS}`);
+            if (description.length < 2) errors.push('Description is required (at least 2 characters)');
+            if (description.length > 100) errors.push('Description cannot exceed 100 characters');
 
             const todayStr = formatDate(getTodayIST());
             if (fromDate && fromDate < todayStr) errors.push('From Date cannot be in the past');
@@ -679,22 +701,24 @@
                 if (toDate > horizonStr) errors.push(`To Date cannot be more than ${MAX_WORKPLAN_DAYS} days from today`);
             }
 
-            return { errors, payload: { client, task, fromDate, toDate, dailyHours, location } };
+            return { errors, payload: { client, task, fromDate, toDate, dailyHours, location, description, includeOffDays } };
         }
 
-        function countSkippedDays(fromStr, toStr) {
-            let sundays = 0, hols = 0, leaves = 0, working = 0;
+        function countSkippedDays(fromStr, toStr, includeOff) {
+            let sundays = 0, hols = 0, leaves = 0, working = 0, offWorked = 0;
             let d = parseDateStr(fromStr);
             const end = parseDateStr(toStr);
             while (d <= end) {
                 const dStr = formatDate(d);
-                if (isSunday(d)) sundays++;
+                const off = isSunday(d) || isHolidayDate(dStr);
+                if (isLeaveDate(dStr)) leaves++;          // leave always skipped
+                else if (off && includeOff) { working++; offWorked++; }  // planned on off-day
+                else if (isSunday(d)) sundays++;
                 else if (isHolidayDate(dStr)) hols++;
-                else if (isLeaveDate(dStr)) leaves++;
                 else working++;
                 d.setDate(d.getDate() + 1);
             }
-            return { sundays, hols, leaves, working };
+            return { sundays, hols, leaves, working, offWorked };
         }
 
         async function handleSave() {
@@ -708,7 +732,7 @@
             }
             errBox.innerHTML = '';
 
-            const skipped = countSkippedDays(payload.fromDate, payload.toDate);
+            const skipped = countSkippedDays(payload.fromDate, payload.toDate, payload.includeOffDays);
             if (skipped.working === 0) {
                 errBox.innerHTML = '<div class="error-text">• No working days in the selected range (all are Sundays, holidays, or your approved leaves)</div>';
                 return;
@@ -724,7 +748,9 @@
                     fromDate: payload.fromDate,
                     toDate: payload.toDate,
                     dailyHours: payload.dailyHours,
-                    location: payload.location
+                    location: payload.location,
+                    description: payload.description,
+                    includeOffDays: payload.includeOffDays
                 };
 
                 if (editingEntry) {
@@ -741,13 +767,14 @@
 
                 closeModal();
 
-                // Compose skipped-days message
+                // Compose feedback message
                 let skipBits = [];
                 if (skipped.sundays) skipBits.push(`${skipped.sundays} Sunday${skipped.sundays>1?'s':''}`);
                 if (skipped.hols) skipBits.push(`${skipped.hols} holiday${skipped.hols>1?'s':''}`);
                 if (skipped.leaves) skipBits.push(`${skipped.leaves} leave day${skipped.leaves>1?'s':''}`);
                 const skipMsg = skipBits.length ? `. Skipped ${skipBits.join(', ')}.` : '.';
-                showToast(`${editingEntry ? 'Updated' : 'Added'}: plan covers ${skipped.working} working day${skipped.working>1?'s':''}${skipMsg}`, 'success');
+                const offMsg = skipped.offWorked ? ` (incl. ${skipped.offWorked} off-day${skipped.offWorked>1?'s':''} you chose to work)` : '';
+                showToast(`${editingEntry ? 'Updated' : 'Added'}: plan covers ${skipped.working} working day${skipped.working>1?'s':''}${offMsg}${skipMsg}`, 'success');
                 render();
             } catch (e) {
                 saveBtn.disabled = false;
@@ -911,12 +938,16 @@
         }
 
         function getCellClass(day) {
+            // A day that has planned hours (incl. deliberately-planned off-days)
+            // shows its allocation colour first.
+            if (day.totalHours > 0 && !day.isLeave) {
+                if (day.totalHours > MAX_DAILY_HOURS) return 'over';
+                if (day.totalHours >= MAX_DAILY_HOURS) return 'full';
+                return 'partial';
+            }
             if (day.isSunday) return 'sunday';
             if (day.isHoliday) return 'holiday';
             if (day.isLeave) return 'leave';
-            if (day.totalHours > MAX_DAILY_HOURS) return 'over';
-            if (day.totalHours >= MAX_DAILY_HOURS) return 'full';
-            if (day.totalHours > 0) return 'partial';
             return 'empty';
         }
 
@@ -952,7 +983,11 @@
                 let labelHours = '';
                 let labelClients = '';
 
-                if (d.isSunday) {
+                if (d.plannedOnOff) {
+                    // Sunday/holiday the user deliberately planned to work
+                    labelHours = `${d.totalHours}h`;
+                    labelClients = (d.isSunday ? 'Sun' : 'Holiday') + ' • planned';
+                } else if (d.isSunday) {
                     labelHours = '—';
                     labelClients = 'Sunday';
                 } else if (d.isHoliday) {
@@ -986,12 +1021,16 @@
         }
 
         function renderCellTooltip(d) {
-            if (d.isSunday) return `<div class="cell-tooltip">Sunday — Weekly Off</div>`;
-            if (d.isHoliday) return `<div class="cell-tooltip">${escapeHtml(d.holidayName)}</div>`;
+            if (!d.plannedOnOff && d.isSunday) return `<div class="cell-tooltip">Sunday — Weekly Off</div>`;
+            if (!d.plannedOnOff && d.isHoliday) return `<div class="cell-tooltip">${escapeHtml(d.holidayName)}</div>`;
             if (d.isLeave) return `<div class="cell-tooltip">Approved Leave</div>`;
             if (d.entries.length === 0) return `<div class="cell-tooltip">No plans yet for ${formatDateDisplay(d.date)}</div>`;
-            const lines = d.entries.map(e => `${escapeHtml(e.client)} — ${escapeHtml(e.task)} (${e.hours}h, ${escapeHtml(e.location)})`).join('<br>');
-            return `<div class="cell-tooltip"><strong>${formatDateDisplay(d.date)}</strong><br>${lines}<br><span style="opacity:0.7">Total: ${d.totalHours}h</span></div>`;
+            const offNote = d.plannedOnOff ? `<br><span style="opacity:0.7">${d.isSunday ? 'Sunday' : escapeHtml(d.holidayName || 'Holiday')} — planned on purpose</span>` : '';
+            const lines = d.entries.map(e => {
+                const desc = e.description ? ` — ${escapeHtml(e.description)}` : '';
+                return `${escapeHtml(e.client)} — ${escapeHtml(e.task)}${desc} (${e.hours}h, ${escapeHtml(e.location)})`;
+            }).join('<br>');
+            return `<div class="cell-tooltip"><strong>${formatDateDisplay(d.date)}</strong>${offNote}<br>${lines}<br><span style="opacity:0.7">Total: ${d.totalHours}h</span></div>`;
         }
 
         function renderCalendarLegend() {
@@ -1013,17 +1052,23 @@
             const items = days.map(d => {
                 const cls = getCellClass(d);
                 let detail = '';
-                if (d.isSunday) detail = 'Sunday — Weekly Off';
+                if (d.plannedOnOff) {
+                    const lbl = d.isSunday ? 'Sunday' : (d.holidayName || 'Holiday');
+                    detail = `<span class="text-amber-700">${escapeHtml(lbl)} — planned:</span><br>` +
+                             d.entries.map(e => `${escapeHtml(e.client)} — ${escapeHtml(e.task)}${e.description ? ' (' + escapeHtml(e.description) + ')' : ''} (${e.hours}h)`).join('<br>');
+                }
+                else if (d.isSunday) detail = 'Sunday — Weekly Off';
                 else if (d.isHoliday) detail = `Holiday: ${escapeHtml(d.holidayName)}`;
                 else if (d.isLeave) detail = 'Approved Leave';
                 else if (d.entries.length === 0) detail = '<span class="text-gray-400">No plans yet</span>';
-                else detail = d.entries.map(e => `${escapeHtml(e.client)} — ${escapeHtml(e.task)} (${e.hours}h)`).join('<br>');
+                else detail = d.entries.map(e => `${escapeHtml(e.client)} — ${escapeHtml(e.task)}${e.description ? ' (' + escapeHtml(e.description) + ')' : ''} (${e.hours}h)`).join('<br>');
                 const todayBadge = d.isToday ? ' <span class="text-xs px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 ml-1">Today</span>' : '';
+                const showDash = (d.isSunday || d.isHoliday || d.isLeave) && !d.plannedOnOff;
                 return `
                     <div class="flex items-start gap-3 py-2 border-b border-gray-100 last:border-0">
                         <div class="plan-cell ${cls}" style="min-width: 60px; min-height: 56px; max-width:60px;">
                             <div class="day-num">${d.date.getDate()}</div>
-                            <div class="day-hours">${(d.isSunday || d.isHoliday || d.isLeave) ? '—' : d.totalHours + 'h'}</div>
+                            <div class="day-hours">${showDash ? '—' : d.totalHours + 'h'}</div>
                         </div>
                         <div class="flex-1">
                             <p class="text-sm font-medium" style="color:#102a43">${formatDateDisplay(d.date)}${todayBadge}</p>
@@ -1054,6 +1099,8 @@
             const fromStr = formatDateDisplay(entry['From Date']);
             const toStr = formatDateDisplay(entry['To Date']);
             const rangeText = entry['From Date'] === entry['To Date'] ? fromStr : `${fromStr} → ${toStr}`;
+            const desc = entry.Description || '';
+            const includeOff = (entry['Include Off Days'] === 'Yes' || entry['Include Off Days'] === true);
             return `
                 <div class="entry-card ${started ? 'past' : ''} flex flex-col sm:flex-row sm:items-center gap-3">
                     <div class="flex-1 min-w-0">
@@ -1062,7 +1109,9 @@
                             <span class="text-gray-400">·</span>
                             <span class="text-sm" style="color:#243b53">${escapeHtml(entry.Task)}</span>
                             ${started ? '<span class="text-xs px-2 py-0.5 rounded bg-gray-200 text-gray-600">Started</span>' : ''}
+                            ${includeOff ? '<span class="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-800">Incl. Sun/holidays</span>' : ''}
                         </div>
+                        ${desc ? `<p class="text-xs text-gray-600 mt-1">📝 ${escapeHtml(desc)}</p>` : ''}
                         <div class="flex flex-wrap items-center gap-3 text-xs text-gray-500 mt-1">
                             <span>📅 ${rangeText}</span>
                             <span>⏱ ${entry['Daily Hours']} hrs/day</span>
@@ -1166,11 +1215,12 @@
 
         function getTeamCellClass(cell, dateInfo) {
             if (cell.isLeave) return 'leave';
-            if (dateInfo.isSunday) return 'sunday';
-            if (dateInfo.isHoliday) return 'holiday';
+            // Planned hours (incl. deliberately-planned off-days) show colour first
             if (cell.totalHours > MAX_DAILY_HOURS) return 'over';
             if (cell.totalHours >= MAX_DAILY_HOURS) return 'full';
             if (cell.totalHours > 0) return 'partial';
+            if (dateInfo.isSunday) return 'sunday';
+            if (dateInfo.isHoliday) return 'holiday';
             return 'empty';
         }
 
@@ -1196,8 +1246,10 @@
                 emp.days.forEach((cell, i) => {
                     const dateInfo = dates[i];
                     const cls = getTeamCellClass(cell, dateInfo);
-                    const displayHours = (dateInfo.isSunday || dateInfo.isHoliday) ? '' : (cell.isLeave ? 'L' : (cell.totalHours > 0 ? cell.totalHours : ''));
-                    const clickable = !(dateInfo.isSunday || dateInfo.isHoliday) && (cell.entries.length > 0 || cell.isLeave);
+                    const isOff = dateInfo.isSunday || dateInfo.isHoliday;
+                    // Show hours whenever planned (even on an off-day); else blank for off-days, 'L' for leave
+                    const displayHours = cell.isLeave ? 'L' : (cell.totalHours > 0 ? cell.totalHours : (isOff ? '' : ''));
+                    const clickable = cell.entries.length > 0 || cell.isLeave;
                     const onClickAttr = clickable ? `onclick="showCellDetail('${escapeHtml(emp.name)}', '${dateInfo.dateStr}', '${dateInfo.dayName}', '${dateInfo.dayNum}', '${dateInfo.monthShort}', ${JSON.stringify(cell).replace(/"/g, '&quot;')})"` : '';
                     html += `<td><div class="team-cell ${cls}" ${onClickAttr}>${displayHours}</div></td>`;
                 });
@@ -1220,6 +1272,7 @@
                     <div class="border-b border-gray-100 last:border-0 py-2">
                         <p class="font-medium" style="color:#102a43">${escapeHtml(e.client)}</p>
                         <p class="text-xs text-gray-600">${escapeHtml(e.task)} · ${e.hours} hrs · ${escapeHtml(e.location)}</p>
+                        ${e.description ? `<p class="text-xs text-gray-500 mt-0.5">📝 ${escapeHtml(e.description)}</p>` : ''}
                     </div>
                 `).join('');
                 body += `<div class="pt-2 mt-2 border-t text-sm font-semibold" style="color:#102a43">Total: ${cell.totalHours} hrs</div>`;
@@ -1258,9 +1311,9 @@
                 const row = [emp.name];
                 emp.days.forEach((cell, i) => {
                     const d = dates[i];
-                    if (d.isSunday || d.isHoliday) row.push('');
-                    else if (cell.isLeave) row.push('LEAVE');
-                    else row.push(cell.totalHours > 0 ? cell.totalHours : '');
+                    if (cell.isLeave) row.push('LEAVE');
+                    else if (cell.totalHours > 0) row.push(cell.totalHours);  // includes planned off-days
+                    else row.push('');  // empty, Sunday or holiday with no plan
                 });
                 row.push(emp.totalPlanned);
                 row.push(emp.plannedDays);
@@ -1298,6 +1351,8 @@
             const toVal = e['To Date'] ? formatDate(e['To Date']) : formatDate(getTodayIST());
             const hoursVal = e['Daily Hours'] || '';
             const locVal = e.Location || '';
+            const descVal = e.Description || '';
+            const includeOffVal = (e['Include Off Days'] === 'Yes' || e['Include Off Days'] === true);
 
             const today = getTodayIST();
             const todayStr = formatDate(today);
@@ -1350,6 +1405,20 @@
                                     </label>
                                 `).join('')}
                             </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1" style="color:#243b53">Description * <span class="text-xs text-gray-400">(short note, e.g. "GST Q1", "ROC filing")</span></label>
+                            <input type="text" id="mp_desc" value="${escapeHtml(descVal)}" maxlength="100" placeholder="What is this work?" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" oninput="document.getElementById('mp_desc_count').textContent = this.value.length + '/100'">
+                            <div class="text-right text-xs text-gray-400 mt-1"><span id="mp_desc_count">${descVal.length}/100</span></div>
+                        </div>
+                        <div>
+                            <label class="flex items-start gap-2 px-3 py-2 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                                <input type="checkbox" id="mp_includeoff" ${includeOffVal ? 'checked' : ''} class="mt-0.5">
+                                <span class="text-sm">
+                                    <span class="font-medium" style="color:#243b53">Include Sundays &amp; holidays</span>
+                                    <span class="block text-xs text-gray-500 mt-0.5">Tick this only if you'll actually work the Sundays/holidays in this date range. Off by default — your approved leaves are always excluded.</span>
+                                </span>
+                            </label>
                         </div>
                         <div id="mp_errors"></div>
                     </div>
