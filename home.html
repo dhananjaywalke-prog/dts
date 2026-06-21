@@ -289,6 +289,15 @@
                                 <p class="text-gray-500 text-sm">${taskCounts.overdue > 0 ? `${taskCounts.overdue} overdue` : taskCounts.pending > 0 ? `${taskCounts.pending} pending` : 'Manage assignments'}</p>
                             </a>
 
+                            <!-- Retirement Corpus Discovery Module -->
+                            <a href="retirement.html" class="module-card bg-white rounded-xl p-6 cursor-pointer block">
+                                <div class="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style="background:#f0f4f8">
+                                    <svg class="w-6 h-6" style="color:#102a43" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                </div>
+                                <h2 class="text-lg font-semibold mb-1" style="color:#102a43">Retirement Planner</h2>
+                                <p class="text-gray-500 text-sm">Discover your retirement corpus</p>
+                            </a>
+
                             ${isApprover ? `
                             <!-- Reports Module (Approvers only) -->
                             <a href="dashboard.html" class="module-card bg-white rounded-xl p-6 cursor-pointer block">

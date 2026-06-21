@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TimeWise | Retirement Corpus Discovery</title>
+    <!-- ============================================
+    TimeWise - Retirement Corpus Discovery Tool
+    Version: 1.0
+    A simple, standalone calculator. Takes a few inputs
+    and estimates the retirement corpus you need plus the
+    monthly investment required to get there.
+    No backend required - all math runs in the browser.
+    ============================================ -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        navy: { 50: '#f0f4f8', 100: '#d9e2ec', 200: '#bcccdc', 700: '#334e68', 800: '#243b53', 900: '#102a43' },
+                        gold: { 50: '#fdf9ef', 100: '#faf0d7', 400: '#e3b04a', 500: '#d4a853', 600: '#c4882c' }
+                    },
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', system-ui, sans-serif; font-size: 14px; }
+        .header-shadow { box-shadow: 0 1px 3px rgba(16,42,67,0.08); }
+        .btn-primary { background: linear-gradient(135deg, #102a43 0%, #243b53 100%); color: white; }
+        .btn-primary:hover { background: linear-gradient(135deg, #243b53 0%, #334e68 100%); }
+        input:focus { outline: none; border-color: #d4a853 !important; box-shadow: 0 0 0 3px rgba(212,168,83,0.15) !important; }
+        .field-error { border-color: #ef4444 !important; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+    <!-- Header -->
+    <header class="bg-white header-shadow">
+        <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-4">
+                    <img src="https://drpca.com/assets/drpca-logo.png" alt="DRP & Co." class="h-12" onerror="this.outerHTML='<span class=\'font-bold text-lg\' style=\'color:#102a43\'>drp&co.</span>'">
+                    <div class="border-l border-gray-200 pl-4"><span class="font-semibold" style="color:#102a43">Retirement Corpus Discovery</span></div>
+                </div>
+                <a href="home.html" class="text-sm text-gray-500 hover:text-gray-700 font-medium">← Home</a>
+            </div>
+        </div>
+    </header>
+
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+        <!-- Intro Card -->
+        <div class="bg-white rounded-xl border border-gray-100 p-6 mb-6">
+            <h1 class="text-2xl font-bold mb-1" style="color:#102a43">How much do you need to retire?</h1>
+            <p class="text-gray-500 text-sm">Answer a few questions and we'll estimate the corpus you need at retirement and the monthly investment to reach it.</p>
+        </div>
+
+        <!-- Input Form -->
+        <div class="bg-white rounded-xl border border-gray-100 p-6 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+                <div>
+                    <label class="block text-sm font-medium mb-2" style="color:#243b53">Current age (years)</label>
+                    <input type="number" id="currentAge" min="1" max="100" placeholder="e.g. 30" class="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm" />
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-2" style="color:#243b53">Retirement age (years)</label>
+                    <input type="number" id="retirementAge" min="1" max="100" placeholder="e.g. 60" class="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm" />
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-2" style="color:#243b53">Life expectancy (years)</label>
+                    <input type="number" id="lifeExpectancy" min="1" max="120" placeholder="e.g. 85" class="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm" />
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-2" style="color:#243b53">Current monthly expenses (₹)</label>
+                    <input type="number" id="monthlyExpenses" min="0" placeholder="e.g. 50000" class="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm" />
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-2" style="color:#243b53">Expected inflation (% per year)</label>
+                    <input type="number" id="inflation" min="0" max="100" step="0.1" placeholder="e.g. 6" class="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm" />
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-2" style="color:#243b53">Expected long-term return (% per year)</label>
+                    <input type="number" id="returnRate" min="0" max="100" step="0.1" placeholder="e.g. 11" class="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm" />
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-2" style="color:#243b53">Fund for life events (₹)</label>
+                    <input type="number" id="lifeEvents" min="0" placeholder="education, marriage, renovation…" class="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm" />
+                    <p class="text-xs text-gray-400 mt-1">Total lump sum for children's education, marriage, house renovation, etc.</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-2" style="color:#243b53">Current investment corpus (₹)</label>
+                    <input type="number" id="currentCorpus" min="0" placeholder="e.g. 1000000" class="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm" />
+                </div>
+            </div>
+
+            <div id="errorBox" class="hidden mt-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-4 py-3"></div>
+
+            <div class="flex flex-wrap gap-3 mt-6">
+                <button onclick="calculate()" class="btn-primary px-6 py-3 rounded-lg font-semibold text-sm">Calculate Corpus</button>
+                <button onclick="resetForm()" class="px-6 py-3 rounded-lg font-semibold text-sm border border-gray-200 text-gray-600 hover:bg-gray-50">Reset</button>
+            </div>
+        </div>
+
+        <!-- Results -->
+        <div id="results" class="hidden"></div>
+
+        <!-- Footer -->
+        <div class="text-center text-gray-400 text-sm mt-8 py-4">
+            Estimates are indicative and assume constant inflation/return. Consult an advisor for personalised planning.<br>
+            Retirement Corpus Discovery v1.0 • © 2026 DRP & Co. LLP
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // HELPERS
+        // ============================================
+        function num(id) {
+            const v = parseFloat(document.getElementById(id).value);
+            return isNaN(v) ? null : v;
+        }
+
+        function formatINR(amount) {
+            // Indian numbering format, rounded to nearest rupee
+            return '₹' + Math.round(amount).toLocaleString('en-IN');
+        }
+
+        function abbrINR(amount) {
+            // Friendly short form in lakh / crore
+            const a = Math.abs(amount);
+            if (a >= 1e7) return '₹' + (amount / 1e7).toFixed(2) + ' Cr';
+            if (a >= 1e5) return '₹' + (amount / 1e5).toFixed(2) + ' L';
+            return formatINR(amount);
+        }
+
+        function showError(msg) {
+            const box = document.getElementById('errorBox');
+            box.textContent = msg;
+            box.classList.remove('hidden');
+            document.getElementById('results').classList.add('hidden');
+        }
+
+        // ============================================
+        // CORE CALCULATION
+        // ============================================
+        function calculate() {
+            document.getElementById('errorBox').classList.add('hidden');
+
+            const currentAge      = num('currentAge');
+            const retirementAge   = num('retirementAge');
+            const lifeExpectancy  = num('lifeExpectancy');
+            const monthlyExpenses = num('monthlyExpenses');
+            const inflation       = num('inflation');
+            const returnRate      = num('returnRate');
+            const lifeEvents      = num('lifeEvents') || 0;
+            const currentCorpus   = num('currentCorpus') || 0;
+
+            // --- Validation ---
+            if (currentAge === null || retirementAge === null || lifeExpectancy === null ||
+                monthlyExpenses === null || inflation === null || returnRate === null) {
+                showError('Please fill in all the required fields (life-events fund and current corpus may be left blank if zero).');
+                return;
+            }
+            if (retirementAge <= currentAge) {
+                showError('Retirement age must be greater than your current age.');
+                return;
+            }
+            if (lifeExpectancy <= retirementAge) {
+                showError('Life expectancy must be greater than your retirement age.');
+                return;
+            }
+
+            const yearsToRetire    = retirementAge - currentAge;     // accumulation phase
+            const yearsInRetirement = lifeExpectancy - retirementAge; // distribution phase
+
+            const i = inflation / 100;   // inflation rate (decimal)
+            const r = returnRate / 100;  // expected return (decimal)
+
+            // 1) Monthly expense at the moment of retirement (today's expense grown by inflation)
+            const monthlyExpenseAtRetirement = monthlyExpenses * Math.pow(1 + i, yearsToRetire);
+            const annualExpenseAtRetirement  = monthlyExpenseAtRetirement * 12;
+
+            // 2) Corpus required at retirement to fund inflation-adjusted expenses
+            //    for the whole retirement period. Use the inflation-adjusted ("real")
+            //    return so that withdrawals keep pace with rising prices.
+            //    Annuity-due (expenses drawn at the start of each year).
+            const realRate = (1 + r) / (1 + i) - 1;
+            let corpusForExpenses;
+            if (Math.abs(realRate) < 1e-9) {
+                corpusForExpenses = annualExpenseAtRetirement * yearsInRetirement;
+            } else {
+                const pvFactor = (1 - Math.pow(1 + realRate, -yearsInRetirement)) / realRate;
+                corpusForExpenses = annualExpenseAtRetirement * pvFactor * (1 + realRate); // annuity due
+            }
+
+            // 3) Total corpus needed at retirement = expenses corpus + life-events fund
+            const totalCorpusNeeded = corpusForExpenses + lifeEvents;
+
+            // 4) Where your current corpus grows to by retirement
+            const futureValueOfCurrent = currentCorpus * Math.pow(1 + r, yearsToRetire);
+
+            // 5) The gap you still need to build
+            const gap = Math.max(0, totalCorpusNeeded - futureValueOfCurrent);
+
+            // 6) Monthly investment (SIP) required to fill the gap, compounded monthly
+            let monthlySIP = 0;
+            if (gap > 0) {
+                const months = yearsToRetire * 12;
+                const monthlyRate = Math.pow(1 + r, 1 / 12) - 1; // effective monthly rate
+                if (monthlyRate < 1e-9) {
+                    monthlySIP = gap / months;
+                } else {
+                    // FV of annuity-due = SIP * [((1+m)^n - 1)/m] * (1+m)
+                    const fvFactor = ((Math.pow(1 + monthlyRate, months) - 1) / monthlyRate) * (1 + monthlyRate);
+                    monthlySIP = gap / fvFactor;
+                }
+            }
+
+            renderResults({
+                yearsToRetire, yearsInRetirement,
+                monthlyExpenseAtRetirement, annualExpenseAtRetirement,
+                corpusForExpenses, lifeEvents, totalCorpusNeeded,
+                futureValueOfCurrent, gap, monthlySIP
+            });
+        }
+
+        // ============================================
+        // RESULTS UI
+        // ============================================
+        function renderResults(d) {
+            const onTrack = d.gap <= 0;
+            const html = `
+                <div class="bg-white rounded-xl border border-gray-100 p-6 mb-6">
+                    <h2 class="text-lg font-semibold mb-4" style="color:#102a43">Your Retirement Snapshot</h2>
+
+                    <!-- Headline -->
+                    <div class="rounded-xl p-6 mb-6 text-center" style="background:#f0f4f8">
+                        <p class="text-sm text-gray-500 mb-1">Corpus required at retirement</p>
+                        <p class="text-3xl font-bold" style="color:#102a43">${abbrINR(d.totalCorpusNeeded)}</p>
+                        <p class="text-xs text-gray-400 mt-1">${formatINR(d.totalCorpusNeeded)}</p>
+                    </div>
+
+                    <!-- Action -->
+                    <div class="rounded-xl p-6 mb-6 text-center border ${onTrack ? 'border-green-200 bg-green-50' : 'border-gold-100 bg-gold-50'}">
+                        ${onTrack
+                            ? `<p class="text-base font-semibold text-green-700">🎉 You're on track!</p>
+                               <p class="text-sm text-green-600 mt-1">Your current corpus is projected to grow to ${abbrINR(d.futureValueOfCurrent)}, which already covers your needs.</p>`
+                            : `<p class="text-sm text-gray-500 mb-1">Invest this every month to reach your goal</p>
+                               <p class="text-3xl font-bold" style="color:#c4882c">${formatINR(d.monthlySIP)}<span class="text-base font-medium text-gray-500">/month</span></p>
+                               <p class="text-xs text-gray-400 mt-1">for the next ${d.yearsToRetire} years</p>`
+                        }
+                    </div>
+
+                    <!-- Breakdown -->
+                    <div class="divide-y divide-gray-100 text-sm">
+                        ${row('Years until retirement', d.yearsToRetire + ' years')}
+                        ${row('Years in retirement', d.yearsInRetirement + ' years')}
+                        ${row('Monthly expenses at retirement', formatINR(d.monthlyExpenseAtRetirement), '(present expenses adjusted for inflation)')}
+                        ${row('Annual expenses at retirement', formatINR(d.annualExpenseAtRetirement))}
+                        ${row('Corpus needed for living expenses', formatINR(d.corpusForExpenses))}
+                        ${row('Fund for life events', formatINR(d.lifeEvents))}
+                        ${row('Total corpus needed at retirement', formatINR(d.totalCorpusNeeded), null, true)}
+                        ${row('Projected value of current corpus', formatINR(d.futureValueOfCurrent), '(grown until retirement)')}
+                        ${row('Shortfall to cover', formatINR(d.gap), null, true)}
+                    </div>
+                </div>
+            `;
+            const el = document.getElementById('results');
+            el.innerHTML = html;
+            el.classList.remove('hidden');
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function row(label, value, note, bold) {
+            return `
+                <div class="flex justify-between items-center py-3">
+                    <span class="text-gray-600">${label}${note ? `<span class="block text-xs text-gray-400">${note}</span>` : ''}</span>
+                    <span class="${bold ? 'font-bold' : 'font-medium'}" style="color:#102a43">${value}</span>
+                </div>
+            `;
+        }
+
+        function resetForm() {
+            ['currentAge','retirementAge','lifeExpectancy','monthlyExpenses','inflation','returnRate','lifeEvents','currentCorpus']
+                .forEach(id => document.getElementById(id).value = '');
+            document.getElementById('errorBox').classList.add('hidden');
+            document.getElementById('results').classList.add('hidden');
+        }
+
+        // Allow Enter key to calculate
+        document.querySelectorAll('input').forEach(inp => {
+            inp.addEventListener('keypress', e => { if (e.key === 'Enter') calculate(); });
+        });
+    </script>
+</body>
+</html>
