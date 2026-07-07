@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TimeWise EMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --navy:#102a43; --navy8:#243b53; --ink:#243b53; --mut:#627d98; --fog:#829ab1; --line:#e3e9ef; --line2:#eef2f6; --bg:#f7f9fb; --gold:#d4a853; --goldd:#8f6b1e; --goldbg:#fdf6e6; --goldline:#ecd9a8; --ok:#1f7a4d; --okbg:#e6f4ea; --bad:#b3261e; --badbg:#fdecec; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:'Inter',system-ui,sans-serif; font-size:14px; color:var(--ink); background:var(--bg); }
+  #shell { display:flex; min-height:100vh; }
+  /* sidebar */
+  #side { width:216px; background:var(--navy); color:#fff; display:flex; flex-direction:column; position:sticky; top:0; height:100vh; flex:none; }
+  #side .brand { padding:18px; display:flex; align-items:center; gap:10px; border-bottom:1px solid rgba(255,255,255,.08); }
+  #side .brand img { height:26px; filter:brightness(0) invert(1); opacity:.95; display:block; }
+  #side .brand .bar { height:18px; width:1px; background:rgba(255,255,255,.25); }
+  #side .brand b { font-size:14px; font-weight:700; }
+  #nav { padding:12px 10px; display:flex; flex-direction:column; gap:2px; }
+  .nitem { display:flex; align-items:center; gap:10px; padding:9px 12px; border:0; border-left:3px solid transparent; border-radius:0 8px 8px 0; background:none; color:rgba(255,255,255,.72); font:500 13px Inter; cursor:pointer; text-align:left; width:100%; }
+  .nitem:hover { color:#fff; background:rgba(255,255,255,.05); }
+  .nitem.on { background:rgba(212,168,83,.16); border-left-color:var(--gold); color:#fff; font-weight:600; }
+  .nitem .bdg { margin-left:auto; background:var(--gold); color:var(--navy); font:700 10px Inter; padding:1px 7px; border-radius:999px; }
+  .nitem .dot { margin-left:auto; width:8px; height:8px; border-radius:50%; background:#e66a5b; }
+  #side .foot { margin-top:auto; padding:14px 16px; border-top:1px solid rgba(255,255,255,.08); display:flex; align-items:center; gap:10px; }
+  #side .foot .av { width:32px; height:32px; border-radius:50%; background:var(--gold); color:var(--navy); display:flex; align-items:center; justify-content:center; font:700 12px Inter; flex:none; }
+  #side .foot button { background:none; border:0; color:rgba(255,255,255,.45); cursor:pointer; font-size:15px; }
+  /* topbar + main */
+  #main { flex:1; min-width:0; display:flex; flex-direction:column; }
+  #top { height:56px; background:#fff; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:14px; padding:0 24px; position:sticky; top:0; z-index:40; }
+  #top h1 { font:700 15px Inter; color:var(--navy); margin:0; }
+  #top .date { font:500 12px Inter; color:var(--mut); }
+  #view { flex:1; padding:20px 24px; }
+  /* primitives */
+  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px 18px; }
+  .h { font:700 13px Inter; color:var(--navy); }
+  .sub { font:500 11px Inter; color:var(--mut); }
+  .btn { background:var(--navy); color:#fff; border:0; border-radius:8px; font:600 12px Inter; padding:8px 16px; cursor:pointer; }
+  .btn:hover { background:var(--navy8); }
+  .btn[disabled] { opacity:.55; cursor:default; }
+  .btn2 { background:#fff; color:var(--navy); border:1px solid #d9e2ec; border-radius:8px; font:600 12px Inter; padding:7px 12px; cursor:pointer; }
+  .btn2:hover { border-color:var(--gold); }
+  .pill { font:600 10px Inter; padding:1px 8px; border-radius:999px; }
+  input, select, textarea { font:500 12.5px Inter; color:var(--ink); border:1px solid #d9e2ec; border-radius:8px; padding:8px 10px; background:#fff; width:100%; }
+  input:focus, select:focus, textarea:focus { outline:none; border-color:var(--gold); box-shadow:0 0 0 3px rgba(212,168,83,.15); }
+  .grid { display:grid; gap:12px; }
+  .skel { background:linear-gradient(90deg,#eef2f6 25%,#f7f9fb 50%,#eef2f6 75%); background-size:200% 100%; animation:sk 1.2s infinite; border-radius:8px; }
+  @keyframes sk { from{background-position:200% 0} to{background-position:-200% 0} }
+  .toast { position:fixed; bottom:20px; right:20px; background:var(--navy); color:#fff; font:500 12.5px Inter; padding:10px 16px; border-radius:10px; box-shadow:0 8px 30px rgba(16,42,67,.35); z-index:99; }
+  .toast.err { background:var(--bad); }
+  /* excel-style table */
+  .xt { font:500 12.5px Inter; }
+  .xt .xh { display:grid; background:#f0f4f8; border-bottom:1px solid #d9e2ec; font:600 11px Inter; color:#486581; text-transform:uppercase; letter-spacing:.04em; position:sticky; top:56px; z-index:30; }
+  .xt .xh > div { padding:8px 10px; cursor:pointer; user-select:none; white-space:nowrap; }
+  .xt .xh > div:hover { color:var(--navy); }
+  .xt .xr { display:grid; border-bottom:1px solid var(--line2); height:32px; align-items:center; }
+  .xt .xr:nth-child(even) { background:#fbfcfe; }
+  .xt .xr:hover { background:var(--goldbg); }
+  .xt .xr > div { padding:0 10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .num { text-align:right; font-weight:600; }
+  @media (max-width: 900px) { #side{width:64px} #side .brand b,#side .brand .bar,#side .foot div,#nav .lbl{display:none} #view{padding:12px} }
+</style>
+</head>
+<body>
+<div id="shell">
+  <div id="side">
+    <div class="brand"><img src="https://drpca.com/assets/drpca-logo.png" alt="DRP" onerror="this.outerHTML='<b style=color:#d4a853>drp&amp;co.</b>'"><div class="bar"></div><b>TimeWise</b></div>
+    <div id="nav"></div>
+    <div class="foot"><div class="av" id="uAv">··</div><div style="flex:1;min-width:0"><div id="uName" style="font:600 12px Inter;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">…</div><div id="uRole" style="font:500 10px Inter;color:rgba(255,255,255,.45)"></div></div><button title="Sign out" onclick="APP.signout()">⎋</button></div>
+  </div>
+  <div id="main">
+    <div id="top"><h1 id="vTitle">…</h1><div class="date" id="vDate"></div><div style="margin-left:auto;display:flex;gap:10px;align-items:center"><button class="btn" onclick="APP.quickLog()">+ Log time</button></div></div>
+    <div id="view"><div class="skel" style="height:200px;margin-top:10px"></div></div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="api.js"></script>
+<script>
+'use strict';
+const APP = (() => {
+  const S = { me:null, isApprover:false, isAdmin:false, view:null, cache:{}, masters:null, myday:null };
+  const $ = id => document.getElementById(id);
+  const h = s => String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const fmt1 = n => (Math.round((+n||0)*100)/100).toLocaleString('en-IN');
+  const IST_DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  function toast(msg, err) {
+    const t = document.createElement('div');
+    t.className = 'toast' + (err?' err':''); t.textContent = msg;
+    document.body.appendChild(t); setTimeout(()=>t.remove(), err?5000:2600);
+  }
+
+  // ---------------- boot ----------------
+  async function boot() {
+    const email = await EMS2.getAuthedEmail();
+    if (!email) { location.replace('home.html'); return; }
+    try {
+      const d = await EMS2.callAPI('myday', {});   // rpc api_myday
+      S.myday = d; S.me = d.employee; S.isApprover = !!d.isApprover;
+      S.isAdmin = (d.employee && d.employee['Role']) === 'admin';
+      $('uName').textContent = S.me['Employee Name'] || email;
+      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'');
+      $('uAv').textContent = (S.me['Employee Name']||email).split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+      buildNav();
+      show(S.isApprover ? 'dashboard' : 'myday');
+    } catch (e) {
+      $('view').innerHTML = '<div class="card" style="margin-top:20px"><b>Could not load.</b><div class="sub" style="margin-top:6px">'+h(e.message)+'</div><button class="btn" style="margin-top:12px" onclick="location.reload()">Retry</button></div>';
+    }
+  }
+
+  // ---------------- nav ----------------
+  const VIEWS = () => [
+    S.isApprover && { id:'dashboard', icon:'📊', label:'Dashboard' },
+    S.isApprover && { id:'approvals', icon:'✅', label:'Approvals', badge:()=>S.cache.dashboard?( (S.cache.dashboard.approvals.leaves.length + S.cache.dashboard.approvals.expenses.length) || null):null },
+    S.isApprover && { id:'review', icon:'🔎', label:'Review' },
+    { id:'myday', icon:'☀️', label:'My Day', dot:()=>missingYday() },
+    { id:'timesheet', icon:'🗓', label:'Timesheet' },
+    { id:'workplan', icon:'📋', label:'Work Plan' },
+    { id:'leave', icon:'🌴', label:'Leave' },
+    { id:'expenses', icon:'💳', label:'Expenses' },
+    S.isAdmin && { id:'admin', icon:'⚙️', label:'Admin', href:'admin.html' },
+    { id:'legacy', icon:'⋯', label:'Classic pages', href:'home.html' }
+  ].filter(Boolean);
+
+  function missingYday() {
+    const w = S.myday && S.myday.week; if (!w || w.length < 2) return false;
+    const y = w[w.length-2];
+    return !y.isSunday && !y.isHoliday && (+y.hours||0) === 0;
+  }
+
+  function buildNav() {
+    $('nav').innerHTML = VIEWS().map(v => v.href
+      ? `<a class="nitem" style="text-decoration:none" href="${v.href}"><span>${v.icon}</span><span class="lbl">${v.label}</span></a>`
+      : `<button class="nitem${S.view===v.id?' on':''}" onclick="APP.show('${v.id}')"><span>${v.icon}</span><span class="lbl">${v.label}</span>${v.badge&&v.badge()?`<span class="bdg">${v.badge()}</span>`:''}${v.dot&&v.dot()?'<span class="dot"></span>':''}</button>`
+    ).join('');
+  }
+
+  const TITLES = { myday:'My Day', dashboard:'Dashboard', approvals:'Approvals', review:'Review', timesheet:'Timesheet', workplan:'Work Plan', leave:'Leave', expenses:'Expenses' };
+
+  async function show(id) {
+    S.view = id; buildNav();
+    $('vTitle').textContent = TITLES[id] || id;
+    $('vDate').textContent = new Date().toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+    $('view').innerHTML = '<div class="grid" style="grid-template-columns:2fr 1fr;margin-top:4px"><div class="skel" style="height:180px"></div><div class="skel" style="height:180px"></div></div>';
+    try { await RENDER[id](); } catch (e) { $('view').innerHTML = '<div class="card"><b>Error:</b> '+h(e.message)+' <button class="btn2" onclick="APP.show(\''+id+'\')">Retry</button></div>'; }
+  }
+
+  // masters (assignments etc.) cached for quick entry
+  async function masters(force) {
+    if (S.masters && !force) return S.masters;
+    S.masters = await EMS2.callAPI('initTimesheet', {});
+    return S.masters;
+  }
+
+  // ---------------- MY DAY ----------------
+  async function rMyday() {
+    const d = S.myday = await EMS2.callAPI('myday', {});
+    const t = d.today, wk = d.week || [];
+    const planned = (t.planned||[]).filter(p=>!p.logged);
+    const pct = Math.min(100, Math.round(100*(+t.loggedTotal||0)/6));
+    $('view').innerHTML = `
+    <div class="grid" style="grid-template-columns:1.4fr 1fr">
+      <div class="card">
+        <div style="display:flex;align-items:baseline;gap:10px"><span class="h">Today</span>
+          <span class="sub">${fmt1(t.loggedTotal)}h logged of 6h${t.loggedTotal<6?' · '+fmt1(6-t.loggedTotal)+'h to go':''}</span></div>
+        <div style="margin-top:10px;height:10px;background:var(--line2);border-radius:99px;overflow:hidden"><div style="width:${pct}%;height:100%;background:${t.loggedTotal>=6?'var(--ok)':'var(--gold)'}"></div></div>
+        <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
+          ${(t.entries||[]).map(e=>`<div style="display:flex;align-items:center;gap:10px;font:500 12px Inter">
+            <span style="width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none"></span>
+            <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h(e.Client)} — ${h(e.Task)} · <b>${fmt1(e.Hours)}h</b>${e.Location?' · '+h(e.Location):''}</span></div>`).join('') || '<div class="sub">Nothing logged yet today.</div>'}
+          ${planned.map(p=>`<div style="display:flex;align-items:center;gap:10px;font:500 12px Inter;color:var(--goldd);background:var(--goldbg);border:1px dashed var(--goldline);border-radius:8px;padding:7px 10px">
+            ⚠️ Planned, not logged: ${h(p.client)} — ${h(p.task)} · ${fmt1(p.hours)}h
+            <button class="btn" style="margin-left:auto;padding:4px 10px;font-size:11px" onclick='APP.logPlan(${JSON.stringify(p).replace(/'/g,"&#39;")})'>Log it</button></div>`).join('')}
+        </div>
+      </div>
+      <div class="card"><div class="h" style="margin-bottom:10px">Quick entry</div><div id="qe"></div></div>
+      <div class="card">
+        <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><span class="h">Last 7 days</span><span class="sub">ending today · 6h standard day</span>
+          <span style="margin-left:auto" class="sub"><b style="color:var(--ok)">${fmt1(wk.reduce((s,x)=>s+(+x.hours||0),0))}h</b> logged</span></div>
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px">
+          ${wk.map(x=>{
+            const off = x.isSunday || x.isHoliday;
+            const bg = x.isToday ? 'var(--goldbg);border:1px solid var(--goldline)' : off ? 'var(--line2)' : (+x.hours>=6 ? 'var(--okbg)' : +x.hours>0 ? 'var(--badbg)' : '#f1f5f9');
+            const col = x.isToday ? 'var(--goldd)' : off ? 'var(--fog)' : +x.hours>=6 ? 'var(--ok)' : +x.hours>0 ? 'var(--bad)' : 'transparent';
+            return `<div style="text-align:center"><div style="height:52px;background:${bg};border-radius:8px;display:flex;align-items:center;justify-content:center;font:700 13px Inter;color:${col}">${off? '🏖' : (+x.hours? fmt1(x.hours):'')}</div><div style="font:500 10px Inter;color:${x.isToday?'var(--navy)':'var(--fog)'};margin-top:4px">${x.dayName} ${x.dayNum}${x.isToday?' · today':''}</div></div>`;
+          }).join('')}
+        </div>
+      </div>
+      <div class="card">
+        <div class="h" style="margin-bottom:10px">My month</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+          <div><div style="font:800 20px Inter;color:var(--navy)">${fmt1(d.month.hours)}</div><div class="sub">hours logged</div></div>
+          <div><div style="font:800 20px Inter;color:var(--ok)">${fmt1(d.month.billablePct)}%</div><div class="sub">billable</div></div>
+          <div><div style="font:800 20px Inter;color:var(--goldd)">${fmt1(d.plBalance)}</div><div class="sub">PL balance</div></div>
+        </div>
+        <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line2);display:flex;flex-direction:column;gap:6px;font:500 12px Inter">
+          ${(d.pendings.leaves||[]).map(l=>`<div>🌴 ${h(l['Leave Type'])} ${h(l['From Date'])} → ${h(l['To Date'])} — <b style="color:${l.Status==='Approved'?'var(--ok)':'var(--goldd)'}">${h(l.Status)}</b></div>`).join('') || '<div class="sub">No upcoming leaves.</div>'}
+        </div>
+      </div>
+    </div>`;
+    renderQuickEntry('qe');
+    buildNav();
+  }
+
+  // quick entry (shared by My Day and modal)
+  async function renderQuickEntry(mountId, prefill) {
+    const m = await masters();
+    const asg = m.assignments || [];
+    const clients = [...new Set(asg.map(a=>a['Client Name']))].sort();
+    const lastLoc = localStorage.getItem('ems2_lastloc') || '';
+    const el = $(mountId);
+    el.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <select id="qe_loc"><option value="">📍 Location…</option>${['Office','Client Place','WFH','Travelling'].map(l=>`<option ${l===(prefill&&prefill.location||lastLoc)?'selected':''}>${l}</option>`).join('')}</select>
+        <select id="qe_client"><option value="">Client…</option>${clients.map(c=>`<option ${prefill&&prefill.client===c?'selected':''}>${h(c)}</option>`).join('')}</select>
+        <select id="qe_task"><option value="">Task…</option></select>
+        <input id="qe_hours" type="number" step="0.5" min="0.5" max="24" placeholder="Hours" value="${prefill&&prefill.hours||''}">
+        <textarea id="qe_desc" rows="2" placeholder="What did you work on?" style="grid-column:1/-1"></textarea>
+      </div>
+      <div style="margin-top:10px;display:flex;align-items:center;gap:10px">
+        <button class="btn" id="qe_add">Add entry</button>
+        <button class="btn2" id="qe_copy">↺ Copy yesterday</button>
+        <span id="qe_st" class="sub"></span>
+      </div>`;
+    const taskSel = $('qe_task');
+    function fillTasks() {
+      const c = $('qe_client').value;
+      const tasks = [...new Set(asg.filter(a=>a['Client Name']===c).map(a=>a['Task Assigned']))].sort();
+      taskSel.innerHTML = '<option value="">Task…</option>' + tasks.map(t=>`<option ${prefill&&prefill.task===t?'selected':''}>${h(t)}</option>`).join('');
+    }
+    $('qe_client').onchange = fillTasks; if (prefill&&prefill.client || clients.length) fillTasks();
+    $('qe_copy').onclick = async () => {
+      const y = (m.timesheets||[]).filter(e=>!e.Auto).sort((a,b)=>b.Date<a.Date?-1:1);
+      const last = y.find(e=>e.Date < (S.myday.today.date));
+      if (!last) return toast('No earlier entry to copy', true);
+      $('qe_loc').value = last.Location||lastLoc; $('qe_client').value = last.Client; fillTasks();
+      $('qe_task').value = last.Task; $('qe_hours').value = last.Hours; $('qe_desc').value = last.Description||'';
+    };
+    $('qe_add').onclick = async () => {
+      const payload = { timesheet: {
+        employeeEmail: S.me['Employee Email'], date: S.myday.today.date,
+        client: $('qe_client').value, task: $('qe_task').value,
+        hours: $('qe_hours').value, description: $('qe_desc').value.trim(),
+        location: $('qe_loc').value, expenseType:'Not Applicable', expenseAmount:'0' } };
+      if (!payload.timesheet.location) return toast('Select a location', true);
+      if (!payload.timesheet.client || !payload.timesheet.task) return toast('Select client and task', true);
+      if (!(+payload.timesheet.hours > 0)) return toast('Enter hours', true);
+      $('qe_add').disabled = true; $('qe_st').textContent = 'Saving…';
+      try {
+        if (prefill && prefill.rowId && prefill.edit) { payload.timesheet.rowId = prefill.rowId; await EMS2.callAPI('updateTimesheet', payload); }
+        else await EMS2.callAPI('addTimesheet', payload);
+        localStorage.setItem('ems2_lastloc', payload.timesheet.location);
+        S.masters = null; toast('Entry saved ✓');
+        const tot = (+S.myday.today.loggedTotal||0) + (+payload.timesheet.hours);
+        if (tot < 6) toast('Day total ' + fmt1(tot) + 'h — remember your 6h day');
+        else if (tot > 6) toast('Day total ' + fmt1(tot) + 'h — above the standard day');
+        rMyday();
+      } catch (e) { toast(e.message, true); $('qe_add').disabled = false; $('qe_st').textContent=''; }
+    };
+  }
+
+  function logPlan(p) {
+    show('myday').then(()=>{ renderQuickEntry('qe', p); window.scrollTo({top:0, behavior:'smooth'}); });
+  }
+  function quickLog() { S.view==='myday' ? window.scrollTo({top:0,behavior:'smooth'}) : show('myday'); }
+
+  // ---------------- DASHBOARD (approver landing) ----------------
+  async function dashData(force) {
+    if (S.cache.dashboard && !force) return S.cache.dashboard;
+    S.cache.dashboard = await EMS2.callAPI('dashboard', {});
+    return S.cache.dashboard;
+  }
+
+  function apprRow(kind, item) {
+    const id = item['Row ID'];
+    const title = kind==='leave'
+      ? `${h(item['Employee Name'])} — ${h(item['Leave Type'])}, ${h(item['From Date'])} → ${h(item['To Date'])} (${fmt1(item['Total Days'])}d)`
+      : `${h(item['Employee Name'])} — ₹${fmt1(item['Amount'])} ${h(item['Expense Type']||'')}`;
+    const sub = kind==='leave' ? h(item['Reason']||'') : `${h(item['Client Name']||'')} · ${h(item['Reimbursement By']||'')} · ${h(item['Description']||'')}`;
+    return `<div style="border:1px solid var(--line2);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:10px">
+      <span>${kind==='leave'?'🌴':'💳'}</span>
+      <div style="flex:1;min-width:0"><div style="font:600 12px Inter">${title}</div><div class="sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${sub}</div></div>
+      <button class="btn2" style="color:var(--ok);border-color:var(--okbg)" onclick="APP.act('${kind}','approve','${id}')">✓ Approve</button>
+      <button class="btn2" style="color:var(--bad);border-color:var(--badbg)" onclick="APP.act('${kind}','reject','${id}')">✕</button>
+    </div>`;
+  }
+
+  async function act(kind, what, rowId) {
+    let comments = '';
+    if (what === 'reject') { comments = prompt('Reason for rejection (required):') || ''; if (!comments.trim()) return; }
+    const action = (what==='approve' ? 'approve' : 'reject') + (kind==='leave' ? 'Leave' : 'Expense');
+    try {
+      await EMS2.callAPI(action, { rowId, approverEmail: S.me['Employee Email'], approverName: S.me['Employee Name'], comments });
+      toast((what==='approve'?'Approved':'Rejected') + ' ✓');
+      await dashData(true); buildNav();
+      (S.view==='dashboard' ? rDashboard : rApprovals)();
+    } catch (e) { toast(e.message, true); }
+  }
+
+  async function rDashboard() {
+    const d = await dashData(true); buildNav();
+    const k = d.kpis, pa = d.planVsActual || [];
+    const inbox = [...(d.approvals.leaves||[]).map(x=>['leave',x]), ...(d.approvals.expenses||[]).map(x=>['expense',x])];
+    const maxpa = Math.max(1, ...pa.map(x=>Math.max(+x.planned,+x.actual)));
+    $('view').innerHTML = `
+    <div class="grid" style="grid-template-columns:repeat(4,1fr)">
+      <div class="card"><div class="sub">Team billable · MTD</div><div style="font:800 24px Inter;color:var(--navy);margin-top:2px">${fmt1(k.billableMtdPct)}%</div></div>
+      <div class="card"><div class="sub">Hours logged today</div><div style="font:800 24px Inter;color:var(--navy);margin-top:2px">${fmt1(k.hoursToday)} <span class="sub">/ ${k.staffCount} staff</span></div></div>
+      <div class="card"><div class="sub">Timesheets missing · yday</div><div style="font:800 24px Inter;color:${k.missingYday>0?'var(--bad)':'var(--ok)'};margin-top:2px">${k.missingYday}</div></div>
+      <div class="card"><div class="sub">Plan coverage · next 7d</div><div style="font:800 24px Inter;color:var(--goldd);margin-top:2px">${fmt1(k.planCoverage7d)}%</div></div>
+    </div>
+    <div class="grid" style="grid-template-columns:1.3fr 1fr;margin-top:12px">
+      <div class="card">
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:12px"><span class="h">Plan vs actual — this week</span><span class="sub">planned ▢ · actual ■</span></div>
+        <div style="display:flex;flex-direction:column;gap:10px;max-height:340px;overflow:auto">
+          ${pa.map(x=>{const r=+x.planned? (+x.actual/+x.planned):1; const col=r>=1?'var(--ok)':r>=0.6?'var(--goldd)':'var(--bad)';
+            return `<div><div style="display:flex;justify-content:space-between;font:500 12px Inter"><span>${h(x.name)}</span><b style="color:${col}">${fmt1(x.actual)} / ${fmt1(x.planned)}h</b></div>
+            <div style="height:7px;background:var(--line2);border-radius:99px;margin-top:4px;position:relative"><div style="width:${Math.min(100,100*x.planned/maxpa)}%;height:100%;background:#bcccdc;border-radius:99px"></div><div style="width:${Math.min(100,100*x.actual/maxpa)}%;height:100%;background:var(--navy);border-radius:99px;position:absolute;top:0"></div></div></div>`;}).join('') || '<div class="sub">No plans or entries this week yet.</div>'}
+        </div>
+        ${d.missingList.length?`<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line2)" class="sub">Missing yesterday: ${d.missingList.map(h).join(' · ')}</div>`:''}
+      </div>
+      <div class="card" style="display:flex;flex-direction:column">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span class="h">Approvals inbox</span><span class="pill" style="background:var(--goldbg);color:var(--goldd)">${inbox.length} pending</span></div>
+        <div style="display:flex;flex-direction:column;gap:8px;overflow:auto;max-height:340px">${inbox.slice(0,6).map(x=>apprRow(x[0],x[1])).join('') || '<div class="sub">Nothing pending 🎉</div>'}</div>
+        ${inbox.length>6?`<button class="btn2" style="margin-top:10px" onclick="APP.show('approvals')">Open all approvals →</button>`:''}
+      </div>
+    </div>`;
+  }
+
+  async function rApprovals() {
+    const d = await dashData(true); buildNav();
+    const lv = d.approvals.leaves||[], ex = d.approvals.expenses||[];
+    $('view').innerHTML = `
+    <div class="grid" style="grid-template-columns:1fr 1fr">
+      <div class="card"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span class="h">Leaves</span><span class="pill" style="background:var(--goldbg);color:var(--goldd)">${lv.length}</span></div>
+        <div style="display:flex;flex-direction:column;gap:8px">${lv.map(x=>apprRow('leave',x)).join('')||'<div class="sub">None pending.</div>'}</div></div>
+      <div class="card"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span class="h">Expenses</span><span class="pill" style="background:var(--goldbg);color:var(--goldd)">${ex.length}</span></div>
+        <div style="display:flex;flex-direction:column;gap:8px">${ex.map(x=>apprRow('expense',x)).join('')||'<div class="sub">None pending.</div>'}</div></div>
+    </div>`;
+  }
+
+  // ---------------- REVIEW TABLE ----------------
+  const RT = { month:null, person:'', client:'', location:'', search:'', sort:'date', dir:'desc', cursor:0, rows:[], totals:null, people:[], clients:[], busy:false, done:false };
+
+  async function rtLoad(reset) {
+    if (RT.busy) return; RT.busy = true;
+    if (reset) { RT.cursor = 0; RT.rows = []; RT.done = false; }
+    const r = await EMS2.callAPI('review_table', { month:RT.month, person:RT.person, client:RT.client, location:RT.location, search:RT.search, sort:RT.sort, dir:RT.dir, cursor:String(RT.cursor||0) });
+    RT.rows = RT.rows.concat(r.rows||[]); RT.totals = r.totals;
+    if (reset) { RT.people = r.people||[]; RT.clients = r.clients||[]; }
+    RT.done = !r.nextCursor; RT.cursor = r.nextCursor ? +r.nextCursor : RT.cursor;
+    RT.busy = false;
+  }
+
+  const RT_COLS = [ ['date','Date','92px'], ['person','Person','150px'], ['client','Client','1fr'], ['task','Task','150px'], ['hours','Hrs','64px'], ['location','Location','96px'], ['desc','Description','1.2fr'], ['flag','Flag','120px'] ];
+  const FLAGS = ['Ok','Review','Incomplete Entry','Leave Without Approval','Incorrect Type Of Work','Client name missing in description'];
+
+  async function rReview() {
+    if (!RT.month) { const t = new Date(); RT.month = t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-01'; }
+    await rtLoad(true);
+    renderReview();
+  }
+
+  function renderReview() {
+    const gtc = RT_COLS.map(c=>c[2]).join(' ');
+    $('view').innerHTML = `
+    <div class="card" style="padding:0;overflow:visible">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <input type="month" id="rt_month" value="${RT.month.slice(0,7)}" style="width:150px">
+        <select id="rt_person" style="width:170px"><option value="">Person: All</option>${RT.people.map(p=>`<option ${p===RT.person?'selected':''}>${h(p)}</option>`).join('')}</select>
+        <select id="rt_client" style="width:200px"><option value="">Client: All</option>${RT.clients.map(c=>`<option ${c===RT.client?'selected':''}>${h(c)}</option>`).join('')}</select>
+        <select id="rt_loc" style="width:130px"><option value="">Location: All</option>${['Office','Client Place','WFH','Travelling'].map(l=>`<option ${l===RT.location?'selected':''}>${l}</option>`).join('')}</select>
+        <input id="rt_q" placeholder="🔍 Search…" value="${h(RT.search)}" style="width:180px">
+        <span class="sub" style="margin-left:auto">${RT.rows.length} of ${RT.totals?RT.totals.rows:0} rows</span>
+        <button class="btn2" onclick="APP.rtCSV()">⬇ CSV</button>
+      </div>
+      <div class="xt">
+        <div class="xh" style="grid-template-columns:${gtc}">${RT_COLS.map(c=>{
+          const sortable = c[0]!=='desc';
+          const on = RT.sort===c[0];
+          return `<div ${sortable?`onclick=\"APP.rtSort('${c[0]}')\"`:''} style="${c[0]==='hours'?'text-align:right;':''}${on?'color:var(--navy);':''}">${c[1]}${sortable?(on?(RT.dir==='asc'?' ▲':' ▼'):' ↕'):''}</div>`;}).join('')}</div>
+        <div id="rt_body">${rtRows()}</div>
+        <div style="display:flex;align-items:center;gap:16px;padding:10px 16px;background:var(--bg);border-top:1px solid var(--line);font:600 11.5px Inter;color:#486581">
+          <span>Σ ${RT.totals?RT.totals.rows:0} rows · <b style="color:var(--navy)">${RT.totals?fmt1(RT.totals.hours):0} hours</b> · ${RT.totals?fmt1(RT.totals.billablePct):0}% billable</span>
+          <span style="margin-left:auto" class="sub">${RT.done?'All rows loaded':'Scroll for more…'}</span>
+        </div>
+      </div>
+    </div>`;
+    $('rt_month').onchange = e => { RT.month = e.target.value + '-01'; rtLoad(true).then(renderReview); };
+    $('rt_person').onchange = e => { RT.person = e.target.value; rtLoad(true).then(renderReview); };
+    $('rt_client').onchange = e => { RT.client = e.target.value; rtLoad(true).then(renderReview); };
+    $('rt_loc').onchange = e => { RT.location = e.target.value; rtLoad(true).then(renderReview); };
+    let deb; $('rt_q').oninput = e => { clearTimeout(deb); deb = setTimeout(()=>{ RT.search = e.target.value.trim(); rtLoad(true).then(renderReview); }, 350); };
+    window.onscroll = () => {
+      if (S.view!=='review' || RT.done || RT.busy) return;
+      if (window.innerHeight + window.scrollY > document.body.offsetHeight - 400) {
+        rtLoad(false).then(()=>{ $('rt_body').innerHTML = rtRows(); });
+      }
+    };
+  }
+
+  function rtRows() {
+    const gtc = RT_COLS.map(c=>c[2]).join(' ');
+    return RT.rows.map(r=>`<div class="xr" style="grid-template-columns:${gtc};${r.Auto?'color:var(--fog)':''}">
+      <div style="color:var(--mut)">${h((r.Date||'').slice(5))}</div>
+      <div>${h(r.Person)}</div><div>${h(r.Client)}</div><div>${h(r.Task)}</div>
+      <div class="num">${fmt1(r.Hours)}</div><div style="color:var(--mut)">${h(r.Location||'—')}</div>
+      <div title="${h(r.Description)}" style="color:#486581">${h(r.Description||'')}</div>
+      <div><select style="padding:2px 6px;font-size:11px;border-radius:6px" onchange="APP.rtFlag('${r['Row ID']}',this.value)">${FLAGS.map(f=>`<option ${f===(r.Flag||'Ok')?'selected':''}>${f}</option>`).join('')}</select></div>
+    </div>`).join('') || '<div style="padding:24px" class="sub">No rows match.</div>';
+  }
+
+  async function rtFlag(rowId, flag) {
+    try { await EMS2.callAPI('setQualityFlag', { rowId, flag }); toast('Flag saved ✓'); }
+    catch (e) { toast(e.message, true); }
+  }
+
+  function rtSort(col) {
+    if (RT.sort === col) RT.dir = RT.dir==='asc'?'desc':'asc'; else { RT.sort = col; RT.dir = col==='date'?'desc':'asc'; }
+    rtLoad(true).then(renderReview);
+  }
+
+  async function rtCSV() {
+    toast('Preparing CSV…');
+    while (!RT.done && RT.rows.length < 5000) { await rtLoad(false); }
+    const heads = ['Date','Person','Client','Task','Hours','Location','Description','Flag'];
+    const esc = v => '"' + String(v??'').replace(/"/g,'""') + '"';
+    const csv = [heads.join(',')].concat(RT.rows.map(r=>heads.map(k=>esc(r[k])).join(','))).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+    a.download = 'timesheet-review-' + RT.month.slice(0,7) + '.csv'; a.click();
+  }
+
+  // ---------------- helpers ----------------
+  function modal(title, inner) {
+    const w = document.createElement('div');
+    w.id = 'modal';
+    w.setAttribute('style','position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;background:rgba(16,42,67,.55);padding:16px');
+    w.innerHTML = `<div class="card" style="width:100%;max-width:560px;max-height:85vh;overflow:auto"><div style="display:flex;align-items:center;margin-bottom:12px"><span class="h" style="font-size:15px">${title}</span><button class="btn2" style="margin-left:auto" onclick="document.getElementById('modal').remove()">✕</button></div>${inner}</div>`;
+    document.body.appendChild(w);
+    return w;
+  }
+  const closeModal = () => { const m = $('modal'); if (m) m.remove(); };
+
+  // ---------------- TIMESHEET ----------------
+  async function rTimesheet() {
+    const m = await masters(true);
+    const rows = (m.timesheets||[]).slice().sort((a,b)=> a.Date<b.Date?1:-1).slice(0,200);
+    const today = S.myday.today.date;
+    const cutoff = new Date(new Date(today+'T00:00:00').getTime() - 7*86400000).toISOString().slice(0,10);
+    const gtc = '92px 1fr 150px 64px 100px 1.4fr 110px';
+    $('view').innerHTML = `
+    <div class="grid" style="grid-template-columns:1fr 340px">
+      <div class="card" style="padding:0;overflow:hidden">
+        <div style="padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center"><span class="h">My entries</span><span class="sub" style="margin-left:8px">latest 200 · edit/delete within 7 days</span></div>
+        <div class="xt">
+          <div class="xh" style="grid-template-columns:${gtc};top:0"><div>Date</div><div>Client</div><div>Task</div><div style="text-align:right">Hrs</div><div>Location</div><div>Description</div><div></div></div>
+          ${rows.map(r=>{
+            const editable = !r.Auto && r.Date >= cutoff;
+            return `<div class="xr" style="grid-template-columns:${gtc};${r.Auto?'color:var(--fog)':''}">
+              <div style="color:var(--mut)">${h(r.Date)}</div><div>${h(r.Client)}</div><div>${h(r.Task)}</div>
+              <div class="num">${fmt1(r.Hours)}</div><div style="color:var(--mut)">${h(r.Location||'—')}</div>
+              <div title="${h(r.Description)}" style="color:#486581">${h(r.Description||'')}</div>
+              <div style="white-space:nowrap">${editable?`<button class=\"btn2\" style=\"padding:2px 8px;font-size:11px\" onclick='APP.tsEdit(${JSON.stringify(r).replace(/'/g,"&#39;")})'>Edit</button> <button class=\"btn2\" style=\"padding:2px 8px;font-size:11px;color:var(--bad)\" onclick=\"APP.tsDel('${r['Row ID']}')\">Del</button>`:''}</div>
+            </div>`;}).join('') || '<div style="padding:24px" class="sub">No entries yet.</div>'}
+        </div>
+      </div>
+      <div class="card" style="align-self:start"><div class="h" style="margin-bottom:10px">Add entry</div><div id="ts_qe"></div></div>
+    </div>`;
+    renderQuickEntry('ts_qe');
+  }
+
+  function tsEdit(r) {
+    renderQuickEntry('ts_qe', { rowId: r['Row ID'], edit: true, client: r.Client, task: r.Task, hours: r.Hours, location: r.Location });
+    setTimeout(()=>{ const d = $('qe_desc'); if (d) d.value = r.Description||''; const b = $('qe_add'); if (b) b.textContent = 'Update entry'; }, 60);
+    toast('Editing entry of ' + r.Date);
+  }
+
+  async function tsDel(rowId) {
+    if (!confirm('Delete this entry?')) return;
+    try { await EMS2.callAPI('deleteTimesheet', { rowId }); S.masters = null; toast('Deleted ✓'); rTimesheet(); }
+    catch (e) { toast(e.message, true); }
+  }
+
+  // ---------------- WORK PLAN ----------------
+  async function rWorkplan() {
+    const d = S.cache.wp = await EMS2.callAPI('initWorkPlan', {});
+    const today = S.myday.today.date;
+    const gtc = '92px 92px 1fr 140px 56px 100px 1.2fr 76px 150px';
+    const rows = d.myPlan || [];
+    $('view').innerHTML = `
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px"><span class="h">My plan</span><span class="sub">next 30 days</span>
+        <button class="btn" style="margin-left:auto" onclick="APP.wpForm()">+ Plan work</button></div>
+      <div class="xt">
+        <div class="xh" style="grid-template-columns:${gtc};top:0"><div>From</div><div>To</div><div>Client</div><div>Task</div><div style="text-align:right">h/d</div><div>Location</div><div>Description</div><div>Off-days</div><div></div></div>
+        ${rows.map(w=>{
+          const fut = w['From Date'] >= today, inprog = !fut && w['To Date'] >= today;
+          const acts = fut
+            ? `<button class=\"btn2\" style=\"padding:2px 8px;font-size:11px\" onclick='APP.wpForm(${JSON.stringify(w).replace(/'/g,"&#39;")},"update")'>Edit</button> <button class=\"btn2\" style=\"padding:2px 8px;font-size:11px;color:var(--bad)\" onclick=\"APP.wpDel('${w['Row ID']}')\">Del</button>`
+            : inprog ? `<button class=\"btn2\" style=\"padding:2px 8px;font-size:11px\" onclick='APP.wpForm(${JSON.stringify(w).replace(/'/g,"&#39;")},"revise")'>Revise</button> <button class=\"btn2\" style=\"padding:2px 8px;font-size:11px;color:var(--goldd)\" onclick=\"APP.wpEnd('${w['Row ID']}')\">End</button>` : '';
+          return `<div class="xr" style="grid-template-columns:${gtc}">
+            <div style="color:var(--mut)">${h(w['From Date'])}</div><div style="color:var(--mut)">${h(w['To Date'])}</div>
+            <div>${h(w.Client)}</div><div>${h(w.Task)}</div><div class="num">${fmt1(w['Daily Hours'])}</div>
+            <div style="color:var(--mut)">${h(w.Location||'—')}</div><div style="color:#486581" title="${h(w.Description)}">${h(w.Description||'')}</div>
+            <div>${w['Include Off Days']==='Yes'?'<span class="pill" style="background:var(--goldbg);color:var(--goldd)">Yes</span>':'<span class="sub">No</span>'}</div>
+            <div style="white-space:nowrap">${acts}</div></div>`;}).join('') || '<div style="padding:24px" class="sub">No plan yet — click + Plan work.</div>'}
+      </div>
+    </div>
+    ${S.isApprover?'<div class="sub" style="margin-top:10px">Team 30-day grid: sidebar → Classic pages → Work Plan → Team View (v2 grid comes with Team Planning).</div>':''}`;
+  }
+
+  function wpForm(w, mode) {
+    const d = S.cache.wp; const isEdit = !!w;
+    const clients = (d.clients||[]).map(c=>c['Client Full Name']).filter(Boolean).sort();
+    const inner = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div style="grid-column:1/-1"><label class="sub">Client</label><select id="wp_client">${clients.map(c=>`<option ${w&&w.Client===c?'selected':''}>${h(c)}</option>`).join('')}</select></div>
+        <div style="grid-column:1/-1"><label class="sub">Task</label><select id="wp_task">${(d.taskTypes||[]).map(t=>`<option ${w&&w.Task===t?'selected':''}>${h(t)}</option>`).join('')}</select></div>
+        <div><label class="sub">From</label><input type="date" id="wp_from" value="${w?w['From Date']:''}"></div>
+        <div><label class="sub">To</label><input type="date" id="wp_to" value="${w?w['To Date']:''}"></div>
+        <div><label class="sub">Hours/day (≤6)</label><input type="number" id="wp_hrs" step="0.5" min="0.5" max="6" value="${w?w['Daily Hours']:'6'}"></div>
+        <div><label class="sub">Location</label><select id="wp_loc">${['Office','Client Place','WFH','Travelling'].map(l=>`<option ${w&&w.Location===l?'selected':''}>${l}</option>`).join('')}</select></div>
+        <div style="grid-column:1/-1"><label class="sub">Description (2–100 chars)</label><input id="wp_desc" maxlength="100" value="${w?h(w.Description||''):''}"></div>
+        <label style="grid-column:1/-1;display:flex;gap:8px;align-items:center;font:500 12px Inter"><input type="checkbox" id="wp_off" style="width:auto" ${w&&w['Include Off Days']==='Yes'?'checked':''}> Include Sundays &amp; holidays on purpose</label>
+      </div>
+      <div style="margin-top:14px;display:flex;gap:10px"><button class="btn" id="wp_save">${mode==='revise'?'Revise from today':isEdit?'Update':'Add plan'}</button></div>`;
+    modal(mode==='revise'?'Revise plan (past days stay frozen)':isEdit?'Edit plan':'Plan work', inner);
+    $('wp_save').onclick = async () => {
+      const entry = { employeeEmail: S.me['Employee Email'], client: $('wp_client').value, task: $('wp_task').value,
+        fromDate: $('wp_from').value, toDate: $('wp_to').value, dailyHours: $('wp_hrs').value,
+        location: $('wp_loc').value, description: $('wp_desc').value.trim(), includeOffDays: $('wp_off').checked ? 'Yes' : 'No' };
+      if (isEdit) entry.rowId = w['Row ID'];
+      const action = mode==='revise' ? 'reviseWorkPlanEntry' : isEdit ? 'updateWorkPlanEntry' : 'addWorkPlanEntry';
+      $('wp_save').disabled = true;
+      try { await EMS2.callAPI(action, { entry }); closeModal(); toast('Plan saved ✓'); rWorkplan(); }
+      catch (e) { toast(e.message, true); $('wp_save').disabled = false; }
+    };
+  }
+
+  async function wpEnd(rowId) {
+    if (!confirm('End this plan as of yesterday?')) return;
+    try { await EMS2.callAPI('endWorkPlanEntry', { rowId, email: S.me['Employee Email'] }); toast('Ended ✓'); rWorkplan(); }
+    catch (e) { toast(e.message, true); }
+  }
+  async function wpDel(rowId) {
+    if (!confirm('Delete this future plan?')) return;
+    try { await EMS2.callAPI('deleteWorkPlanEntry', { rowId, email: S.me['Employee Email'] }); toast('Deleted ✓'); rWorkplan(); }
+    catch (e) { toast(e.message, true); }
+  }
+
+  // ---------------- LEAVE ----------------
+  async function rLeave() {
+    const d = await EMS2.callAPI('initLeave', {});
+    const b = d.leaveBalance || {};
+    const gtc = '110px 92px 92px 64px 90px 1.2fr 110px 90px';
+    $('view').innerHTML = `
+    <div class="grid" style="grid-template-columns:repeat(5,1fr)">
+      ${[['plBalance','PL Available','var(--ok)'],['plEarned','PL Earned','var(--navy)'],['plUsed','PL Used','var(--goldd)'],['completedMonths','Months Service','var(--mut)'],['plMaxCap','Max PL Cap','var(--fog)']].map(x=>`<div class="card"><div style="font:800 22px Inter;color:${x[2]}">${fmt1(b[x[0]])}</div><div class="sub">${x[1]}</div></div>`).join('')}
+    </div>
+    <div class="grid" style="grid-template-columns:1fr 340px;margin-top:12px">
+      <div class="card" style="padding:0;overflow:hidden">
+        <div style="padding:12px 16px;border-bottom:1px solid var(--line)"><span class="h">My applications</span></div>
+        <div class="xt"><div class="xh" style="grid-template-columns:${gtc};top:0"><div>Type</div><div>From</div><div>To</div><div style="text-align:right">Days</div><div>Status</div><div>Reason</div><div>Approver</div><div></div></div>
+        ${(d.leaves||[]).map(l=>`<div class="xr" style="grid-template-columns:${gtc}">
+          <div>${h(l['Leave Type'])}${l['Auto LOP']==='Yes'?' <span class="pill" style="background:var(--badbg);color:var(--bad)">auto</span>':''}</div>
+          <div style="color:var(--mut)">${h(l['From Date'])}</div><div style="color:var(--mut)">${h(l['To Date'])}</div>
+          <div class="num">${fmt1(l['Total Days'])}</div>
+          <div><span class="pill" style="background:${l.Status==='Approved'?'var(--okbg)':l.Status==='Pending'?'var(--goldbg)':'var(--line2)'};color:${l.Status==='Approved'?'var(--ok)':l.Status==='Pending'?'var(--goldd)':'var(--mut)'}">${h(l.Status)}</span></div>
+          <div style="color:#486581" title="${h(l.Reason)}">${h(l.Reason||'')}</div><div style="color:var(--mut)">${h(l['Approver Name']||'—')}</div>
+          <div>${l.Status==='Pending'?`<button class=\"btn2\" style=\"padding:2px 8px;font-size:11px;color:var(--bad)\" onclick=\"APP.lvCancel('${l['Row ID']}')\">Cancel</button>`:''}</div>
+        </div>`).join('') || '<div style="padding:24px" class="sub">No applications yet.</div>'}</div>
+      </div>
+      <div class="card" style="align-self:start">
+        <div class="h" style="margin-bottom:10px">Apply for leave</div>
+        <div style="display:grid;gap:8px">
+          <select id="lv_type"><option>PL</option><option>LOP</option></select>
+          <select id="lv_day"><option>Full Day</option><option>Half Day</option></select>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><input type="date" id="lv_from"><input type="date" id="lv_to"></div>
+          <textarea id="lv_reason" rows="2" placeholder="Reason (min 10 characters)"></textarea>
+          <button class="btn" id="lv_apply">Apply</button>
+        </div>
+      </div>
+    </div>`;
+    $('lv_apply').onclick = async () => {
+      $('lv_apply').disabled = true;
+      try {
+        const r = await EMS2.callAPI('applyLeave', { leave: { employeeEmail: S.me['Employee Email'], employeeName: S.me['Employee Name'],
+          leaveType: $('lv_type').value, dayType: $('lv_day').value, fromDate: $('lv_from').value, toDate: $('lv_to').value, reason: $('lv_reason').value.trim() } });
+        toast(r.autoLOP==='Yes' ? 'Applied — converted to LOP (PL balance short)' : 'Leave applied ✓');
+        rLeave();
+      } catch (e) { toast(e.message, true); $('lv_apply').disabled = false; }
+    };
+  }
+  async function lvCancel(rowId) {
+    if (!confirm('Cancel this application?')) return;
+    try { await EMS2.callAPI('cancelLeave', { rowId, email: S.me['Employee Email'] }); toast('Cancelled ✓'); rLeave(); }
+    catch (e) { toast(e.message, true); }
+  }
+
+  // ---------------- EXPENSES ----------------
+  async function rExpenses() {
+    const d = S.cache.exp = await EMS2.callAPI('initExpense', {});
+    const sm = d.summary || {};
+    const gtc = '92px 130px 90px 1fr 120px 90px 100px 90px';
+    $('view').innerHTML = `
+    <div class="grid" style="grid-template-columns:repeat(4,1fr)">
+      <div class="card"><div style="font:800 22px Inter;color:var(--goldd)">₹${fmt1(sm.pending)}</div><div class="sub">Pending</div></div>
+      <div class="card"><div style="font:800 22px Inter;color:var(--ok)">₹${fmt1(sm.approved)}</div><div class="sub">Approved</div></div>
+      <div class="card"><div style="font:800 22px Inter;color:var(--bad)">₹${fmt1(sm.rejected)}</div><div class="sub">Rejected</div></div>
+      <div class="card"><div style="font:800 22px Inter;color:var(--navy)">₹${fmt1((+sm.pending||0)+(+sm.approved||0))}</div><div class="sub">Pending + Approved</div></div>
+    </div>
+    <div class="grid" style="grid-template-columns:1fr 340px;margin-top:12px">
+      <div class="card" style="padding:0;overflow:hidden">
+        <div style="padding:12px 16px;border-bottom:1px solid var(--line)"><span class="h">My expenses</span></div>
+        <div class="xt"><div class="xh" style="grid-template-columns:${gtc};top:0"><div>Date</div><div>Type</div><div style="text-align:right">₹</div><div>Description</div><div>Client</div><div>Reimb. by</div><div>Status</div><div></div></div>
+        ${(d.expenses||[]).map(x=>`<div class="xr" style="grid-template-columns:${gtc}">
+          <div style="color:var(--mut)">${h(x.Date)}</div><div>${h(x['Expense Type'])}</div><div class="num">${fmt1(x.Amount)}</div>
+          <div style="color:#486581" title="${h(x.Description)}">${h(x.Description||'')}</div><div style="color:var(--mut)">${h(x['Client Name']||'—')}</div>
+          <div style="color:var(--mut)">${h(x['Reimbursement By']||'')}</div>
+          <div><span class="pill" style="background:${x.Status==='Approved'?'var(--okbg)':x.Status==='Pending'?'var(--goldbg)':'var(--line2)'};color:${x.Status==='Approved'?'var(--ok)':x.Status==='Pending'?'var(--goldd)':'var(--mut)'}">${h(x.Status)}</span></div>
+          <div>${x.Status==='Pending'?`<button class=\"btn2\" style=\"padding:2px 8px;font-size:11px;color:var(--bad)\" onclick=\"APP.exCancel('${x['Row ID']}')\">Cancel</button>`:''}</div>
+        </div>`).join('') || '<div style="padding:24px" class="sub">No expenses yet.</div>'}</div>
+      </div>
+      <div class="card" style="align-self:start">
+        <div class="h" style="margin-bottom:10px">Submit expense</div>
+        <div style="display:grid;gap:8px">
+          <input type="date" id="ex_date">
+          <select id="ex_type"><option value="">Type…</option>${(d.expenseTypes||[]).map(t=>`<option>${h(t['Expense Type'])}</option>`).join('')}</select>
+          <input type="number" id="ex_amt" min="1" step="0.01" placeholder="Amount ₹">
+          <select id="ex_by"><option value="">Reimbursement by…</option><option>Client</option><option>DRP &amp; Co. LLP</option></select>
+          <select id="ex_client" style="display:none"><option value="">Client…</option>${(d.clients||[]).map(c=>`<option>${h(c['Client Full Name'])}</option>`).join('')}</select>
+          <input id="ex_ref" placeholder="Receipt reference">
+          <textarea id="ex_desc" rows="2" placeholder="Description (min 10 characters)"></textarea>
+          <button class="btn" id="ex_add">Submit</button>
+        </div>
+      </div>
+    </div>`;
+    $('ex_by').onchange = e => { $('ex_client').style.display = e.target.value==='Client' ? '' : 'none'; };
+    $('ex_add').onclick = async () => {
+      $('ex_add').disabled = true;
+      try {
+        await EMS2.callAPI('submitExpense', { expense: { employeeEmail: S.me['Employee Email'], employeeName: S.me['Employee Name'],
+          date: $('ex_date').value, expenseType: $('ex_type').value, amount: parseFloat($('ex_amt').value),
+          description: $('ex_desc').value.trim(), reimbursementBy: $('ex_by').value,
+          clientName: $('ex_client').value, receiptReference: $('ex_ref').value.trim() } });
+        toast('Expense submitted ✓'); rExpenses();
+      } catch (e) { toast(e.message, true); $('ex_add').disabled = false; }
+    };
+  }
+  async function exCancel(rowId) {
+    if (!confirm('Cancel this expense?')) return;
+    try { await EMS2.callAPI('cancelExpense', { rowId, email: S.me['Employee Email'] }); toast('Cancelled ✓'); rExpenses(); }
+    catch (e) { toast(e.message, true); }
+  }
+
+  const RENDER = { myday:rMyday, dashboard:rDashboard, approvals:rApprovals, review:rReview, timesheet:rTimesheet, workplan:rWorkplan, leave:rLeave, expenses:rExpenses };
+
+  async function signout() { await EMS2.signOut(); location.replace('home.html'); }
+
+  boot();
+  return { show, signout, quickLog, logPlan, act, rtSort, rtFlag, rtCSV, tsEdit, tsDel, wpForm, wpEnd, wpDel, lvCancel, exCancel, S, RENDER, masters, renderQuickEntry, h, fmt1, toast, $ };
+})();
+</script>
+</body>
+</html>
