@@ -83,6 +83,7 @@
     <div id="app"></div>
 
     <script src="config.js"></script>
+    <script src="api.js"></script>
     <script>
         let employeeEmail = '';
         let employeeData = null;
@@ -96,10 +97,7 @@
         function hideLoading() { document.getElementById('loadingOverlay').style.display = 'none'; }
 
         async function callAPI(action, params = {}) {
-            const r = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, ...params }) });
-            const result = await r.json();
-            if (!result.success && result.error) throw new Error(result.error);
-            return result.data !== undefined ? result.data : result;
+            return window.EMS2.callAPI(action, params);
         }
 
         // ==================== SESSION ====================
@@ -122,7 +120,10 @@
                 return s;
             } catch { return null; }
         }
-        function clearSession() { localStorage.removeItem(SESSION_KEY); }
+        function clearSession() {
+            localStorage.removeItem('timewise_session');
+            if (window.EMS2) { try { EMS2.signOut(); } catch (e) {} }
+        }
 
         function handleSignOut() { clearSession(); window.location.href = 'index.html'; }
 
@@ -260,44 +261,8 @@
         }
 
         function renderLogin() {
-            document.getElementById('app').innerHTML = `
-                <div class="min-h-screen flex">
-                    <div class="hidden lg:flex lg:w-1/2 relative" style="background: linear-gradient(135deg, #102a43 0%, #243b53 100%);">
-                        <div class="flex flex-col justify-between p-12 text-white w-full">
-                            <div>
-                                <div class="flex items-center gap-3 mb-16">
-                                    <img src="https://drpca.com/assets/drpca-logo.png" alt="DRP & Co." class="h-12" onerror="this.outerHTML='<span class=&quot;font-bold text-lg&quot; style=&quot;color:#102a43&quot;>drp&amp;co.</span>'">
-                                </div>
-                            </div>
-                            <div>
-                                <h1 class="text-4xl font-bold mb-4">Reports &amp; MIS</h1>
-                                <p class="text-lg text-white/80 mb-8">Attendance dashboards, analytics and operational insights for approvers.</p>
-                                <div class="flex items-center gap-6 text-sm text-white/60 pt-8 border-t border-white/10">
-                                    <span>DRP &amp; Co. LLP</span>
-                                    <span>•</span>
-                                    <span>Approvers Only</span>
-                                </div>
-                            </div>
-                            <div class="text-sm text-white/40">© 2026 DRP &amp; Co. LLP</div>
-                        </div>
-                    </div>
-                    <div class="w-full lg:w-1/2 flex items-center justify-center p-6 bg-white">
-                        <div class="w-full max-w-md">
-                            <div class="mb-12"><img src="https://drpca.com/assets/drpca-logo.png" alt="DRP & Co." class="h-12" onerror="this.outerHTML='<span class=&quot;font-bold text-lg&quot; style=&quot;color:#102a43&quot;>drp&amp;co.</span>'"></div>
-                            <h2 class="text-3xl font-bold mb-2" style="color:#102a43">Reports Module</h2>
-                            <p class="text-gray-500 mb-8">Sign in to view dashboards</p>
-                            <div class="space-y-4">
-                                <div>
-                                    <label class="block text-sm font-medium mb-2" style="color:#102a43">Email Address</label>
-                                    <input id="emailInput" type="email" placeholder="your.name@drpca.com" class="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg" onkeypress="if(event.key==='Enter')handleLogin()">
-                                </div>
-                                <button id="loginBtn" onclick="handleLogin()" class="btn-primary w-full px-4 py-3 rounded-lg font-medium">Sign In</button>
-                                <div id="loginStatus"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>`;
-            document.getElementById('emailInput').focus();
+            window.location.replace('home.html');
+            return '<div style="padding:60px;text-align:center;color:#486581;font-family:Inter,sans-serif">Redirecting to sign in…</div>';
         }
 
         function renderAccessDenied() {

@@ -141,6 +141,7 @@
     <div id="app"></div>
 
     <script src="config.js"></script>
+    <script src="api.js"></script>
     <script>
         // ============================================
         // STATE
@@ -167,12 +168,15 @@
         function loadSession() {
             try {
                 const session = JSON.parse(localStorage.getItem('timewise_session'));
-                if (session && (Date.now() - session.timestamp) < 30 * 60 * 1000) return session;
+                if (session && (Date.now() - session.timestamp) < (CONFIG.SESSION_TIMEOUT || 720) * 60 * 1000) return session;
             } catch (e) {}
             return null;
         }
 
-        function clearSession() { localStorage.removeItem('timewise_session'); }
+        function clearSession() {
+            localStorage.removeItem('timewise_session');
+            if (window.EMS2) { try { EMS2.signOut(); } catch (e) {} }
+        }
 
         // ============================================
         // UTILITIES
@@ -184,14 +188,7 @@
         function hideLoading() { document.getElementById('loadingOverlay').style.display = 'none'; }
 
         async function callAPI(action, params = {}) {
-            const response = await fetch(API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify({ action, ...params })
-            });
-            const result = await response.json();
-            if (!result.success && result.error) throw new Error(result.error);
-            return result.data !== undefined ? result.data : result;
+            return window.EMS2.callAPI(action, params);
         }
 
         function formatDate(date) {
@@ -417,26 +414,8 @@
         // RENDER: LOGIN
         // ============================================
         function renderLogin() {
-            return `
-            <div class="min-h-screen flex">
-                <div class="hidden lg:flex lg:w-1/2 flex-col justify-between p-12" style="background:#102a43">
-                    <div><img src="https://drpca.com/assets/drpca-logo.png" alt="DRP & Co. LLP" class="h-12 brightness-0 invert opacity-90" onerror="this.style.display='none'"></div>
-                    <div class="text-white"><h1 class="text-4xl font-bold mb-4">TimeWise EMS</h1><p class="text-lg opacity-60">Employee Management System</p><p class="opacity-40 text-sm mt-1">[internal portal for DRPCA]</p></div>
-                    <div class="text-white opacity-40 text-sm"><p>DRP & Co. LLP</p><p>Chartered Accountants • Wealth Managers • Valuation Professionals</p></div>
-                </div>
-                <div class="w-full lg:w-1/2 flex items-center justify-center p-8 bg-white">
-                    <div class="w-full max-w-md">
-                        <div class="lg:hidden text-center mb-8"><img src="https://drpca.com/assets/drpca-logo.png" alt="DRP & Co." class="h-10 mx-auto mb-4" onerror="this.style.display='none'"></div>
-                        <div class="text-center mb-8"><h2 class="text-2xl font-bold" style="color:#102a43">Leave Module</h2><p class="text-gray-500 mt-2 text-sm">Sign in to manage your leave</p></div>
-                        <div class="space-y-5">
-                            <div><label class="form-label">Email Address</label><input type="email" id="emailInput" placeholder="your.name@drpca.com" class="form-input" onkeypress="if(event.key==='Enter')handleLogin()"></div>
-                            <button id="loginBtn" onclick="handleLogin()" class="btn btn-primary btn-lg w-full">Sign In</button>
-                            <div id="loginStatus"></div>
-                        </div>
-                        <div class="mt-12 pt-8 border-t border-gray-100"><p class="text-center text-gray-400 text-sm">© 2026 DRP & Co. LLP</p></div>
-                    </div>
-                </div>
-            </div>`;
+            window.location.replace('home.html');
+            return '<div style="padding:60px;text-align:center;color:#486581;font-family:Inter,sans-serif">Redirecting to sign in…</div>';
         }
 
         // ============================================

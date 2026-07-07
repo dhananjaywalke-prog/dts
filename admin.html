@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TimeWise EMS | Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', system-ui, sans-serif; font-size: 14px; }
+        .btn-primary { background: linear-gradient(135deg, #102a43 0%, #243b53 100%); color: white; }
+        .btn-primary:disabled { opacity: .6; }
+        .tab-active { background: #102a43; color: #fff; }
+        .adm-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #627d98; padding: 8px 10px; border-bottom: 1px solid #d9e2ec; background: #f0f4f8; position: sticky; top: 0; }
+        .adm-table td { padding: 8px 10px; border-bottom: 1px solid #f0f4f8; vertical-align: top; }
+        .adm-table tr:hover td { background: #fdf9ef; }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: #d4a853 !important; box-shadow: 0 0 0 3px rgba(212,168,83,.15) !important; }
+        .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div id="app" class="max-w-7xl mx-auto px-4 py-6"><p class="text-gray-500 p-8 text-center">Loading admin…</p></div>
+
+    <script src="config.js"></script>
+    <script src="api.js"></script>
+    <script>
+    (async function () {
+        // ---------- access guard ----------
+        const email = await EMS2.getAuthedEmail();
+        if (!email) { window.location.replace('home.html'); return; }
+        const sb = await EMS2.ready;
+        const meRes = await sb.from('employees').select('id,name,email,role').eq('email', email).maybeSingle();
+        const me = meRes.data;
+        if (!me || me.role !== 'admin') {
+            document.getElementById('app').innerHTML =
+                '<div class="bg-white border border-gray-200 rounded-xl p-10 text-center mt-16"><h2 class="text-xl font-bold" style="color:#102a43">Admins only</h2><p class="text-gray-500 mt-2">This module is restricted.</p><a href="home.html" class="inline-block mt-4 btn-primary px-5 py-2 rounded-lg text-sm font-semibold">Back to Home</a></div>';
+            return;
+        }
+
+        // ---------- entity registry ----------
+        const yesNo = v => v ? 'Yes' : 'No';
+        const ENTITIES = {
+            clients: { title: 'Clients', table: 'clients', order: 'name',
+                cols: [
+                    { k: 'name', label: 'Full Name', type: 'text', req: true },
+                    { k: 'short_name', label: 'Short Name', type: 'text' },
+                    { k: 'partner_name', label: 'Partner', type: 'text' },
+                    { k: 'team', label: 'Team', type: 'text' },
+                    { k: 'gst', label: 'GST', type: 'text' },
+                    { k: 'pan', label: 'PAN', type: 'text' },
+                    { k: 'email', label: 'Email', type: 'text' },
+                    { k: 'is_internal', label: 'Internal (non-billable)', type: 'bool', fmt: yesNo },
+                    { k: 'status', label: 'Status', type: 'select', options: ['active','inactive'], req: true }
+                ] },
+            tasks: { title: 'Tasks', table: 'tasks', order: 'name',
+                cols: [
+                    { k: 'name', label: 'Work Name', type: 'text', req: true },
+                    { k: 'work_type', label: 'Work Type', type: 'text' },
+                    { k: 'practice_head', label: 'Practice Head', type: 'text' },
+                    { k: 'is_billable', label: 'Billable', type: 'bool', fmt: yesNo },
+                    { k: 'status', label: 'Status', type: 'select', options: ['active','inactive'], req: true }
+                ] },
+            employees: { title: 'Employees', table: 'employees', order: 'name',
+                note: 'Adding an active employee with an email lets them sign in with an OTP immediately. Deactivate on exit — history stays.',
+                cols: [
+                    { k: 'name', label: 'Name', type: 'text', req: true },
+                    { k: 'email', label: 'Email (login)', type: 'text' },
+                    { k: 'role', label: 'Role', type: 'select', options: ['staff','approver','admin'], req: true },
+                    { k: 'designation', label: 'Designation', type: 'text' },
+                    { k: 'team_allocation', label: 'Team', type: 'text' },
+                    { k: 'joined_on', label: 'Joined', type: 'date' },
+                    { k: 'exited_on', label: 'Exited', type: 'date' },
+                    { k: 'hourly_cost', label: 'Hourly Cost (₹)', type: 'number' },
+                    { k: 'status', label: 'Status', type: 'select', options: ['active','inactive'], req: true }
+                ] },
+            holidays: { title: 'Holidays', table: 'holidays', order: 'holiday_date',
+                cols: [
+                    { k: 'holiday_date', label: 'Date', type: 'date', req: true },
+                    { k: 'raw_email', label: 'Applies To (All or email)', type: 'text', req: true, def: 'All' },
+                    { k: 'description', label: 'Description', type: 'text', req: true },
+                    { k: 'status', label: 'Status', type: 'text', def: 'Active' }
+                ] },
+            expense_heads: { title: 'Expense Heads', table: 'expense_heads', order: 'name',
+                cols: [
+                    { k: 'name', label: 'Expense Type', type: 'text', req: true },
+                    { k: 'description', label: 'Description', type: 'text' },
+                    { k: 'status', label: 'Status', type: 'select', options: ['active','inactive'], req: true }
+                ] },
+            announcements: { title: 'Announcements', table: 'announcements', order: 'show_from', desc: true,
+                note: 'Active announcements show on every portal page (and the login screen) between the two timestamps.',
+                cols: [
+                    { k: 'message', label: 'Message', type: 'textarea', req: true },
+                    { k: 'severity', label: 'Tone', type: 'select', options: ['info','important'], req: true },
+                    { k: 'show_from', label: 'Show From', type: 'datetime' },
+                    { k: 'show_until', label: 'Show Until', type: 'datetime' },
+                    { k: 'active', label: 'Active', type: 'bool', fmt: yesNo }
+                ] }
+        };
+
+        let current = 'clients';
+        let rows = [];
+        let editing = null;   // null | {} (new) | row (edit)
+        let auditRows = [];
+
+        // ---------- data ----------
+        async function load() {
+            const spec = ENTITIES[current];
+            if (current === 'audit') {
+                const table = document.getElementById('f_table') ? document.getElementById('f_table').value : '';
+                const who = document.getElementById('f_actor') ? document.getElementById('f_actor').value.trim() : '';
+                let q = sb.from('audit_log').select('*').order('at', { ascending: false }).limit(300);
+                if (table) q = q.eq('table_name', table);
+                if (who) q = q.ilike('actor_email', '%' + who + '%');
+                const r = await q;
+                auditRows = r.data || [];
+                return;
+            }
+            const r = await sb.from(spec.table).select('*').order(spec.order, { ascending: !spec.desc });
+            if (r.error) alert('Load failed: ' + r.error.message);
+            rows = r.data || [];
+        }
+
+        async function save() {
+            const spec = ENTITIES[current];
+            const obj = {};
+            for (const c of spec.cols) {
+                const el = document.getElementById('fld_' + c.k);
+                let v = c.type === 'bool' ? el.checked : el.value;
+                if (v === '' || v === undefined) v = null;
+                if (c.req && (v === null || v === false && c.type !== 'bool')) {
+                    alert(c.label + ' is required'); return;
+                }
+                obj[c.k] = v;
+            }
+            let r;
+            if (editing && editing.id) r = await sb.from(spec.table).update(obj).eq('id', editing.id);
+            else r = await sb.from(spec.table).insert([obj]);
+            if (r.error) { alert('Save failed: ' + r.error.message); return; }
+            editing = null;
+            await load(); render();
+        }
+
+        async function toggleStatus(id) {
+            const spec = ENTITIES[current];
+            const row = rows.find(x => x.id === id);
+            if (!row) return;
+            const field = ('status' in row) ? 'status' : ('active' in row ? 'active' : null);
+            if (!field) return;
+            const nv = field === 'active' ? !row.active
+                     : (String(row.status).toLowerCase() === 'active' ? 'inactive' : 'active');
+            if (!confirm('Change status of this record?')) return;
+            const r = await sb.from(spec.table).update({ [field]: nv }).eq('id', id);
+            if (r.error) { alert(r.error.message); return; }
+            await load(); render();
+        }
+
+        function exportCSV() {
+            const spec = ENTITIES[current];
+            const cols = spec ? spec.cols.map(c => c.k) : [];
+            const data = current === 'audit' ? auditRows : rows;
+            const heads = current === 'audit' ? ['at','actor_email','table_name','row_id','action'] : cols;
+            const esc = v => '"' + String(v === null || v === undefined ? '' : (typeof v === 'object' ? JSON.stringify(v) : v)).replace(/"/g, '""') + '"';
+            const lines = [heads.join(',')].concat(data.map(r => heads.map(h => esc(r[h])).join(',')));
+            const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'ems2-' + current + '-' + new Date().toISOString().slice(0, 10) + '.csv';
+            a.click();
+        }
+
+        // ---------- render ----------
+        function h(s) { return String(s === null || s === undefined ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+        function render() {
+            const tabs = Object.keys(ENTITIES).map(k =>
+                `<button onclick="ADM.go('${k}')" class="px-4 py-2 rounded-lg text-sm font-semibold ${current === k ? 'tab-active' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}">${ENTITIES[k].title}</button>`
+            ).join('') +
+            `<button onclick="ADM.go('audit')" class="px-4 py-2 rounded-lg text-sm font-semibold ${current === 'audit' ? 'tab-active' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}">Audit Log</button>`;
+
+            let bodyHTML = '';
+            if (current === 'audit') bodyHTML = renderAudit();
+            else bodyHTML = renderEntity();
+
+            document.getElementById('app').innerHTML = `
+                <header class="flex items-center justify-between mb-6">
+                    <div class="flex items-center gap-4">
+                        <a href="home.html"><img src="https://drpca.com/assets/drpca-logo.png" alt="DRP" class="h-10" onerror="this.outerHTML='<span class=&quot;font-bold&quot; style=&quot;color:#102a43&quot;>drp&amp;co.</span>'"></a>
+                        <div class="border-l border-gray-200 pl-4">
+                            <p class="font-semibold" style="color:#102a43">TimeWise EMS · Admin</p>
+                            <p class="text-xs text-gray-500">Signed in as ${h(me.name)} · every change is audit-logged</p>
+                        </div>
+                    </div>
+                    <a href="home.html" class="text-sm text-gray-500 hover:text-gray-700 font-medium">← Back to Home</a>
+                </header>
+                <div class="flex flex-wrap gap-2 mb-5">${tabs}</div>
+                ${bodyHTML}
+                ${editing !== null ? renderModal() : ''}`;
+        }
+
+        function renderEntity() {
+            const spec = ENTITIES[current];
+            const cols = spec.cols;
+            const head = cols.map(c => `<th>${h(c.label)}</th>`).join('') + '<th></th>';
+            const body = rows.map(r => {
+                const tds = cols.map(c => {
+                    let v = r[c.k];
+                    if (c.fmt) v = c.fmt(v);
+                    if (c.k === 'status') {
+                        const act = String(r.status).toLowerCase() === 'active';
+                        v = `<span class="badge" style="background:${act ? '#e6f4ea' : '#f0f4f8'};color:${act ? '#1f7a4d' : '#627d98'}">${h(r.status)}</span>`;
+                        return `<td>${v}</td>`;
+                    }
+                    if (c.type === 'datetime' && v) v = String(v).slice(0, 16).replace('T', ' ');
+                    return `<td>${h(v)}</td>`;
+                }).join('');
+                return `<tr>${tds}<td class="whitespace-nowrap text-right">
+                    <button onclick="ADM.edit('${r.id}')" class="text-sm font-medium" style="color:#8f6b1e">Edit</button>
+                    <button onclick="ADM.toggle('${r.id}')" class="text-sm text-gray-400 hover:text-gray-600 ml-3">Toggle</button>
+                </td></tr>`;
+            }).join('');
+            return `
+                <div class="bg-white rounded-xl border border-gray-200">
+                    <div class="flex items-center justify-between p-4 border-b border-gray-100">
+                        <div>
+                            <h2 class="font-bold" style="color:#102a43">${spec.title} <span class="text-gray-400 font-normal">(${rows.length})</span></h2>
+                            ${spec.note ? `<p class="text-xs text-gray-500 mt-1">${spec.note}</p>` : ''}
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="ADM.csv()" class="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 bg-white hover:bg-gray-50" style="color:#102a43">⬇ CSV</button>
+                            <button onclick="ADM.add()" class="btn-primary px-4 py-2 rounded-lg text-sm font-semibold">+ Add</button>
+                        </div>
+                    </div>
+                    <div class="overflow-auto" style="max-height:65vh">
+                        <table class="w-full adm-table text-sm" style="color:#243b53"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
+                    </div>
+                </div>`;
+        }
+
+        function renderAudit() {
+            const tables = ['', 'employees','clients','tasks','holidays','expense_heads','announcements','timesheets','leaves','expenses','assignments','work_plans'];
+            const body = auditRows.map(r => `
+                <tr>
+                    <td class="whitespace-nowrap">${h(String(r.at).slice(0, 19).replace('T', ' '))}</td>
+                    <td>${h(r.actor_email || 'system')}</td>
+                    <td>${h(r.table_name)}</td>
+                    <td><span class="badge" style="background:#f0f4f8;color:#334e68">${h(r.action)}</span></td>
+                    <td class="text-xs text-gray-500" style="max-width:480px;overflow-wrap:anywhere">${h(diff(r))}</td>
+                </tr>`).join('');
+            return `
+                <div class="bg-white rounded-xl border border-gray-200">
+                    <div class="flex flex-wrap items-center gap-3 p-4 border-b border-gray-100">
+                        <h2 class="font-bold mr-auto" style="color:#102a43">Audit Log <span class="text-gray-400 font-normal">(last ${auditRows.length})</span></h2>
+                        <select id="f_table" class="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white" onchange="ADM.reload()">${tables.map(t => `<option value="${t}">${t || 'All tables'}</option>`).join('')}</select>
+                        <input id="f_actor" placeholder="Filter by person…" class="border border-gray-200 rounded-lg px-3 py-2 text-sm" onchange="ADM.reload()">
+                        <button onclick="ADM.csv()" class="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 bg-white hover:bg-gray-50" style="color:#102a43">⬇ CSV</button>
+                    </div>
+                    <div class="overflow-auto" style="max-height:65vh">
+                        <table class="w-full adm-table text-sm" style="color:#243b53">
+                            <thead><tr><th>When (UTC)</th><th>Who</th><th>Table</th><th>Action</th><th>Change</th></tr></thead>
+                            <tbody>${body}</tbody>
+                        </table>
+                    </div>
+                </div>`;
+        }
+
+        function diff(r) {
+            try {
+                if (r.action === 'INSERT') return 'created: ' + short(r.new_data);
+                if (r.action === 'DELETE') return 'removed: ' + short(r.old_data);
+                const o = r.old_data || {}, n = r.new_data || {};
+                const parts = [];
+                for (const k of Object.keys(n)) {
+                    if (['updated_at','updated_by','created_at','created_by','trailstamp'].includes(k)) continue;
+                    if (JSON.stringify(o[k]) !== JSON.stringify(n[k])) parts.push(k + ': ' + short(o[k]) + ' → ' + short(n[k]));
+                }
+                return parts.join(' · ') || '(no visible change)';
+            } catch (e) { return ''; }
+        }
+        function short(v) {
+            if (v === null || v === undefined) return '∅';
+            const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+            return s.length > 60 ? s.slice(0, 57) + '…' : s;
+        }
+
+        function renderModal() {
+            const spec = ENTITIES[current];
+            const f = spec.cols.map(c => {
+                const v = editing && editing.id ? editing[c.k] : (c.def !== undefined ? c.def : '');
+                if (c.type === 'select') {
+                    return `<div><label class="block text-xs font-medium mb-1 text-gray-600">${c.label}</label>
+                        <select id="fld_${c.k}" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+                        ${c.options.map(o => `<option ${o === v ? 'selected' : ''}>${o}</option>`).join('')}</select></div>`;
+                }
+                if (c.type === 'bool') {
+                    return `<div class="flex items-center gap-2 pt-5"><input type="checkbox" id="fld_${c.k}" ${v ? 'checked' : ''} class="w-4 h-4"><label for="fld_${c.k}" class="text-sm text-gray-700">${c.label}</label></div>`;
+                }
+                if (c.type === 'textarea') {
+                    return `<div class="col-span-2"><label class="block text-xs font-medium mb-1 text-gray-600">${c.label}</label>
+                        <textarea id="fld_${c.k}" rows="3" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">${h(v)}</textarea></div>`;
+                }
+                const t = c.type === 'date' ? 'date' : c.type === 'datetime' ? 'datetime-local' : c.type === 'number' ? 'number' : 'text';
+                const val = c.type === 'datetime' && v ? String(v).slice(0, 16) : h(v);
+                return `<div><label class="block text-xs font-medium mb-1 text-gray-600">${c.label}${c.req ? ' *' : ''}</label>
+                    <input type="${t}" id="fld_${c.k}" value="${val}" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"></div>`;
+            }).join('');
+            return `
+                <div class="fixed inset-0 z-50 flex items-center justify-center p-4" style="background:rgba(16,42,67,.55)">
+                    <div class="bg-white rounded-xl w-full max-w-2xl p-6 max-h-[85vh] overflow-auto">
+                        <h3 class="font-bold text-lg mb-4" style="color:#102a43">${editing && editing.id ? 'Edit' : 'Add'} — ${spec.title}</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">${f}</div>
+                        <div class="flex justify-end gap-2 mt-6">
+                            <button onclick="ADM.cancel()" class="px-4 py-2 rounded-lg text-sm border border-gray-200">Cancel</button>
+                            <button onclick="ADM.save()" class="btn-primary px-5 py-2 rounded-lg text-sm font-semibold">Save</button>
+                        </div>
+                    </div>
+                </div>`;
+        }
+
+        // ---------- wire up ----------
+        window.ADM = {
+            go: async k => { current = k; editing = null; await load(); render(); },
+            add: () => { editing = {}; render(); },
+            edit: id => { editing = rows.find(x => x.id === id) || null; render(); },
+            cancel: () => { editing = null; render(); },
+            save, toggle: toggleStatus, csv: exportCSV,
+            reload: async () => { await load(); render(); }
+        };
+        await load(); render();
+    })();
+    </script>
+</body>
+</html>

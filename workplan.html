@@ -182,11 +182,12 @@
     <div id="app"></div>
 
     <script src="config.js"></script>
+    <script src="api.js"></script>
     <script>
         // ============================================
         // CONFIGURATION
         // ============================================
-        const SESSION_TIMEOUT = 30 * 60 * 1000;
+        const SESSION_TIMEOUT = (CONFIG.SESSION_TIMEOUT || 720) * 60 * 1000;
         const SESSION_WARNING = 2 * 60 * 1000;
         const MAX_WORKPLAN_DAYS = 30;
         const MAX_DAILY_HOURS = 6;
@@ -251,7 +252,10 @@
             } catch (e) { return null; }
         }
 
-        function clearSession() { localStorage.removeItem('timewise_session'); }
+        function clearSession() {
+            localStorage.removeItem('timewise_session');
+            if (window.EMS2) { try { EMS2.signOut(); } catch (e) {} }
+        }
 
         function resetSessionTimer() {
             if (sessionTimer) clearTimeout(sessionTimer);
@@ -387,14 +391,7 @@
         // API
         // ============================================
         async function callAPI(action, params = {}) {
-            const response = await fetch(API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify({ action, ...params })
-            });
-            const result = await response.json();
-            if (!result.success) throw new Error(result.error || 'API call failed');
-            return result.data !== undefined ? result.data : result;
+            return window.EMS2.callAPI(action, params);
         }
 
         // ============================================
@@ -850,27 +847,8 @@
         // RENDER — Login
         // ============================================
         function renderLogin() {
-            return `
-                <div class="min-h-screen flex">
-                    <div class="hidden lg:flex lg:w-1/2 flex-col justify-between p-12" style="background:#102a43">
-                        <div><img src="https://drpca.com/assets/drpca-logo.png" alt="DRP & Co. LLP" class="h-12 brightness-0 invert opacity-90" onerror="this.style.display='none'"></div>
-                        <div class="text-white"><h1 class="text-4xl font-bold mb-4">TimeWise EMS</h1><p class="text-lg opacity-60">Work Plan Module</p><p class="opacity-40 text-sm mt-1">Forward-looking 30-day capacity planning</p></div>
-                        <div class="text-white opacity-40 text-sm"><p>DRP &amp; Co. LLP</p><p>Chartered Accountants • Wealth Managers • Valuation Professionals</p></div>
-                    </div>
-                    <div class="w-full lg:w-1/2 flex items-center justify-center p-8 bg-white">
-                        <div class="w-full max-w-md">
-                            <div class="lg:hidden text-center mb-8"><img src="https://drpca.com/assets/drpca-logo.png" alt="DRP &amp; Co." class="h-10 mx-auto mb-4" onerror="this.style.display='none'"></div>
-                            <div class="text-center mb-8"><h2 class="text-2xl font-bold" style="color:#102a43">Work Plan</h2><p class="text-gray-500 mt-2 text-sm">Sign in to continue</p></div>
-                            <div class="space-y-5">
-                                <div><label class="block text-sm font-medium mb-2" style="color:#243b53">Email Address</label><input type="email" id="emailInput" placeholder="your.name@drpca.com" class="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm" onkeypress="if(event.key === 'Enter') handleLogin()"></div>
-                                <button id="loginBtn" onclick="handleLogin()" class="btn-primary w-full py-3 rounded-lg font-semibold text-sm">Sign In</button>
-                                <div id="loginStatus"></div>
-                            </div>
-                            <div class="mt-12 pt-8 border-t border-gray-100"><p class="text-center text-gray-400 text-sm">© 2026 DRP &amp; Co. LLP</p></div>
-                        </div>
-                    </div>
-                </div>
-            `;
+            window.location.replace('home.html');
+            return '<div style="padding:60px;text-align:center;color:#486581;font-family:Inter,sans-serif">Redirecting to sign in…</div>';
         }
 
         // ============================================

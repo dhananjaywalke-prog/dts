@@ -176,6 +176,7 @@
     <div id="app"></div>
 
     <script src="config.js"></script>
+    <script src="api.js"></script>
     <script>
         // ============================================
         // CONFIGURATION
@@ -183,7 +184,7 @@
         // API_URL loaded from config.js
         
         // Session timeout settings (in milliseconds)
-        const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+        const SESSION_TIMEOUT = (CONFIG.SESSION_TIMEOUT || 720) * 60 * 1000; // 30 minutes
         const SESSION_WARNING = 2 * 60 * 1000;  // 2 minutes before timeout
         
         // ============================================
@@ -230,7 +231,7 @@
                 
                 // Check if session is expired (30 minutes)
                 const sessionAge = Date.now() - session.timestamp;
-                if (sessionAge > 30 * 60 * 1000) {
+                if (sessionAge > (CONFIG.SESSION_TIMEOUT || 720) * 60 * 1000) {
                     localStorage.removeItem('timewise_session');
                     return null;
                 }
@@ -243,6 +244,7 @@
 
         function clearSession() {
             localStorage.removeItem('timewise_session');
+            if (window.EMS2) { try { EMS2.signOut(); } catch (e) {} }
         }
 
         // ============================================
@@ -471,23 +473,11 @@
         // ============================================
         // API CALL FUNCTION
         // ============================================
-        async function callAPI(action, data = {}) {
-            try {
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    body: JSON.stringify({ action, ...data })
-                });
-                
-                const result = await response.json();
-                if (!result.success) {
-                    throw new Error(result.error || 'API call failed');
-                }
-                return result.data;
-            } catch (error) {
-                console.error('API Error:', error);
-                throw error;
-            }
+        async function callAPI(action, params = {}) {
+            return window.EMS2.callAPI(action, params);
         }
+
+        function locationVal() { var el = document.getElementById('locationSelect'); return el ? el.value : ''; }
 
         // ============================================
         // DATE CHECK FUNCTIONS
@@ -932,6 +922,7 @@
             const amount = document.getElementById('amountInput').value;
             const statusDiv = document.getElementById('submitStatus');
             const submitBtn = document.getElementById('submitBtn');
+            if (!locationVal()) { statusDiv.innerHTML = '<p class="text-red-600 text-sm">❌ Please select a location.</p>'; return; }
 
             isProcessing = true;
             submitBtn.disabled = true;
@@ -947,6 +938,7 @@
                         task: task,
                         hours: hours,
                         description: description,
+                        location: locationVal(),
                         expenseType: expenseType || 'Not Applicable',
                         expenseAmount: amount || '0'
                     }
@@ -1051,6 +1043,7 @@
             }
             document.getElementById('hoursInput').value = entry.Hours;
             document.getElementById('descInput').value = entry.Description;
+            document.getElementById('locationSelect').value = entry['Location'] || '';
             document.getElementById('expenseSelect').value = entry['Expense Type'] || '';
             document.getElementById('amountInput').value = entry['Expense Amount'] || '0';
             
@@ -1140,6 +1133,7 @@
             const rowId = document.getElementById('editingRowId').value;
             const statusDiv = document.getElementById('submitStatus');
             const submitBtn = document.getElementById('submitBtn');
+            if (!locationVal()) { statusDiv.innerHTML = '<p class="text-red-600 text-sm">❌ Please select a location.</p>'; return; }
 
             isProcessing = true;
             submitBtn.disabled = true;
@@ -1156,6 +1150,7 @@
                         task: task,
                         hours: hours,
                         description: description,
+                        location: locationVal(),
                         expenseType: expenseType || 'Not Applicable',
                         expenseAmount: amount || '0'
                     }
@@ -1263,54 +1258,8 @@
         // RENDER FUNCTIONS
         // ============================================
         function renderLogin() {
-            return `
-                <div class="min-h-screen flex">
-                    <!-- Left Panel - Branding -->
-                    <div class="hidden lg:flex lg:w-1/2 flex-col justify-between p-12" style="background:#102a43">
-                        <div>
-                            <img src="https://drpca.com/assets/drpca-logo.png" alt="DRP & Co. LLP" class="h-12 brightness-0 invert opacity-90" onerror="this.style.display='none'">
-                        </div>
-                        <div class="text-white">
-                            <h1 class="text-4xl font-bold mb-4">TimeWise EMS</h1>
-                            <p class="text-lg opacity-60">Employee Management System</p>
-                            <p class="opacity-40 text-sm mt-1">[internal portal for DRPCA]</p>
-                        </div>
-                        <div class="text-white opacity-40 text-sm">
-                            <p>DRP & Co. LLP</p>
-                            <p>Chartered Accountants • Wealth Managers • Valuation Professionals</p>
-                        </div>
-                    </div>
-                    <!-- Right Panel - Login Form -->
-                    <div class="w-full lg:w-1/2 flex items-center justify-center p-8 bg-white">
-                        <div class="w-full max-w-md">
-                            <div class="lg:hidden text-center mb-8">
-                                <img src="https://drpca.com/assets/drpca-logo.png" alt="DRP & Co." class="h-10 mx-auto mb-4" onerror="this.style.display='none'">
-                            </div>
-                            <div class="text-center mb-8">
-                                <h2 class="text-2xl font-bold" style="color:#102a43">Timesheet Module</h2>
-                                <p class="text-gray-500 mt-2 text-sm">Sign in to manage your timesheet</p>
-                            </div>
-                            <div class="space-y-5">
-                                <div>
-                                    <label class="block text-sm font-medium mb-2" style="color:#243b53">Email Address</label>
-                                    <input type="email" id="emailInput" 
-                                        placeholder="your.name@drpca.com"
-                                        class="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm"
-                                        onkeypress="if(event.key === 'Enter') handleLogin()" />
-                                </div>
-                                <button id="loginBtn" onclick="handleLogin()" 
-                                    class="btn-primary w-full py-3 rounded-lg font-semibold text-sm">
-                                    Sign In
-                                </button>
-                                <div id="loginStatus"></div>
-                            </div>
-                            <div class="mt-12 pt-8 border-t border-gray-100">
-                                <p class="text-center text-gray-400 text-sm">© 2026 DRP & Co. LLP</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
+            window.location.replace('home.html');
+            return '<div style="padding:60px;text-align:center;color:#486581;font-family:Inter,sans-serif">Redirecting to sign in…</div>';
         }
 
         function renderApp() {
@@ -1492,6 +1441,16 @@
                                                     class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gold-400 focus:border-gold-500"
                                                     placeholder="Describe the specific tasks performed..."></textarea>
                                                 <p class="text-xs text-gray-500 mt-1"><span id="charCount">0</span>/500 characters</p>
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium mb-2" style="color:#243b53">Location <span class="text-red-500">*</span></label>
+                                                <select id="locationSelect" class="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm bg-white">
+                                                    <option value="">Select location</option>
+                                                    <option>Office</option>
+                                                    <option>Client Place</option>
+                                                    <option>WFH</option>
+                                                    <option>Travelling</option>
+                                                </select>
                                             </div>
                                             <!-- Expense removed - use Expense Module -->
                                             <input type="hidden" id="expenseSelect" value="">

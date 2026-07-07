@@ -56,6 +56,7 @@
     <div id="app"></div>
 
     <script src="config.js"></script>
+    <script src="api.js"></script>
     <script>
         // ============================================
         // CONFIGURATION
@@ -87,16 +88,7 @@
         }
 
         async function callAPI(action, params = {}) {
-            const response = await fetch(API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify({ action, ...params })
-            });
-            const result = await response.json();
-            if (!result.success && result.error) {
-                throw new Error(result.error);
-            }
-            return result.data !== undefined ? result.data : result;
+            return window.EMS2.callAPI(action, params);
         }
 
         // ============================================
@@ -121,7 +113,7 @@
                 
                 // Check if session is expired (30 minutes)
                 const sessionAge = Date.now() - session.timestamp;
-                if (sessionAge > 30 * 60 * 1000) {
+                if (sessionAge > (CONFIG.SESSION_TIMEOUT || 720) * 60 * 1000) {
                     localStorage.removeItem('timewise_session');
                     return null;
                 }
@@ -134,44 +126,69 @@
 
         function clearSession() {
             localStorage.removeItem('timewise_session');
+            if (window.EMS2) { try { EMS2.signOut(); } catch (e) {} }
         }
 
         // ============================================
         // LOGIN
         // ============================================
-        async function handleLogin() {
+        async function handleSendCode() {
             const input = document.getElementById('emailInput');
             const statusDiv = document.getElementById('loginStatus');
-            const loginBtn = document.getElementById('loginBtn');
+            const btn = document.getElementById('loginBtn');
             employeeEmail = input.value.trim().toLowerCase();
-
             if (!employeeEmail || !employeeEmail.includes('@')) {
                 statusDiv.innerHTML = '<p class="text-red-600 text-sm mt-2">Please enter a valid email</p>';
                 return;
             }
-
-            loginBtn.disabled = true;
-            loginBtn.innerHTML = 'Logging in...';
-            statusDiv.innerHTML = '<p class="text-blue-600 text-sm mt-2">⏳ Verifying...</p>';
-
+            btn.disabled = true; btn.innerHTML = 'Sending code...';
+            statusDiv.innerHTML = '<p class="text-blue-600 text-sm mt-2">⏳ Sending a 6-digit code to your email…</p>';
             try {
-                // Use initHome for single API call
-                const initData = await callAPI('initHome', { email: employeeEmail });
+                await EMS2.sendOtp(employeeEmail);
+                document.getElementById('emailInput').disabled = true;
+                document.getElementById('codeRow').style.display = '';
+                document.getElementById('btnRowSend').style.display = 'none';
+                statusDiv.innerHTML = '<p class="text-green-700 text-sm mt-2">✅ Code sent. Check your inbox (and spam) — it expires in 5 minutes.</p>';
+                setTimeout(() => { var ci = document.getElementById('codeInput'); if (ci) ci.focus(); }, 50);
+            } catch (error) {
+                btn.disabled = false; btn.innerHTML = 'Send Code';
+                statusDiv.innerHTML = '<p class="text-red-600 text-sm mt-2">❌ ' + error.message + '</p>';
+            }
+        }
 
+        async function handleVerifyCode() {
+            const statusDiv = document.getElementById('loginStatus');
+            const btn = document.getElementById('verifyBtn');
+            const code = document.getElementById('codeInput').value.trim();
+            if (!/^[0-9]{6}$/.test(code)) {
+                statusDiv.innerHTML = '<p class="text-red-600 text-sm mt-2">Enter the 6-digit code from the email</p>';
+                return;
+            }
+            btn.disabled = true; btn.innerHTML = 'Verifying...';
+            try {
+                await EMS2.verifyOtp(employeeEmail, code);
+                const initData = await callAPI('initHome', { email: employeeEmail });
                 employeeData = initData.employee;
                 isApprover = initData.isApprover;
                 pendingLeavesCount = initData.pendingLeavesCount || 0;
                 pendingExpensesCount = initData.pendingExpensesCount || 0;
                 taskCounts = initData.taskCounts || { total: 0, pending: 0, overdue: 0 };
-
                 isLoggedIn = true;
                 saveSession();
                 render();
             } catch (error) {
-                loginBtn.disabled = false;
-                loginBtn.innerHTML = 'Login';
-                statusDiv.innerHTML = `<p class="text-red-600 text-sm mt-2">❌ ${error.message}</p>`;
+                btn.disabled = false; btn.innerHTML = 'Verify & Sign In';
+                statusDiv.innerHTML = '<p class="text-red-600 text-sm mt-2">❌ ' + error.message + '</p>';
             }
+        }
+
+        function handleChangeEmail() {
+            document.getElementById('emailInput').disabled = false;
+            document.getElementById('codeRow').style.display = 'none';
+            document.getElementById('btnRowSend').style.display = '';
+            const btn = document.getElementById('loginBtn');
+            btn.disabled = false; btn.innerHTML = 'Send Code';
+            document.getElementById('loginStatus').innerHTML = '';
         }
 
         function handleLogout() {
@@ -202,8 +219,14 @@
                             <div class="lg:hidden text-center mb-8"><img src="https://drpca.com/assets/drpca-logo.png" alt="DRP & Co." class="h-10 mx-auto mb-4" onerror="this.style.display='none'"></div>
                             <div class="text-center mb-8"><h2 class="text-2xl font-bold" style="color:#102a43">Welcome to TimeWise</h2><p class="text-gray-500 mt-2 text-sm">Sign in to continue</p></div>
                             <div class="space-y-5">
-                                <div><label class="block text-sm font-medium mb-2" style="color:#243b53">Email Address</label><input type="email" id="emailInput" placeholder="your.name@drpca.com" class="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm" onkeypress="if(event.key === 'Enter') handleLogin()" /></div>
-                                <button id="loginBtn" onclick="handleLogin()" class="btn-primary w-full py-3 rounded-lg font-semibold text-sm">Sign In</button>
+                                <div><label class="block text-sm font-medium mb-2" style="color:#243b53">Email Address</label><input type="email" id="emailInput" placeholder="your.name@drpca.com" class="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm" onkeypress="if(event.key === 'Enter') handleSendCode()" /></div>
+                                <div id="btnRowSend"><button id="loginBtn" onclick="handleSendCode()" class="btn-primary w-full py-3 rounded-lg font-semibold text-sm">Send Code</button></div>
+                                <div id="codeRow" style="display:none">
+                                    <label class="block text-sm font-medium mb-2" style="color:#243b53">6-digit code (sent to your email)</label>
+                                    <input type="text" id="codeInput" inputmode="numeric" maxlength="6" placeholder="••••••" class="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm text-center" style="letter-spacing:8px;font-size:18px" onkeypress="if(event.key === 'Enter') handleVerifyCode()" />
+                                    <button id="verifyBtn" onclick="handleVerifyCode()" class="btn-primary w-full py-3 rounded-lg font-semibold text-sm mt-3">Verify &amp; Sign In</button>
+                                    <button onclick="handleChangeEmail()" class="w-full py-2 text-sm text-gray-500 hover:text-gray-700 mt-1">Use a different email</button>
+                                </div>
                                 <div id="loginStatus"></div>
                             </div>
                             <div class="mt-12 pt-8 border-t border-gray-100"><p class="text-center text-gray-400 text-sm">© 2026 DRP & Co. LLP</p></div>
@@ -299,6 +322,17 @@
                                 <p class="text-gray-500 text-sm">Attendance, analytics &amp; MIS</p>
                             </a>
                             ` : ''}
+
+                            ${employeeData && employeeData['Role'] === 'admin' ? `
+                            <!-- Admin Module (Admins only) -->
+                            <a href="admin.html" class="module-card bg-white rounded-xl p-6 cursor-pointer block">
+                                <div class="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style="background:#102a43">
+                                    <svg class="w-6 h-6" style="color:#d4a853" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                                </div>
+                                <h2 class="text-lg font-semibold mb-1" style="color:#102a43">Admin</h2>
+                                <p class="text-gray-500 text-sm">Masters, users, announcements &amp; audit</p>
+                            </a>
+                            ` : ''}
                         </div>
 
                         <!-- Footer -->
@@ -344,6 +378,22 @@
                 hideLoading();
                 render();
             } else {
+                try {
+                    const em = window.EMS2 ? await EMS2.getAuthedEmail() : null;
+                    if (em) {
+                        showLoading('Restoring session...');
+                        employeeEmail = em;
+                        const initData = await callAPI('initHome', { email: em });
+                        employeeData = initData.employee;
+                        isApprover = initData.isApprover;
+                        pendingLeavesCount = initData.pendingLeavesCount || 0;
+                        pendingExpensesCount = initData.pendingExpensesCount || 0;
+                        taskCounts = initData.taskCounts || { total: 0, pending: 0, overdue: 0 };
+                        isLoggedIn = true;
+                        saveSession();
+                        hideLoading();
+                    }
+                } catch (e) { hideLoading(); }
                 render();
             }
         }
