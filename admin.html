@@ -134,6 +134,17 @@
                 }
                 obj[c.k] = v;
             }
+            // logical validations
+            if (current === 'announcements' && obj.show_from && obj.show_until && obj.show_until <= obj.show_from) {
+                alert('Show Until must be after Show From'); return;
+            }
+            if (current === 'employees') {
+                if (obj.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(obj.email)) { alert('Invalid email format'); return; }
+                if (obj.joined_on && obj.exited_on && obj.exited_on < obj.joined_on) { alert('Exit date cannot be before joining date'); return; }
+            }
+            if (current === 'holidays' && obj.raw_email && obj.raw_email !== 'All' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(obj.raw_email)) {
+                alert("Applies To must be 'All' or a valid email"); return;
+            }
             let r;
             if (editing && editing.id) r = await sb.from(spec.table).update(obj).eq('id', editing.id);
             else r = await sb.from(spec.table).insert([obj]);
