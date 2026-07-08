@@ -117,7 +117,7 @@ const APP = (() => {
       S.myday = d; S.me = d.employee; S.isApprover = !!d.isApprover;
       S.isAdmin = (d.employee && d.employee['Role']) === 'admin';
       $('uName').textContent = S.me['Employee Name'] || email;
-      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b6';
+      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b7';
       $('uAv').textContent = (S.me['Employee Name']||email).split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
       buildNav();
       show(S.isApprover ? 'dashboard' : 'myday');
@@ -1137,6 +1137,7 @@ const APP = (() => {
       if (kind === 'u') {
         const d = await EMS2.callAPI('viz_user', { employee: opts.employee || '', client: opts.client || '' });
         mount.innerHTML = vizUserHtml(d, opts);
+        const sc = $('stk_scroll'); if (sc) sc.scrollLeft = sc.scrollWidth;
       } else {
         const d = await EMS2.callAPI('viz_client', { client: opts.client || '' });
         mount.innerHTML = vizClientHtml(d, opts);
@@ -1183,13 +1184,23 @@ const APP = (() => {
 
   function vTreemap(items, clickJs) {
     if (!items.length) return '<div class="sub" style="padding:10px">No data.</div>';
-    const tot = items.reduce((s,x)=>s+(+x.hours||0),0) || 1;
-    return `<div style="display:flex;flex-wrap:wrap;gap:3px">${items.map((x,i)=>{
+    let arr = items.slice().sort((a,b)=>(+b.hours||0)-(+a.hours||0));
+    if (arr.length > 12) {
+      const rest = arr.slice(11);
+      arr = arr.slice(0,11);
+      arr.push({ name: 'Others (' + rest.length + ')', hours: Math.round(rest.reduce((s,x)=>s+(+x.hours||0),0)*10)/10, _others: true });
+    }
+    const RAMP = ['#0b1f33','#102a43','#1c3a5c','#2a4d69','#3d5a80','#486581','#627d98','#829ab1','#9fb3c8','#bcccdc','#d9e2ec'];
+    const tot = arr.reduce((s,x)=>s+(+x.hours||0),0) || 1;
+    const n = arr.length;
+    return `<div style="display:flex;flex-wrap:wrap;gap:3px;align-content:flex-start">${arr.map((x,i)=>{
+      const idx = Math.round((n<2?0:i/(n-1)) * (RAMP.length-1));
+      const bg = RAMP[idx]; const light = idx >= 7;
       const share = (+x.hours||0) / tot;
-      const js = clickJs ? clickJs.split('__NAME__').join(String(x.name).split("'").join("\\'")) : '';
-      return `<div ${js?`onclick=\"${js}\"`:''} title="${h(x.name)}: ${fmt1(x.hours)}h (${fmt1(100*share)}%)" style="flex:${Math.max(1, Math.round(share*100))} 1 ${Math.max(64, Math.round(share*420))}px;background:${VIZPAL[i%VIZPAL.length]};color:#fff;border-radius:6px;padding:6px 8px;min-width:0;${js?'cursor:pointer;':''}">
+      const js = (clickJs && !x._others) ? clickJs.split('__NAME__').join(String(x.name).split("'").join("\\'")) : '';
+      return `<div ${js?`onclick=\"${js}\"`:''} title="${h(x.name)}: ${fmt1(x.hours)}h (${fmt1(100*share)}%)" style="flex:${Math.max(1, Math.round(share*100))} 1 ${Math.max(62, Math.round(share*380))}px;background:${bg};color:${light?'var(--navy)':'#fff'};border-radius:6px;padding:6px 8px;min-width:0;${js?'cursor:pointer;':''}">
         <div style="font:600 10.5px Inter;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h(x.name)}</div>
-        <div style="font:500 9.5px Inter;opacity:.75">${fmt1(x.hours)}h</div></div>`;
+        <div style="font:500 9.5px Inter;opacity:.8">${fmt1(x.hours)}h · ${fmt1(100*share)}%</div></div>`;
     }).join('')}</div>`;
   }
 
@@ -1205,21 +1216,60 @@ const APP = (() => {
     }).join('') + '<div class="sub">green = billable · red = non-billable</div>';
   }
 
+  function vStack6(monthly) {
+    if (!monthly.length) return '<div class="sub" style="padding:10px">No data.</div>';
+    const H = 168, colW = 64;
+    const maxT = Math.max(1, ...monthly.map(m=>+m.hours||0));
+    const w = monthly.length * colW;
+    const pts = monthly.map((m,i)=>{ const pct = (+m.hours||0)>0 ? 100*(+m.billable||0)/(+m.hours) : 0; return { x: i*colW+colW/2, y: H - H*pct/100, pct }; });
+    const poly = pts.map(p=>p.x+','+p.y).join(' ');
+    const dots = pts.map(p=>`<circle cx="${p.x}" cy="${p.y}" r="3" fill="var(--gold)"/>`).join('');
+    const cols = monthly.map((m,i)=>{
+      const bh = Math.round(H*(+m.billable||0)/maxT);
+      const nb = Math.max(0, Math.round(H*(+m.hours||0)/maxT) - bh);
+      return `<div style="width:${colW}px;flex:none;display:flex;flex-direction:column;align-items:center;gap:4px">
+        <div title="${fmtM(m.ym)}: total ${fmt1(m.hours)}h · billable ${fmt1(m.billable)}h (${fmt1(pts[i].pct)}%)" style="height:${H}px;display:flex;flex-direction:column;justify-content:flex-end">
+          <div style="width:30px"><div style="height:${nb}px;background:#9fb3c8;border-radius:4px 4px 0 0"></div><div style="height:${bh}px;background:var(--ok);${nb>0?'':'border-radius:4px 4px 0 0'}"></div></div>
+        </div>
+        <div style="font:600 9.5px Inter;color:var(--mut);white-space:nowrap">${fmtM(m.ym)}</div></div>`;
+    }).join('');
+    return `<div style="display:flex;gap:6px;height:100%">
+      <div style="display:flex;flex-direction:column;justify-content:space-between;font:500 9px Inter;color:var(--fog);padding-bottom:18px;flex:none"><span>${fmt1(maxT)}h</span><span>0</span></div>
+      <div id="stk_scroll" style="flex:1;overflow-x:auto;min-width:0"><div style="position:relative;width:${w}px">
+        <svg width="${w}" height="${H}" style="position:absolute;left:0;top:0;pointer-events:none;z-index:2"><polyline points="${poly}" fill="none" stroke="var(--gold)" stroke-width="2" stroke-dasharray="4 3"/>${dots}</svg>
+        <div style="display:flex">${cols}</div>
+      </div></div>
+      <div style="display:flex;flex-direction:column;justify-content:space-between;font:500 9px Inter;color:var(--goldd);padding-bottom:18px;flex:none"><span>100%</span><span>0%</span></div>
+    </div>
+    <div class="sub" style="margin-top:4px">■ billable (green) · ■ non-billable (grey) · –– gold line = % billable · scroll for older months</div>`;
+  }
+
   function vizUserHtml(d, opts) {
+    const mon = d.monthly || [];
+    const tot = mon.reduce((s,m)=>s+(+m.hours||0),0);
+    const bill = mon.reduce((s,m)=>s+(+m.billable||0),0);
+    const idle = mon.reduce((s,m)=>s+(+m.idle||0),0);
+    const pctB = tot>0 ? 100*bill/tot : 0;
+    const pctI = tot>0 ? 100*idle/tot : 0;
+    const top3 = a => (a||[]).slice(0,3).map(x=>`<div style="font:600 11px Inter;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${h(x.name)}">${h(x.name)} <span style="font:500 10px Inter;color:var(--fog)">${fmt1(x.hours)}h</span></div>`).join('') || '<span class="sub">—</span>';
     const empSel = (d.employees||[]).length ? `<select style="width:190px" onchange="APP.vizGo('u',{employee:this.value})"><option value="">Me (${h(d.employeeName)})</option>${d.employees.map(e=>`<option value="${h(e.email)}" ${opts.employee===e.email?'selected':''}>${h(e.name)}</option>`).join('')}</select>` : `<span class="sub">${h(d.employeeName)}</span>`;
     const clientChip = opts.client ? `<span class="pill" style="background:var(--goldbg);color:var(--goldd);cursor:pointer" onclick="APP.vizGo('u',{employee:'${h(opts.employee||'')}'})">Client: ${h(opts.client)} ✕</span>` : '<span class="sub">click a client tile to focus</span>';
-    const flags = (d.flags||[]).filter(f=>f.flag!=='Ok');
+    const tile = (v, lbl, col) => `<div style="border:1px solid var(--line2);border-radius:10px;padding:12px 14px"><div style="font:800 20px Inter;color:${col||'var(--navy)'}">${v}</div><div class="sub">${lbl}</div></div>`;
+    const card = (t, b) => `<div style="border:1px solid var(--line2);border-radius:10px;padding:12px;height:296px;display:flex;flex-direction:column;min-width:0"><div class="sub" style="font-weight:700;color:var(--navy);margin-bottom:8px">${t}</div><div style="flex:1;min-height:0;overflow:auto">${b}</div></div>`;
     return `
-    <div style="display:flex;gap:10px;align-items:center;margin:12px 0">${empSel}${clientChip}</div>
-    <div class="sub" style="font-weight:700;color:var(--navy);margin-bottom:6px">Monthly time reported</div>
-    ${vMonthBars(d.monthly||[], {})}
-    <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:14px">
-      <div><div class="sub" style="font-weight:700;color:var(--navy);margin-bottom:6px">Clients worked for</div>${vTreemap(d.clients||[], `APP.vizGo('u',{employee:'${h(opts.employee||'')}',client:'__NAME__'})`)}</div>
-      <div><div class="sub" style="font-weight:700;color:var(--navy);margin-bottom:6px">Work performed</div>${vTaskBars(d.tasks||[])}</div>
-      <div><div class="sub" style="font-weight:700;color:var(--navy);margin-bottom:6px">Billable % by month (vs 80%)</div>${vPctBars(d.monthly||[], 'billable', 'hours', 80)}</div>
-      <div><div class="sub" style="font-weight:700;color:var(--navy);margin-bottom:6px">Idle hours by month</div>${vMonthBars(d.monthly||[], {key:'idle', color:'#d69e06'})}
-        ${flags.length?`<div class="sub" style="font-weight:700;color:var(--navy);margin:10px 0 4px">Timesheet flags</div>${flags.map(f=>`<div style=\"display:flex;justify-content:space-between;font:500 11.5px Inter;border-bottom:1px solid var(--line2);padding:3px 0\"><span>${h(f.flag)}</span><b>${fmt1(f.hours)}h</b></div>`).join('')}`:''}
-      </div>
+    <div style="display:flex;gap:10px;align-items:center;margin:12px 0;flex-wrap:wrap">${empSel}${clientChip}</div>
+    <div class="grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:12px">
+      ${tile(fmt1(tot), 'Total hours')}
+      ${tile(fmt1(pctB)+'%', '% billable', 'var(--ok)')}
+      ${tile(fmt1(pctI)+'%', '% idle time', 'var(--goldd)')}
+      <div style="border:1px solid var(--line2);border-radius:10px;padding:10px 14px"><div class="sub" style="margin-bottom:4px">3 key clients</div>${top3(d.clients)}</div>
+      <div style="border:1px solid var(--line2);border-radius:10px;padding:10px 14px"><div class="sub" style="margin-bottom:4px">3 key tasks</div>${top3(d.tasks)}</div>
+    </div>
+    <div class="grid" style="grid-template-columns:1fr 1fr">
+      ${card('Clients worked for', vTreemap(d.clients||[], `APP.vizGo('u',{employee:'${h(opts.employee||'')}',client:'__NAME__'})`))}
+      ${card('Work performed', vTreemap(d.tasks||[], null))}
+      ${card('Months — billable hours &amp; % billable', vStack6(mon))}
+      ${card('Location', vTreemap(d.locations||[], null))}
     </div>`;
   }
 
