@@ -15,9 +15,9 @@
   /* sidebar */
   #side { width:216px; background:var(--navy); color:#fff; display:flex; flex-direction:column; position:sticky; top:0; height:100vh; flex:none; }
   #side .brand { padding:18px; display:flex; align-items:center; gap:10px; border-bottom:1px solid rgba(255,255,255,.08); }
-  #side .brand img { height:26px; filter:brightness(0) invert(1); opacity:.95; display:block; }
-  #side .brand .bar { height:18px; width:1px; background:rgba(255,255,255,.25); }
-  #side .brand b { font-size:14px; font-weight:700; }
+  #side .brand img { height:36px; filter:brightness(0) invert(1); opacity:.95; display:block; }
+  #side .brand .bar { height:24px; width:1px; background:rgba(255,255,255,.25); }
+  #side .brand b { font-size:12px; font-weight:700; }
   #nav { padding:12px 10px; display:flex; flex-direction:column; gap:2px; }
   .nitem { display:flex; align-items:center; gap:10px; padding:9px 12px; border:0; border-left:3px solid transparent; border-radius:0 8px 8px 0; background:none; color:rgba(255,255,255,.72); font:500 13px Inter; cursor:pointer; text-align:left; width:100%; }
   .nitem:hover { color:#fff; background:rgba(255,255,255,.05); }
@@ -86,6 +86,18 @@ const APP = (() => {
   const h = s => String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const fmt1 = n => (Math.round((+n||0)*100)/100).toLocaleString('en-IN');
   const IST_DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const MONS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function fmtD(iso){ const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[3]+'-'+MONS[+m[2]-1]+'-'+m[1].slice(2) : h(iso||''); }
+  function fmtM(ym){ const m=String(ym||'').match(/^(\d{4})-(\d{2})/); return m ? MONS[+m[2]-1]+'-'+m[1].slice(2) : h(ym||''); }
+  function sane(t){ t=String(t||'').trim(); if(t.length<10) return false; const w=t.split(/\s+/); return w.length>=5 && w.filter(x=>/[A-Za-z]{3,}/.test(x)).length>=3; }
+  const SANE_HINT = 'meaningful sentence: 10+ characters, 5+ real words';
+  const TSORT = {};
+  function tsort(view, col){ const s=TSORT[view]=TSORT[view]||{}; if(s.col===col) s.dir=s.dir==='asc'?'desc':'asc'; else { s.col=col; s.dir='asc'; } RENDER[view](); }
+  function fGo(view, key, val){ (TSORT[view]=TSORT[view]||{})[key]=val; RENDER[view](); }
+  let _qdeb; function qGo(view, val){ (TSORT[view]=TSORT[view]||{}).q=val.trim(); clearTimeout(_qdeb); _qdeb=setTimeout(()=>RENDER[view](),300); }
+  function tq(view, rows){ const q=(TSORT[view]&&TSORT[view].q||'').toLowerCase(); return q ? rows.filter(r=>JSON.stringify(r).toLowerCase().includes(q)) : rows; }
+  function applySort(view, rows, defCol, defDir){ const s=TSORT[view]||{}; const col=s.col||defCol, dir=s.col?s.dir:(defDir||'asc'); const isD=v=>/^\d{4}-\d{2}/.test(String(v)); return rows.slice().sort((a,b)=>{ let x=a[col], y=b[col]; const nx=parseFloat(x), ny=parseFloat(y); if(isD(x)&&isD(y)){ x=String(x); y=String(y); } else if(!isNaN(nx)&&!isNaN(ny)&&String(x).trim()!==''&&String(y).trim()!==''){ x=nx; y=ny; } else { x=String(x??'').toLowerCase(); y=String(y??'').toLowerCase(); } return (x<y?-1:x>y?1:0)*(dir==='asc'?1:-1); }); }
+  function thdr(view, cols, gtc, top){ const s=TSORT[view]||{}; return `<div class="xh" style="grid-template-columns:${gtc};top:${top||0}">` + cols.map(c=>`<div ${c.k?`onclick=\"APP.tsortGo('${view}','${c.k}')\"`:''} style="${c.r?'text-align:right;':''}${s.col===c.k?'color:var(--navy);':''}">${c.l}${c.k?(s.col===c.k?(s.dir==='asc'?' ▲':' ▼'):' ↕'):''}</div>`).join('') + '</div>'; }
 
   function toast(msg, err) {
     const t = document.createElement('div');
@@ -115,7 +127,7 @@ const APP = (() => {
   const VIEWS = () => [
     S.isApprover && { id:'dashboard', icon:'📊', label:'Dashboard' },
     S.isApprover && { id:'approvals', icon:'✅', label:'Approvals', badge:()=>S.cache.dashboard?( (S.cache.dashboard.approvals.leaves.length + S.cache.dashboard.approvals.expenses.length) || null):null },
-    S.isApprover && { id:'review', icon:'🔎', label:'Review' },
+    { id:'review', icon:'🔎', label:'Review' },
     { id:'myday', icon:'☀️', label:'My Day', dot:()=>missingYday() },
     { id:'timesheet', icon:'🗓', label:'Timesheet' },
     { id:'workplan', icon:'📋', label:'Work Plan' },
@@ -197,7 +209,7 @@ const APP = (() => {
           <div><div style="font:800 20px Inter;color:var(--goldd)">${fmt1(d.plBalance)}</div><div class="sub">PL balance</div></div>
         </div>
         <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line2);display:flex;flex-direction:column;gap:6px;font:500 12px Inter">
-          ${(d.pendings.leaves||[]).map(l=>`<div>🌴 ${h(l['Leave Type'])} ${h(l['From Date'])} → ${h(l['To Date'])} — <b style="color:${l.Status==='Approved'?'var(--ok)':'var(--goldd)'}">${h(l.Status)}</b></div>`).join('') || '<div class="sub">No upcoming leaves.</div>'}
+          ${(d.pendings.leaves||[]).map(l=>`<div>🌴 ${h(l['Leave Type'])} ${fmtD(l['From Date'])} → ${fmtD(l['To Date'])} — <b style="color:${l.Status==='Approved'?'var(--ok)':'var(--goldd)'}">${h(l.Status)}</b></div>`).join('') || '<div class="sub">No upcoming leaves.</div>'}
         </div>
       </div>
     </div>`;
@@ -277,28 +289,68 @@ const APP = (() => {
   function apprRow(kind, item) {
     const id = item['Row ID'];
     const title = kind==='leave'
-      ? `${h(item['Employee Name'])} — ${h(item['Leave Type'])}, ${h(item['From Date'])} → ${h(item['To Date'])} (${fmt1(item['Total Days'])}d)`
+      ? `${h(item['Employee Name'])} — ${h(item['Leave Type'])}, ${fmtD(item['From Date'])} → ${fmtD(item['To Date'])} (${fmt1(item['Total Days'])}d)`
       : `${h(item['Employee Name'])} — ₹${fmt1(item['Amount'])} ${h(item['Expense Type']||'')}`;
-    const sub = kind==='leave' ? h(item['Reason']||'') : `${h(item['Client Name']||'')} · ${h(item['Reimbursement By']||'')} · ${h(item['Description']||'')}`;
-    return `<div style="border:1px solid var(--line2);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:10px">
+    const sub = kind==='leave' ? h(item['Reason']||'') : `${h(item['Client Name']||'—')} · ${h(item['Description']||'')}`;
+    return `<div onclick="APP.openAppr('${kind}','${id}')" style="cursor:pointer;border:1px solid var(--line2);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:10px">
       <span>${kind==='leave'?'🌴':'💳'}</span>
       <div style="flex:1;min-width:0"><div style="font:600 12px Inter">${title}</div><div class="sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${sub}</div></div>
-      <button class="btn2" style="color:var(--ok);border-color:var(--okbg)" onclick="APP.act('${kind}','approve','${id}')">✓ Approve</button>
-      <button class="btn2" style="color:var(--bad);border-color:var(--badbg)" onclick="APP.act('${kind}','reject','${id}')">✕</button>
+      <span class="btn2" style="pointer-events:none">Open →</span>
     </div>`;
   }
 
-  async function act(kind, what, rowId) {
-    let comments = '';
-    if (what === 'reject') { comments = prompt('Reason for rejection (required):') || ''; if (!comments.trim()) return; }
-    const action = (what==='approve' ? 'approve' : 'reject') + (kind==='leave' ? 'Leave' : 'Expense');
+  const BULK = { leave:{}, expense:{} };
+
+  function openAppr(kind, id) {
+    const d = S.cache.dashboard; if (!d) return;
+    const list = kind==='leave' ? d.approvals.leaves : d.approvals.expenses;
+    const it = (list||[]).find(x=>String(x['Row ID'])===String(id)); if (!it) return;
+    const F = (l,v)=>`<div style="display:flex;gap:8px;padding:6px 0;border-bottom:1px solid var(--line2)"><span class="sub" style="width:140px;flex:none">${l}</span><span style="font:500 12.5px Inter;min-width:0">${v||'—'}</span></div>`;
+    const body = kind==='leave'
+      ? F('Employee',h(it['Employee Name']))+F('Leave type',h(it['Leave Type'])+(it['Auto LOP']==='Yes'?' (Auto LOP)':''))+F('Day type',h(it['Day Type']))+F('From',fmtD(it['From Date']))+F('To',fmtD(it['To Date']))+F('Working days',fmt1(it['Total Days']))+F('Reason',h(it['Reason']))+F('Applied on',h(it['Applied On']))
+      : F('Employee',h(it['Employee Name']))+F('Date',fmtD(it.Date))+F('Type',h(it['Expense Type']))+F('Amount','₹'+fmt1(it.Amount))+F('Client',h(it['Client Name']))+F('Reimbursement by',h(it['Reimbursement By']))+F('Receipt ref',h(it['Receipt Reference']))+F('Description',h(it.Description))+F('Submitted on',h(it['Submitted On']));
+    modal((kind==='leave'?'Leave':'Expense')+' application', body +
+      `<div style="margin-top:12px"><label class="sub">Comments — required to reject (${SANE_HINT})</label><textarea id="ap_cmt" rows="2"></textarea></div>
+      <div style="margin-top:12px;display:flex;gap:10px">
+        <button class="btn" style="background:var(--ok)" onclick="APP.actGo('${kind}','approve','${id}')">✓ Approve</button>
+        <button class="btn" style="background:var(--bad)" onclick="APP.actGo('${kind}','reject','${id}')">✕ Reject</button>
+      </div>`);
+  }
+
+  async function actGo(kind, what, id) {
+    const cEl = $('ap_cmt');
+    const comments = (cEl && cEl.value.trim()) || '';
+    if (what==='reject' && !sane(comments)) return toast('Rejection needs a ' + SANE_HINT, true);
+    closeModal();
     try {
-      await EMS2.callAPI(action, { rowId, approverEmail: S.me['Employee Email'], approverName: S.me['Employee Name'], comments });
-      toast((what==='approve'?'Approved':'Rejected') + ' ✓');
-      await dashData(true); buildNav();
-      (S.view==='dashboard' ? rDashboard : rApprovals)();
+      await EMS2.callAPI((what==='approve'?'approve':'reject')+(kind==='leave'?'Leave':'Expense'),
+        { rowId: id, approverEmail: S.me['Employee Email'], approverName: S.me['Employee Name'], comments });
+      toast((what==='approve'?'Approved':'Rejected')+' ✓');
+      delete BULK[kind][id];
+      await dashData(true); buildNav(); RENDER[S.view]();
     } catch (e) { toast(e.message, true); }
   }
+
+  function selAppr(kind, id, on) { if (on) BULK[kind][id] = 1; else delete BULK[kind][id]; RENDER.approvals(); }
+
+  async function bulkApprove(kind) {
+    const ids = Object.keys(BULK[kind]);
+    if (!ids.length) return;
+    if (!confirm('Approve ' + ids.length + ' selected ' + (kind==='leave'?'leave(s)':'expense(s)') + '?')) return;
+    let ok = 0;
+    for (const id of ids) {
+      try {
+        await EMS2.callAPI('approve'+(kind==='leave'?'Leave':'Expense'),
+          { rowId: id, approverEmail: S.me['Employee Email'], approverName: S.me['Employee Name'], comments: '' });
+        ok++;
+      } catch (e) { toast(e.message, true); }
+    }
+    BULK[kind] = {};
+    toast('Approved ' + ok + ' of ' + ids.length);
+    await dashData(true); buildNav(); RENDER[S.view]();
+  }
+
+  async function rfshAppr() { await dashData(true); buildNav(); RENDER[S.view](); }
 
   async function rDashboard() {
     const d = await dashData(true); buildNav();
@@ -331,15 +383,31 @@ const APP = (() => {
   }
 
   async function rApprovals() {
-    const d = await dashData(true); buildNav();
-    const lv = d.approvals.leaves||[], ex = d.approvals.expenses||[];
-    $('view').innerHTML = `
-    <div class="grid" style="grid-template-columns:1fr 1fr">
-      <div class="card"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span class="h">Leaves</span><span class="pill" style="background:var(--goldbg);color:var(--goldd)">${lv.length}</span></div>
-        <div style="display:flex;flex-direction:column;gap:8px">${lv.map(x=>apprRow('leave',x)).join('')||'<div class="sub">None pending.</div>'}</div></div>
-      <div class="card"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span class="h">Expenses</span><span class="pill" style="background:var(--goldbg);color:var(--goldd)">${ex.length}</span></div>
-        <div style="display:flex;flex-direction:column;gap:8px">${ex.map(x=>apprRow('expense',x)).join('')||'<div class="sub">None pending.</div>'}</div></div>
-    </div>`;
+    const d = await dashData(!S.cache.dashboard); buildNav();
+    const card = (view, kind, title, items, cols, gtc, rowFn) => {
+      const F = TSORT[view]||{};
+      const rows = applySort(view, tq(view, items), cols[1].k, 'asc');
+      const nSel = Object.keys(BULK[kind]).length;
+      return `<div class="card" style="padding:0;overflow:hidden;margin-top:12px">
+        <div style="padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="h">${title}</span><span class="pill" style="background:var(--goldbg);color:var(--goldd)">${items.length} pending</span>
+          <input style="width:180px;margin-left:12px" placeholder="🔍 Search…" value="${h(F.q||'')}" oninput="APP.qGo('${view}', this.value)">
+          <button class="btn2" style="margin-left:auto" onclick="APP.rfshAppr()">↺ Refresh</button>
+          <button class="btn" ${nSel?'':'disabled'} onclick="APP.bulkApprove('${kind}')">✓ Approve selected (${nSel})</button>
+        </div>
+        <div class="xt">${thdr(view, cols, gtc)}${rows.map(rowFn).join('') || '<div style=\"padding:24px\" class=\"sub\">Nothing pending 🎉</div>'}</div>
+      </div>`;
+    };
+    const lvCols = [{l:''},{k:'Employee Name',l:'Person'},{k:'Leave Type',l:'Type'},{k:'From Date',l:'From'},{k:'To Date',l:'To'},{k:'Total Days',l:'Days',r:1},{k:'Reason',l:'Reason'},{k:'Applied On',l:'Applied'}];
+    const exCols = [{l:''},{k:'Employee Name',l:'Person'},{k:'Date',l:'Date'},{k:'Expense Type',l:'Type'},{k:'Amount',l:'₹',r:1},{k:'Client Name',l:'Client'},{k:'Description',l:'Description'},{k:'Submitted On',l:'Submitted'}];
+    const gtcL = '36px 150px 90px 92px 92px 60px 1fr 150px';
+    const gtcX = '36px 150px 90px 110px 84px 160px 1fr 150px';
+    const cb = (kind,id)=>`<div onclick="event.stopPropagation()"><input type="checkbox" style="width:auto" ${BULK[kind][id]?'checked':''} onchange="APP.selAppr('${kind}','${id}',this.checked)"></div>`;
+    const lvRow = l=>`<div class="xr" style="grid-template-columns:${gtcL};cursor:pointer" onclick="APP.openAppr('leave','${l['Row ID']}')">${cb('leave',l['Row ID'])}<div>${h(l['Employee Name'])}</div><div>${h(l['Leave Type'])}${l['Auto LOP']==='Yes'?' · LOP':''}</div><div style="color:var(--mut)">${fmtD(l['From Date'])}</div><div style="color:var(--mut)">${fmtD(l['To Date'])}</div><div class="num">${fmt1(l['Total Days'])}</div><div style="color:#486581" title="${h(l.Reason)}">${h(l.Reason||'')}</div><div style="color:var(--mut)">${h(l['Applied On']||'')}</div></div>`;
+    const exRow = x=>`<div class="xr" style="grid-template-columns:${gtcX};cursor:pointer" onclick="APP.openAppr('expense','${x['Row ID']}')">${cb('expense',x['Row ID'])}<div>${h(x['Employee Name'])}</div><div style="color:var(--mut)">${fmtD(x.Date)}</div><div>${h(x['Expense Type'])}</div><div class="num">${fmt1(x.Amount)}</div><div style="color:var(--mut)">${h(x['Client Name']||'—')}</div><div style="color:#486581" title="${h(x.Description)}">${h(x.Description||'')}</div><div style="color:var(--mut)">${h(x['Submitted On']||'')}</div></div>`;
+    $('view').innerHTML =
+      card('apl','leave','Leave approvals', d.approvals.leaves||[], lvCols, gtcL, lvRow) +
+      card('apx','expense','Expense approvals', d.approvals.expenses||[], exCols, gtcX, exRow);
   }
 
   // ---------------- REVIEW TABLE ----------------
@@ -355,8 +423,7 @@ const APP = (() => {
     RT.busy = false;
   }
 
-  const RT_COLS = [ ['date','Date','92px'], ['person','Person','150px'], ['client','Client','1fr'], ['task','Task','150px'], ['hours','Hrs','64px'], ['location','Location','96px'], ['desc','Description','1.2fr'], ['flag','Flag','120px'] ];
-  const FLAGS = ['Ok','Review','Incomplete Entry','Leave Without Approval','Incorrect Type Of Work','Client name missing in description'];
+  const RT_COLS = [ ['date','Date','96px'], ['person','Person','150px'], ['client','Client','1fr'], ['task','Task','150px'], ['hours','Hrs','64px'], ['location','Location','96px'], ['desc','Description','1.4fr'] ];
 
   async function rReview() {
     if (!RT.month) { const t = new Date(); RT.month = t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-01'; }
@@ -366,11 +433,12 @@ const APP = (() => {
 
   function renderReview() {
     const gtc = RT_COLS.map(c=>c[2]).join(' ');
+    const personSel = S.isApprover ? `<select id="rt_person" style="width:170px"><option value="">Person: All</option>${RT.people.map(p=>`<option ${p===RT.person?'selected':''}>${h(p)}</option>`).join('')}</select>` : '';
     $('view').innerHTML = `
     <div class="card" style="padding:0;overflow:visible">
       <div style="padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <input type="month" id="rt_month" value="${RT.month.slice(0,7)}" style="width:150px">
-        <select id="rt_person" style="width:170px"><option value="">Person: All</option>${RT.people.map(p=>`<option ${p===RT.person?'selected':''}>${h(p)}</option>`).join('')}</select>
+        ${personSel}
         <select id="rt_client" style="width:200px"><option value="">Client: All</option>${RT.clients.map(c=>`<option ${c===RT.client?'selected':''}>${h(c)}</option>`).join('')}</select>
         <select id="rt_loc" style="width:130px"><option value="">Location: All</option>${['Office','Client Place','WFH','Travelling'].map(l=>`<option ${l===RT.location?'selected':''}>${l}</option>`).join('')}</select>
         <input id="rt_q" placeholder="🔍 Search…" value="${h(RT.search)}" style="width:180px">
@@ -390,7 +458,7 @@ const APP = (() => {
       </div>
     </div>`;
     $('rt_month').onchange = e => { RT.month = e.target.value + '-01'; rtLoad(true).then(renderReview); };
-    $('rt_person').onchange = e => { RT.person = e.target.value; rtLoad(true).then(renderReview); };
+    const _ps = $('rt_person'); if (_ps) _ps.onchange = e => { RT.person = e.target.value; rtLoad(true).then(renderReview); };
     $('rt_client').onchange = e => { RT.client = e.target.value; rtLoad(true).then(renderReview); };
     $('rt_loc').onchange = e => { RT.location = e.target.value; rtLoad(true).then(renderReview); };
     let deb; $('rt_q').oninput = e => { clearTimeout(deb); deb = setTimeout(()=>{ RT.search = e.target.value.trim(); rtLoad(true).then(renderReview); }, 350); };
@@ -405,11 +473,10 @@ const APP = (() => {
   function rtRows() {
     const gtc = RT_COLS.map(c=>c[2]).join(' ');
     return RT.rows.map(r=>`<div class="xr" style="grid-template-columns:${gtc};${r.Auto?'color:var(--fog)':''}">
-      <div style="color:var(--mut)">${h((r.Date||'').slice(5))}</div>
+      <div style="color:var(--mut)">${fmtD(r.Date)}</div>
       <div>${h(r.Person)}</div><div>${h(r.Client)}</div><div>${h(r.Task)}</div>
       <div class="num">${fmt1(r.Hours)}</div><div style="color:var(--mut)">${h(r.Location||'—')}</div>
       <div title="${h(r.Description)}" style="color:#486581">${h(r.Description||'')}</div>
-      <div><select style="padding:2px 6px;font-size:11px;border-radius:6px" onchange="APP.rtFlag('${r['Row ID']}',this.value)">${FLAGS.map(f=>`<option ${f===(r.Flag||'Ok')?'selected':''}>${f}</option>`).join('')}</select></div>
     </div>`).join('') || '<div style="padding:24px" class="sub">No rows match.</div>';
   }
 
@@ -426,9 +493,9 @@ const APP = (() => {
   async function rtCSV() {
     toast('Preparing CSV…');
     while (!RT.done && RT.rows.length < 5000) { await rtLoad(false); }
-    const heads = ['Date','Person','Client','Task','Hours','Location','Description','Flag'];
+    const heads = ['Date','Person','Client','Task','Hours','Location','Description'];
     const esc = v => '"' + String(v??'').replace(/"/g,'""') + '"';
-    const csv = [heads.join(',')].concat(RT.rows.map(r=>heads.map(k=>esc(r[k])).join(','))).join('\n');
+    const csv = [heads.join(',')].concat(RT.rows.map(r=>heads.map(k=>esc(k==='Date'?fmtD(r[k]):r[k])).join(','))).join('\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
     a.download = 'timesheet-review-' + RT.month.slice(0,7) + '.csv'; a.click();
@@ -461,7 +528,7 @@ const APP = (() => {
           ${rows.map(r=>{
             const editable = !r.Auto && r.Date >= cutoff;
             return `<div class="xr" style="grid-template-columns:${gtc};${r.Auto?'color:var(--fog)':''}">
-              <div style="color:var(--mut)">${h(r.Date)}</div><div>${h(r.Client)}</div><div>${h(r.Task)}</div>
+              <div style="color:var(--mut)">${fmtD(r.Date)}</div><div>${h(r.Client)}</div><div>${h(r.Task)}</div>
               <div class="num">${fmt1(r.Hours)}</div><div style="color:var(--mut)">${h(r.Location||'—')}</div>
               <div title="${h(r.Description)}" style="color:#486581">${h(r.Description||'')}</div>
               <div style="white-space:nowrap">${editable?`<button class=\"btn2\" style=\"padding:2px 8px;font-size:11px\" onclick='APP.tsEdit(${JSON.stringify(r).replace(/'/g,"&#39;")})'>Edit</button> <button class=\"btn2\" style=\"padding:2px 8px;font-size:11px;color:var(--bad)\" onclick=\"APP.tsDel('${r['Row ID']}')\">Del</button>`:''}</div>
@@ -503,7 +570,7 @@ const APP = (() => {
             ? `<button class=\"btn2\" style=\"padding:2px 8px;font-size:11px\" onclick='APP.wpForm(${JSON.stringify(w).replace(/'/g,"&#39;")},"update")'>Edit</button> <button class=\"btn2\" style=\"padding:2px 8px;font-size:11px;color:var(--bad)\" onclick=\"APP.wpDel('${w['Row ID']}')\">Del</button>`
             : inprog ? `<button class=\"btn2\" style=\"padding:2px 8px;font-size:11px\" onclick='APP.wpForm(${JSON.stringify(w).replace(/'/g,"&#39;")},"revise")'>Revise</button> <button class=\"btn2\" style=\"padding:2px 8px;font-size:11px;color:var(--goldd)\" onclick=\"APP.wpEnd('${w['Row ID']}')\">End</button>` : '';
           return `<div class="xr" style="grid-template-columns:${gtc}">
-            <div style="color:var(--mut)">${h(w['From Date'])}</div><div style="color:var(--mut)">${h(w['To Date'])}</div>
+            <div style="color:var(--mut)">${fmtD(w['From Date'])}</div><div style="color:var(--mut)">${fmtD(w['To Date'])}</div>
             <div>${h(w.Client)}</div><div>${h(w.Task)}</div><div class="num">${fmt1(w['Daily Hours'])}</div>
             <div style="color:var(--mut)">${h(w.Location||'—')}</div><div style="color:#486581" title="${h(w.Description)}">${h(w.Description||'')}</div>
             <div>${w['Include Off Days']==='Yes'?'<span class="pill" style="background:var(--goldbg);color:var(--goldd)">Yes</span>':'<span class="sub">No</span>'}</div>
@@ -567,7 +634,7 @@ const APP = (() => {
         <div class="xt"><div class="xh" style="grid-template-columns:${gtc};top:0"><div>Type</div><div>From</div><div>To</div><div style="text-align:right">Days</div><div>Status</div><div>Reason</div><div>Approver</div><div></div></div>
         ${(d.leaves||[]).map(l=>`<div class="xr" style="grid-template-columns:${gtc}">
           <div>${h(l['Leave Type'])}${l['Auto LOP']==='Yes'?' <span class="pill" style="background:var(--badbg);color:var(--bad)">auto</span>':''}</div>
-          <div style="color:var(--mut)">${h(l['From Date'])}</div><div style="color:var(--mut)">${h(l['To Date'])}</div>
+          <div style="color:var(--mut)">${fmtD(l['From Date'])}</div><div style="color:var(--mut)">${fmtD(l['To Date'])}</div>
           <div class="num">${fmt1(l['Total Days'])}</div>
           <div><span class="pill" style="background:${l.Status==='Approved'?'var(--okbg)':l.Status==='Pending'?'var(--goldbg)':'var(--line2)'};color:${l.Status==='Approved'?'var(--ok)':l.Status==='Pending'?'var(--goldd)':'var(--mut)'}">${h(l.Status)}</span></div>
           <div style="color:#486581" title="${h(l.Reason)}">${h(l.Reason||'')}</div><div style="color:var(--mut)">${h(l['Approver Name']||'—')}</div>
@@ -603,66 +670,101 @@ const APP = (() => {
 
   // ---------------- EXPENSES ----------------
   async function rExpenses() {
-    const d = S.cache.exp = await EMS2.callAPI('initExpense', {});
-    const sm = d.summary || {};
-    const gtc = '92px 130px 90px 1fr 120px 90px 100px 90px';
+    const d = S.cache.exp || (S.cache.exp = await EMS2.callAPI('initExpense', {}));
+    if (!S.exMonth) S.exMonth = S.myday.today.date.slice(0,7);
+    const all = d.expenses || [];
+    const months = [...new Set(all.map(x=>String(x.Date||'').slice(0,7)))].filter(Boolean);
+    if (!months.includes(S.exMonth)) months.push(S.exMonth);
+    months.sort().reverse();
+    const mine = all.filter(x=>String(x.Date||'').startsWith(S.exMonth));
+    const sum = st => mine.filter(x=>!st||x.Status===st).reduce((s,x)=>s+(+x.Amount||0),0);
+    const F = TSORT['exp'] = TSORT['exp']||{};
+    let rows = mine;
+    if (F.ftype) rows = rows.filter(x=>x['Expense Type']===F.ftype);
+    if (F.fstatus) rows = rows.filter(x=>x.Status===F.fstatus);
+    rows = applySort('exp', tq('exp', rows), 'Date', 'desc');
+    const gtc = '86px 120px 84px 1.4fr 160px 100px 92px 118px';
+    const cols = [{k:'Date',l:'Date'},{k:'Expense Type',l:'Type'},{k:'Amount',l:'₹',r:1},{k:'Description',l:'Description'},{k:'Client Name',l:'Client'},{k:'Reimbursement By',l:'Reimb.'},{k:'Status',l:'Status'},{l:''}];
+    const types = [...new Set(all.map(x=>x['Expense Type']).filter(Boolean))].sort();
     $('view').innerHTML = `
-    <div class="grid" style="grid-template-columns:repeat(4,1fr)">
-      <div class="card"><div style="font:800 22px Inter;color:var(--goldd)">₹${fmt1(sm.pending)}</div><div class="sub">Pending</div></div>
-      <div class="card"><div style="font:800 22px Inter;color:var(--ok)">₹${fmt1(sm.approved)}</div><div class="sub">Approved</div></div>
-      <div class="card"><div style="font:800 22px Inter;color:var(--bad)">₹${fmt1(sm.rejected)}</div><div class="sub">Rejected</div></div>
-      <div class="card"><div style="font:800 22px Inter;color:var(--navy)">₹${fmt1((+sm.pending||0)+(+sm.approved||0))}</div><div class="sub">Pending + Approved</div></div>
+    <div class="grid" style="grid-template-columns:170px repeat(4,1fr)">
+      <div class="card"><div class="sub" style="margin-bottom:6px">Month</div><select onchange="APP.exMonthGo(this.value)">${months.map(m=>`<option value="${m}" ${m===S.exMonth?'selected':''}>${fmtM(m)}</option>`).join('')}</select></div>
+      <div class="card"><div style="font:800 22px Inter;color:var(--navy)">₹${fmt1(sum())}</div><div class="sub">Claimed</div></div>
+      <div class="card"><div style="font:800 22px Inter;color:var(--ok)">₹${fmt1(sum('Approved'))}</div><div class="sub">Approved</div></div>
+      <div class="card"><div style="font:800 22px Inter;color:var(--bad)">₹${fmt1(sum('Rejected'))}</div><div class="sub">Rejected</div></div>
+      <div class="card"><div style="font:800 22px Inter;color:var(--goldd)">₹${fmt1(sum('Pending'))}</div><div class="sub">Pending</div></div>
     </div>
-    <div class="grid" style="grid-template-columns:1fr 340px;margin-top:12px">
-      <div class="card" style="padding:0;overflow:hidden">
-        <div style="padding:12px 16px;border-bottom:1px solid var(--line)"><span class="h">My expenses</span></div>
-        <div class="xt"><div class="xh" style="grid-template-columns:${gtc};top:0"><div>Date</div><div>Type</div><div style="text-align:right">₹</div><div>Description</div><div>Client</div><div>Reimb. by</div><div>Status</div><div></div></div>
-        ${(d.expenses||[]).map(x=>`<div class="xr" style="grid-template-columns:${gtc}">
-          <div style="color:var(--mut)">${h(x.Date)}</div><div>${h(x['Expense Type'])}</div><div class="num">${fmt1(x.Amount)}</div>
+    <div class="card" style="padding:0;overflow:hidden;margin-top:12px">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span class="h">My expenses</span><span class="sub">${fmtM(S.exMonth)}</span>
+        <select style="width:150px;margin-left:12px" onchange="APP.fGo('exp','ftype',this.value)"><option value="">Type: All</option>${types.map(t=>`<option ${t===F.ftype?'selected':''}>${h(t)}</option>`).join('')}</select>
+        <select style="width:130px" onchange="APP.fGo('exp','fstatus',this.value)"><option value="">Status: All</option>${['Pending','Approved','Rejected','Cancelled'].map(s=>`<option ${s===F.fstatus?'selected':''}>${s}</option>`).join('')}</select>
+        <input style="width:170px" placeholder="🔍 Search…" value="${h(F.q||'')}" oninput="APP.qGo('exp', this.value)">
+        <button class="btn" style="margin-left:auto" onclick="APP.exForm()">+ Submit expense</button>
+      </div>
+      <div class="xt">
+        ${thdr('exp', cols, gtc)}
+        ${rows.map(x=>{
+          const p = x.Status==='Pending';
+          return `<div class="xr" style="grid-template-columns:${gtc}">
+          <div style="color:var(--mut)">${fmtD(x.Date)}</div><div>${h(x['Expense Type'])}</div><div class="num">${fmt1(x.Amount)}</div>
           <div style="color:#486581" title="${h(x.Description)}">${h(x.Description||'')}</div><div style="color:var(--mut)">${h(x['Client Name']||'—')}</div>
           <div style="color:var(--mut)">${h(x['Reimbursement By']||'')}</div>
-          <div><span class="pill" style="background:${x.Status==='Approved'?'var(--okbg)':x.Status==='Pending'?'var(--goldbg)':'var(--line2)'};color:${x.Status==='Approved'?'var(--ok)':x.Status==='Pending'?'var(--goldd)':'var(--mut)'}">${h(x.Status)}</span></div>
-          <div>${x.Status==='Pending'?`<button class=\"btn2\" style=\"padding:2px 8px;font-size:11px;color:var(--bad)\" onclick=\"APP.exCancel('${x['Row ID']}')\">Cancel</button>`:''}</div>
-        </div>`).join('') || '<div style="padding:24px" class="sub">No expenses yet.</div>'}</div>
-      </div>
-      <div class="card" style="align-self:start">
-        <div class="h" style="margin-bottom:10px">Submit expense</div>
-        <div style="display:grid;gap:8px">
-          <input type="date" id="ex_date">
-          <select id="ex_type"><option value="">Type…</option>${(d.expenseTypes||[]).map(t=>`<option>${h(t['Expense Type'])}</option>`).join('')}</select>
-          <input type="number" id="ex_amt" min="1" step="0.01" placeholder="Amount ₹">
-          <select id="ex_by"><option value="">Reimbursement by…</option><option>Client</option><option>DRP &amp; Co. LLP</option></select>
-          <select id="ex_client" style="display:none"><option value="">Client…</option>${(d.clients||[]).map(c=>`<option>${h(c['Client Full Name'])}</option>`).join('')}</select>
-          <input id="ex_ref" placeholder="Receipt reference">
-          <textarea id="ex_desc" rows="2" placeholder="Description (min 10 characters)"></textarea>
-          <button class="btn" id="ex_add">Submit</button>
-        </div>
+          <div><span class="pill" style="background:${x.Status==='Approved'?'var(--okbg)':p?'var(--goldbg)':'var(--line2)'};color:${x.Status==='Approved'?'var(--ok)':p?'var(--goldd)':'var(--mut)'}">${h(x.Status)}</span></div>
+          <div style="white-space:nowrap">${p?`<button class=\"btn2\" style=\"padding:2px 8px;font-size:11px\" onclick='APP.exForm(${JSON.stringify(x).replace(/'/g,"&#39;")})'>Edit</button> <button class=\"btn2\" style=\"padding:2px 8px;font-size:11px;color:var(--bad)\" onclick=\"APP.exCancel('${x['Row ID']}')\">Cancel</button>`:''}</div>
+        </div>`;}).join('') || '<div style="padding:24px" class="sub">No expenses this month.</div>'}
+        <div style="display:flex;gap:16px;padding:10px 16px;background:var(--bg);border-top:1px solid var(--line);font:600 11.5px Inter;color:#486581"><span>Σ ${rows.length} rows · <b style="color:var(--navy)">₹${fmt1(rows.reduce((s,x)=>s+(+x.Amount||0),0))}</b></span></div>
       </div>
     </div>`;
-    $('ex_by').onchange = e => { $('ex_client').style.display = e.target.value==='Client' ? '' : 'none'; };
-    $('ex_add').onclick = async () => {
-      $('ex_add').disabled = true;
-      try {
-        await EMS2.callAPI('submitExpense', { expense: { employeeEmail: S.me['Employee Email'], employeeName: S.me['Employee Name'],
-          date: $('ex_date').value, expenseType: $('ex_type').value, amount: parseFloat($('ex_amt').value),
-          description: $('ex_desc').value.trim(), reimbursementBy: $('ex_by').value,
-          clientName: $('ex_client').value, receiptReference: $('ex_ref').value.trim() } });
-        toast('Expense submitted ✓'); rExpenses();
-      } catch (e) { toast(e.message, true); $('ex_add').disabled = false; }
-    };
   }
   async function exCancel(rowId) {
     if (!confirm('Cancel this expense?')) return;
-    try { await EMS2.callAPI('cancelExpense', { rowId, email: S.me['Employee Email'] }); toast('Cancelled ✓'); rExpenses(); }
+    try { await EMS2.callAPI('cancelExpense', { rowId, email: S.me['Employee Email'] }); S.cache.exp = null; toast('Cancelled ✓'); rExpenses(); }
     catch (e) { toast(e.message, true); }
   }
+
+  function exForm(x) {
+    const d = S.cache.exp || {}; const isEdit = !!x;
+    const types = (d.expenseTypes||[]).map(t=>t['Expense Type']).filter(Boolean);
+    const clients = (d.clients||[]).map(c=>c['Client Full Name']).filter(Boolean);
+    modal(isEdit?'Edit expense':'Submit expense', `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><label class="sub">Date (within 7 days)</label><input type="date" id="ex_date" value="${x?x.Date:''}"></div>
+        <div><label class="sub">Type</label><select id="ex_type"><option value="">Type…</option>${types.map(t=>`<option ${x&&x['Expense Type']===t?'selected':''}>${h(t)}</option>`).join('')}</select></div>
+        <div><label class="sub">Amount ₹</label><input type="number" id="ex_amt" min="1" step="0.01" value="${x?x.Amount:''}"></div>
+        <div><label class="sub">Reimbursement by</label><select id="ex_by" onchange="document.getElementById('ex_cli_row').style.display=this.value==='Client'?'':'none'"><option value="">Select…</option>${['Client','DRP & Co. LLP'].map(v=>`<option ${x&&x['Reimbursement By']===v?'selected':''}>${v}</option>`).join('')}</select></div>
+        <div id="ex_cli_row" style="grid-column:1/-1;display:${x&&x['Reimbursement By']==='Client'?'':'none'}"><label class="sub">Client</label><select id="ex_client"><option value="">Client…</option>${clients.map(c=>`<option ${x&&x['Client Name']===c?'selected':''}>${h(c)}</option>`).join('')}</select></div>
+        <div style="grid-column:1/-1"><label class="sub">Receipt reference</label><input id="ex_ref" value="${x?h(x['Receipt Reference']||''):''}"></div>
+        <div style="grid-column:1/-1"><label class="sub">Description — ${SANE_HINT}</label><textarea id="ex_desc" rows="2">${x?h(x.Description||''):''}</textarea></div>
+      </div>
+      <div style="margin-top:14px"><button class="btn" id="ex_save">${isEdit?'Update':'Submit'}</button></div>`);
+    $('ex_save').onclick = async () => {
+      const desc = $('ex_desc').value.trim();
+      if (!$('ex_date').value) return toast('Pick the date', true);
+      if (!$('ex_type').value) return toast('Pick the type', true);
+      if (!(+$('ex_amt').value > 0)) return toast('Enter a valid amount', true);
+      if (!$('ex_by').value) return toast('Select who reimburses', true);
+      if ($('ex_by').value==='Client' && !$('ex_client').value) return toast('Select the client', true);
+      if ($('ex_ref').value.trim().length < 3) return toast('Receipt reference required', true);
+      if (!sane(desc)) return toast('Description must be a ' + SANE_HINT, true);
+      const expense = { employeeEmail: S.me['Employee Email'], employeeName: S.me['Employee Name'],
+        date: $('ex_date').value, expenseType: $('ex_type').value, amount: parseFloat($('ex_amt').value),
+        description: desc, reimbursementBy: $('ex_by').value, clientName: $('ex_client').value, receiptReference: $('ex_ref').value.trim() };
+      if (isEdit) expense.rowId = x['Row ID'];
+      $('ex_save').disabled = true;
+      try { await EMS2.callAPI(isEdit?'updateExpense':'submitExpense', { expense }); closeModal(); S.cache.exp = null; toast(isEdit?'Updated ✓':'Submitted ✓'); rExpenses(); }
+      catch (e) { toast(e.message, true); $('ex_save').disabled = false; }
+    };
+  }
+
+  function exMonthGo(v) { S.exMonth = v; rExpenses(); }
 
   const RENDER = { myday:rMyday, dashboard:rDashboard, approvals:rApprovals, review:rReview, timesheet:rTimesheet, workplan:rWorkplan, leave:rLeave, expenses:rExpenses };
 
   async function signout() { await EMS2.signOut(); location.replace('home.html'); }
 
   boot();
-  return { show, signout, quickLog, logPlan, act, rtSort, rtFlag, rtCSV, tsEdit, tsDel, wpForm, wpEnd, wpDel, lvCancel, exCancel, S, RENDER, masters, renderQuickEntry, h, fmt1, toast, $ };
+  return { show, signout, quickLog, logPlan, actGo, openAppr, selAppr, bulkApprove, rfshAppr, tsortGo: tsort, qGo, fGo, exForm, exMonthGo, rtSort, rtCSV, tsEdit, tsDel, wpForm, wpEnd, wpDel, lvCancel, exCancel, S, RENDER, masters, renderQuickEntry, h, fmt1, toast, $ };
 })();
 </script>
 </body>
