@@ -117,7 +117,7 @@ const APP = (() => {
       S.myday = d; S.me = d.employee; S.isApprover = !!d.isApprover;
       S.isAdmin = (d.employee && d.employee['Role']) === 'admin';
       $('uName').textContent = S.me['Employee Name'] || email;
-      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b9';
+      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b10';
       $('uAv').textContent = (S.me['Employee Name']||email).split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
       buildNav();
       show(S.isApprover ? 'dashboard' : 'myday');
@@ -1092,7 +1092,7 @@ const APP = (() => {
     modal(isEdit?'Edit expense':'Submit expense', `
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div><label class="sub">Date (within 7 days)</label><input type="date" id="ex_date" value="${x?x.Date:''}"></div>
-        <div><label class="sub">Type</label><select id="ex_type"><option value="">Type…</option>${types.map(t=>`<option ${x&&x['Expense Type']===t?'selected':''}>${h(t)}</option>`).join('')}</select></div>
+        <div><label class="sub">Type</label><select id="ex_type"><option value="">Type…</option>${types.map(t=>`<option ${x&&x['Expense Type']===t?'selected':''}>${h(t)}</option>`).join('')}</select><div id="ex_hint" class="sub" style="margin-top:4px"></div></div>
         <div><label class="sub">Amount ₹</label><input type="number" id="ex_amt" min="1" step="0.01" value="${x?x.Amount:''}"></div>
         <div><label class="sub">Reimbursement by</label><select id="ex_by" onchange="document.getElementById('ex_cli_row').style.display=this.value==='Client'?'':'none'"><option value="">Select…</option>${['Client','DRP & Co. LLP'].map(v=>`<option ${x&&x['Reimbursement By']===v?'selected':''}>${v}</option>`).join('')}</select></div>
         <div id="ex_cli_row" style="grid-column:1/-1;display:${x&&x['Reimbursement By']==='Client'?'':'none'}"><label class="sub">Client</label><select id="ex_client"><option value="">Client…</option>${clients.map(c=>`<option ${x&&x['Client Name']===c?'selected':''}>${h(c)}</option>`).join('')}</select></div>
@@ -1100,11 +1100,17 @@ const APP = (() => {
         <div style="grid-column:1/-1"><label class="sub">Description — ${SANE_HINT}</label><textarea id="ex_desc" rows="2">${x?h(x.Description||''):''}</textarea></div>
       </div>
       <div style="margin-top:14px"><button class="btn" id="ex_save">${isEdit?'Update':'Submit'}</button></div>`);
+    const _heads = d.expenseTypes || [];
+    const _hint = () => { const hd = _heads.find(t=>t['Expense Type']===$('ex_type').value); const el = $('ex_hint'); if (!el) return;
+      el.innerHTML = hd ? `${hd['Expense Description'] ? 'ℹ️ ' + h(hd['Expense Description']) + '<br>' : ''}${(+hd['Max Allowed']>0) ? '<b style="color:var(--goldd)">Max ₹' + fmt1(hd['Max Allowed']) + ' per claim</b>' : ''}` : ''; };
+    $('ex_type').onchange = _hint; _hint();
     $('ex_save').onclick = async () => {
       const desc = $('ex_desc').value.trim();
       if (!$('ex_date').value) return toast('Pick the date', true);
       if (!$('ex_type').value) return toast('Pick the type', true);
       if (!(+$('ex_amt').value > 0)) return toast('Enter a valid amount', true);
+      const _hd = _heads.find(t=>t['Expense Type']===$('ex_type').value);
+      if (_hd && (+_hd['Max Allowed']>0) && parseFloat($('ex_amt').value) > +_hd['Max Allowed']) return toast($('ex_type').value + ' claims are capped at ₹' + fmt1(_hd['Max Allowed']) + ' per claim', true);
       if (!$('ex_by').value) return toast('Select who reimburses', true);
       if ($('ex_by').value==='Client' && !$('ex_client').value) return toast('Select the client', true);
       if ($('ex_ref').value.trim().length < 3) return toast('Receipt reference required', true);
@@ -1136,10 +1142,12 @@ const APP = (() => {
     try {
       if (kind === 'u') {
         const d = await EMS2.callAPI('viz_user', { employee: opts.employee || '', client: opts.client || '' });
+        S.cache.vizU = d;
         mount.innerHTML = vizUserHtml(d, opts);
         const sc = $('stk_scroll'); if (sc) sc.scrollLeft = sc.scrollWidth;
       } else {
         const d = await EMS2.callAPI('viz_client', { client: opts.client || '' });
+        S.cache.vizC = d;
         mount.innerHTML = vizClientHtml(d, opts);
         const sc2 = $('stk_scroll'); if (sc2) sc2.scrollLeft = sc2.scrollWidth;
       }
@@ -1273,7 +1281,7 @@ const APP = (() => {
     const pctB = tot>0 ? 100*bill/tot : 0;
     const pctI = tot>0 ? 100*idle/tot : 0;
     const top3 = a => (a||[]).slice(0,3).map(x=>`<div style="font:600 11px Inter;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${h(x.name)}">${h(x.name)} <span style="font:500 10px Inter;color:var(--fog)">${fmt1(x.hours)}h</span></div>`).join('') || '<span class="sub">—</span>';
-    const empSel = (d.employees||[]).length ? `<select style="width:190px" onchange="APP.vizGo('u',{employee:this.value})"><option value="">Me (${h(d.employeeName)})</option>${d.employees.map(e=>`<option value="${h(e.email)}" ${opts.employee===e.email?'selected':''}>${h(e.name)}</option>`).join('')}</select>` : `<span class="sub">${h(d.employeeName)}</span>`;
+    const empSel = (d.employees||[]).length ? `<input list="dl_emp" placeholder="🔍 Employee… (blank = me)" value="${h(((d.employees||[]).find(e=>e.email===opts.employee)||{}).name||'')}" style="width:210px" onchange="APP.vizEmpGo(this.value)"><datalist id="dl_emp">${d.employees.map(e=>`<option value="${h(e.name)}"></option>`).join('')}</datalist>` : `<span class="sub">${h(d.employeeName)}</span>`;
     const clientChip = opts.client ? `<span class="pill" style="background:var(--goldbg);color:var(--goldd);cursor:pointer" onclick="APP.vizGo('u',{employee:'${h(opts.employee||'')}'})">Client: ${h(opts.client)} ✕</span>` : '<span class="sub">click a client tile to focus</span>';
     const tile = (v, lbl, col) => `<div style="border:1px solid var(--line2);border-radius:10px;padding:12px 14px"><div style="font:800 20px Inter;color:${col||'var(--navy)'}">${v}</div><div class="sub">${lbl}</div></div>`;
     const card = (t, b) => `<div style="border:1px solid var(--line2);border-radius:10px;padding:12px;height:296px;display:flex;flex-direction:column;min-width:0"><div class="sub" style="font-weight:700;color:var(--navy);margin-bottom:8px">${t}</div><div style="flex:1;min-height:0;overflow:auto">${b}</div></div>`;
@@ -1297,7 +1305,7 @@ const APP = (() => {
   function vizClientHtml(d, opts) {
     const k = d.kpis || {};
     const fmt0 = n => Math.round(+n||0).toLocaleString('en-IN');
-    const sel = `<select style="width:240px" onchange="APP.vizGo('c',{client:this.value})"><option value="">All clients (firm)</option>${(d.clients||[]).map(c=>`<option ${opts.client===c?'selected':''}>${h(c)}</option>`).join('')}</select>`;
+    const sel = `<input list="dl_cli" placeholder="🔍 Client… (blank = all clients)" value="${h(opts.client||'')}" style="width:260px" onchange="APP.vizCliGo(this.value)"><datalist id="dl_cli">${(d.clients||[]).map(c=>`<option value="${h(c)}"></option>`).join('')}</datalist>`;
     const topEmp = (d.employees||[]).slice(0,3).map(x=>`<div style="font:600 11px Inter;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${h(x.name)}">${h(x.name)} <span style="font:500 10px Inter;color:var(--fog)">${fmt1(x.hours)}h</span></div>`).join('') || '<span class="sub">—</span>';
     const topSvc = (d.taskCost||[]).slice(0,3).map(x=>`<div style="font:600 11px Inter;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${h(x.task)}">${h(x.task)} <span style="font:500 10px Inter;color:var(--fog)">₹${fmt0((+x.bcost||0)+(+x.ncost||0))}</span></div>`).join('') || '<span class="sub">—</span>';
     const tile = (v, lbl, col) => `<div style="border:1px solid var(--line2);border-radius:10px;padding:12px 14px"><div style="font:800 19px Inter;color:${col||'var(--navy)'};white-space:nowrap">${v}</div><div class="sub">${lbl}</div></div>`;
@@ -1325,12 +1333,24 @@ const APP = (() => {
     </div>`;
   }
 
+  function vizEmpGo(name) {
+    const d = S.cache.vizU || {};
+    const e = (d.employees||[]).find(x=>x.name===name);
+    if (name && !e) { toast('Pick an employee from the list', true); return; }
+    vizGo('u', { employee: e ? e.email : '' });
+  }
+  function vizCliGo(v) {
+    const d = S.cache.vizC || {};
+    if (v && !(d.clients||[]).includes(v)) { toast('Pick a client from the list', true); return; }
+    vizGo('c', { client: v || '' });
+  }
+
   const RENDER = { myday:rMyday, dashboard:rDashboard, approvals:rApprovals, review:rReview, timesheet:rTimesheet, workplan:rWorkplan, leave:rLeave, expenses:rExpenses };
 
   async function signout() { await EMS2.signOut(); location.replace('home.html'); }
 
   boot();
-  return { show, signout, quickLog, logPlan, tsPopup, actGo, openAppr, selAppr, bulkApprove, rfshAppr, tsortGo: tsort, qGo, fGo, exForm, exMonthGo, rtSort, rtCSV, tsEdit, tsDel, wpForm, wpEnd, wpDel, wpNew, wpTabGo, tpForm, vizGo, lvEdit, lvCancel, coCancel, exCancel, S, RENDER, masters, h, fmt1, toast, $ };
+  return { show, signout, quickLog, logPlan, tsPopup, actGo, openAppr, selAppr, bulkApprove, rfshAppr, tsortGo: tsort, qGo, fGo, exForm, exMonthGo, rtSort, rtCSV, tsEdit, tsDel, wpForm, wpEnd, wpDel, wpNew, wpTabGo, tpForm, vizGo, vizEmpGo, vizCliGo, lvEdit, lvCancel, coCancel, exCancel, S, RENDER, masters, h, fmt1, toast, $ };
 })();
 </script>
 </body>

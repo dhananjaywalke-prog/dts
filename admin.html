@@ -5,341 +5,431 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TimeWise EMS | Admin</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', system-ui, sans-serif; font-size: 14px; }
-        .btn-primary { background: linear-gradient(135deg, #102a43 0%, #243b53 100%); color: white; }
-        .btn-primary:disabled { opacity: .6; }
-        .tab-active { background: #102a43; color: #fff; }
-        .adm-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #627d98; padding: 8px 10px; border-bottom: 1px solid #d9e2ec; background: #f0f4f8; position: sticky; top: 0; }
-        .adm-table td { padding: 8px 10px; border-bottom: 1px solid #f0f4f8; vertical-align: top; }
-        .adm-table tr:hover td { background: #fdf9ef; }
-        input:focus, select:focus, textarea:focus { outline: none; border-color: #d4a853 !important; box-shadow: 0 0 0 3px rgba(212,168,83,.15) !important; }
-        .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+        :root { --navy:#102a43; --ink:#243b53; --mut:#627d98; --fog:#829ab1; --line:#e3e9ef; --line2:#eef2f6; --bg:#f7f9fb; --gold:#d4a853; --goldd:#8f6b1e; --goldbg:#fdf6e6; --ok:#1f7a4d; --okbg:#e6f4ea; --bad:#b3261e; --badbg:#fdecec; }
+        * { box-sizing:border-box; }
+        body { margin:0; font-family:'Inter',system-ui,sans-serif; font-size:14px; color:var(--ink); background:var(--bg); }
+        .wrap { max-width:1360px; margin:0 auto; padding:20px 24px; }
+        .btn { background:var(--navy); color:#fff; border:0; border-radius:8px; font:600 12px Inter; padding:8px 14px; cursor:pointer; }
+        .btn:hover { background:#243b53; } .btn[disabled]{opacity:.55}
+        .btn2 { background:#fff; color:var(--navy); border:1px solid #d9e2ec; border-radius:8px; font:600 12px Inter; padding:7px 12px; cursor:pointer; }
+        .btn2:hover { border-color:var(--gold); }
+        .card { background:#fff; border:1px solid var(--line); border-radius:12px; }
+        .sub { font:500 11px Inter; color:var(--mut); }
+        .pill { display:inline-block; padding:2px 10px; border-radius:999px; font:600 10.5px Inter; border:0; cursor:pointer; }
+        input, select, textarea { font:500 12.5px Inter; color:var(--ink); border:1px solid #d9e2ec; border-radius:8px; padding:7px 10px; background:#fff; }
+        input:focus, select:focus, textarea:focus { outline:none; border-color:var(--gold); box-shadow:0 0 0 3px rgba(212,168,83,.15); }
+        .tab { padding:8px 14px; border-radius:8px; font:600 12.5px Inter; cursor:pointer; border:1px solid var(--line); background:#fff; color:var(--mut); }
+        .tab.on { background:var(--navy); color:#fff; border-color:var(--navy); }
+        .xh { display:grid; background:#f0f4f8; border-bottom:1px solid #d9e2ec; font:600 10.5px Inter; color:#486581; text-transform:uppercase; letter-spacing:.04em; }
+        .xh > div { padding:8px 10px; cursor:pointer; user-select:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .xh > div:hover { color:var(--navy); }
+        .xr { display:grid; border-bottom:1px solid var(--line2); min-height:32px; align-items:center; font:500 12.5px Inter; }
+        .xr:hover { background:var(--goldbg); }
+        .xr > div { padding:5px 10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .num { text-align:right; }
+        .toast { position:fixed; bottom:20px; right:20px; background:var(--navy); color:#fff; font:500 12.5px Inter; padding:10px 16px; border-radius:10px; z-index:99; box-shadow:0 8px 30px rgba(16,42,67,.35); }
+        .toast.err { background:var(--bad); }
     </style>
 </head>
-<body class="bg-gray-50 min-h-screen">
-    <div id="app" class="max-w-7xl mx-auto px-4 py-6"><p class="text-gray-500 p-8 text-center">Loading admin…</p></div>
+<body>
+<div class="wrap" id="app"><p class="sub" style="padding:40px;text-align:center">Loading admin…</p></div>
+<script src="config.js"></script>
+<script src="api.js"></script>
+<script>
+(async function () {
+    const $ = id => document.getElementById(id);
+    const h = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    const fmt1 = n => (Math.round((+n||0)*100)/100).toLocaleString('en-IN');
+    function toast(msg, err) { const t=document.createElement('div'); t.className='toast'+(err?' err':''); t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(), err?5000:2600); }
+    function modal(title, inner, wide) {
+        closeModal();
+        const w=document.createElement('div'); w.id='modal';
+        w.setAttribute('style','position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;background:rgba(16,42,67,.55);padding:16px');
+        w.innerHTML=`<div class="card" style="width:100%;max-width:${wide?'760px':'620px'};max-height:88vh;overflow:auto;padding:20px"><div style="display:flex;align-items:center;margin-bottom:12px"><b style="font:700 15px Inter;color:var(--navy)">${title}</b><button class="btn2" style="margin-left:auto" onclick="document.getElementById('modal').remove()">✕</button></div>${inner}</div>`;
+        document.body.appendChild(w);
+    }
+    const closeModal = () => { const m=$('modal'); if(m) m.remove(); };
 
-    <script src="config.js"></script>
-    <script src="api.js"></script>
-    <script>
-    (async function () {
-        // ---------- access guard ----------
-        const email = await EMS2.getAuthedEmail();
-        if (!email) { window.location.replace('home.html'); return; }
-        const sb = await EMS2.ready;
-        const meRes = await sb.from('employees').select('id,name,email,role').eq('email', email).maybeSingle();
-        const me = meRes.data;
-        if (!me || me.role !== 'admin') {
-            document.getElementById('app').innerHTML =
-                '<div class="bg-white border border-gray-200 rounded-xl p-10 text-center mt-16"><h2 class="text-xl font-bold" style="color:#102a43">Admins only</h2><p class="text-gray-500 mt-2">This module is restricted.</p><a href="home.html" class="inline-block mt-4 btn-primary px-5 py-2 rounded-lg text-sm font-semibold">Back to Home</a></div>';
-            return;
+    // ---------- access guard ----------
+    const email = await EMS2.getAuthedEmail();
+    if (!email) { location.replace('home.html'); return; }
+    const sb = await EMS2.ready;
+    const meRes = await sb.from('employees').select('id,name,email,role').eq('email', email).maybeSingle();
+    const me = meRes.data;
+    if (!me || me.role !== 'admin') {
+        $('app').innerHTML = '<div class="card" style="padding:40px;text-align:center;margin-top:60px"><b style="color:var(--navy)">Admins only</b><div class="sub" style="margin-top:6px">This module is restricted.</div><a class="btn" style="display:inline-block;margin-top:14px;text-decoration:none" href="app.html">Back to portal</a></div>';
+        return;
+    }
+
+    // ---------- entity registry ----------
+    const ENTITIES = {
+        clients: { title:'Clients', table:'clients', order:'name', statusField:'status', uniq:['name'],
+            filters:[{k:'fstatus',label:'Status',opts:['active','inactive'],col:'status'}],
+            cols:[
+                {k:'name',l:'Full Name',t:'text',req:1,w:'1.6fr'},
+                {k:'short_name',l:'Short Name',t:'text',w:'1fr'},
+                {k:'partner_name',l:'Partner',t:'text',w:'1fr'},
+                {k:'team',l:'Team',t:'text',w:'64px'},
+                {k:'gst',l:'GST',t:'text',w:'130px'},
+                {k:'pan',l:'PAN',t:'text',w:'104px'},
+                {k:'email',l:'Email',t:'text',w:'1fr'},
+                {k:'is_internal',l:'Internal',t:'bool',w:'76px'},
+                {k:'status',l:'Status',t:'status',w:'88px'} ] },
+        tasks: { title:'Tasks', table:'tasks', order:'name', statusField:'status', uniq:['name'],
+            filters:[{k:'fstatus',label:'Status',opts:['active','inactive'],col:'status'}],
+            cols:[
+                {k:'name',l:'Work Name',t:'text',req:1,w:'1.5fr'},
+                {k:'work_type',l:'Work Type',t:'text',w:'1fr'},
+                {k:'practice_head',l:'Practice Head',t:'text',w:'1fr'},
+                {k:'is_billable',l:'Billable',t:'bool',w:'80px'},
+                {k:'status',l:'Status',t:'status',w:'88px'} ] },
+        employees: { title:'Employees', table:'employees', order:'name', statusField:'status', uniq:['email','name'],
+            filters:[{k:'fstatus',label:'Status',opts:['active','inactive'],col:'status'},{k:'frole',label:'Role',opts:['staff','approver','admin'],col:'role'}],
+            cols:[
+                {k:'name',l:'Name',t:'text',req:1,w:'1.2fr'},
+                {k:'email',l:'Email (login)',t:'text',w:'1.5fr'},
+                {k:'role',l:'Role',t:'select',opts:['staff','approver','admin'],req:1,w:'92px'},
+                {k:'designation',l:'Designation',t:'text',w:'1fr'},
+                {k:'team_allocation',l:'Team',t:'text',w:'60px'},
+                {k:'joined_on',l:'Joined',t:'date',w:'104px'},
+                {k:'exited_on',l:'Exited',t:'date',w:'104px'},
+                {k:'hourly_cost',l:'₹/hr',t:'num',w:'76px',num:1},
+                {k:'status',l:'Status',t:'status',w:'88px'} ] },
+        holidays: { title:'Holidays', table:'holidays', order:'holiday_date', statusField:null, uniq:['holiday_date','raw_email'],
+            filters:[],
+            cols:[
+                {k:'holiday_date',l:'Date',t:'date',req:1,w:'120px'},
+                {k:'raw_email',l:'Applies To (All / email)',t:'text',req:1,def:'All',w:'1.2fr'},
+                {k:'description',l:'Description',t:'text',req:1,w:'2fr'},
+                {k:'status',l:'Status',t:'status',w:'88px'} ] },
+        expense_heads: { title:'Expense Heads', table:'expense_heads', order:'name', statusField:'status', uniq:['name'],
+            filters:[{k:'fstatus',label:'Status',opts:['active','inactive'],col:'status'}],
+            cols:[
+                {k:'name',l:'Expense Type',t:'text',req:1,w:'1.2fr'},
+                {k:'description',l:'Description (shown to staff at entry)',t:'text',w:'2.4fr'},
+                {k:'max_allowed',l:'Max ₹/claim',t:'num',w:'110px',num:1},
+                {k:'status',l:'Status',t:'status',w:'88px'} ] },
+        announcements: { title:'Announcements', table:'announcements', order:'show_from', desc:true, statusField:'active', uniq:[],
+            filters:[{k:'fsev',label:'Tone',opts:['info','important'],col:'severity'}],
+            cols:[
+                {k:'message',l:'Message',t:'textarea',req:1,w:'2.6fr'},
+                {k:'severity',l:'Tone',t:'select',opts:['info','important'],req:1,w:'96px'},
+                {k:'show_from',l:'Show From',t:'datetime',w:'150px'},
+                {k:'show_until',l:'Show Until',t:'datetime',w:'150px'},
+                {k:'active',l:'Status',t:'status',w:'88px'} ] }
+    };
+
+    let current = 'clients', rows = [], auditRows = [], editing = null;
+    const SRT = {}, FL = {};
+    let _qdeb;
+
+    const spec = () => ENTITIES[current];
+    const stVal = r => { const f=spec().statusField; if(!f) return String(r.status||'Active'); return f==='active' ? (r.active?'active':'inactive') : String(r[f]||''); };
+    const isInactive = r => /inactive|^false$/i.test(stVal(r)) || (spec().statusField==='active' && !r.active) || (String(r.status||'').toLowerCase()==='inactive');
+
+    async function load() {
+        if (current === 'audit') {
+            let q = sb.from('audit_log').select('*').order('at',{ascending:false}).limit(300);
+            const f = FL.audit||{};
+            if (f.ftable) q = q.eq('table_name', f.ftable);
+            const r = await q; auditRows = r.data||[]; return;
         }
+        const r = await sb.from(spec().table).select('*').order(spec().order, {ascending:!spec().desc});
+        if (r.error) toast('Load failed: '+r.error.message, true);
+        rows = r.data||[];
+    }
 
-        // ---------- entity registry ----------
-        const yesNo = v => v ? 'Yes' : 'No';
-        const ENTITIES = {
-            clients: { title: 'Clients', table: 'clients', order: 'name',
-                cols: [
-                    { k: 'name', label: 'Full Name', type: 'text', req: true },
-                    { k: 'short_name', label: 'Short Name', type: 'text' },
-                    { k: 'partner_name', label: 'Partner', type: 'text' },
-                    { k: 'team', label: 'Team', type: 'text' },
-                    { k: 'gst', label: 'GST', type: 'text' },
-                    { k: 'pan', label: 'PAN', type: 'text' },
-                    { k: 'email', label: 'Email', type: 'text' },
-                    { k: 'is_internal', label: 'Internal (non-billable)', type: 'bool', fmt: yesNo },
-                    { k: 'status', label: 'Status', type: 'select', options: ['active','inactive'], req: true }
-                ] },
-            tasks: { title: 'Tasks', table: 'tasks', order: 'name',
-                cols: [
-                    { k: 'name', label: 'Work Name', type: 'text', req: true },
-                    { k: 'work_type', label: 'Work Type', type: 'text' },
-                    { k: 'practice_head', label: 'Practice Head', type: 'text' },
-                    { k: 'is_billable', label: 'Billable', type: 'bool', fmt: yesNo },
-                    { k: 'status', label: 'Status', type: 'select', options: ['active','inactive'], req: true }
-                ] },
-            employees: { title: 'Employees', table: 'employees', order: 'name',
-                note: 'Adding an active employee with an email lets them sign in with an OTP immediately. Deactivate on exit — history stays.',
-                cols: [
-                    { k: 'name', label: 'Name', type: 'text', req: true },
-                    { k: 'email', label: 'Email (login)', type: 'text' },
-                    { k: 'role', label: 'Role', type: 'select', options: ['staff','approver','admin'], req: true },
-                    { k: 'designation', label: 'Designation', type: 'text' },
-                    { k: 'team_allocation', label: 'Team', type: 'text' },
-                    { k: 'joined_on', label: 'Joined', type: 'date' },
-                    { k: 'exited_on', label: 'Exited', type: 'date' },
-                    { k: 'hourly_cost', label: 'Hourly Cost (₹)', type: 'number' },
-                    { k: 'status', label: 'Status', type: 'select', options: ['active','inactive'], req: true }
-                ] },
-            holidays: { title: 'Holidays', table: 'holidays', order: 'holiday_date',
-                cols: [
-                    { k: 'holiday_date', label: 'Date', type: 'date', req: true },
-                    { k: 'raw_email', label: 'Applies To (All or email)', type: 'text', req: true, def: 'All' },
-                    { k: 'description', label: 'Description', type: 'text', req: true },
-                    { k: 'status', label: 'Status', type: 'text', def: 'Active' }
-                ] },
-            expense_heads: { title: 'Expense Heads', table: 'expense_heads', order: 'name',
-                cols: [
-                    { k: 'name', label: 'Expense Type', type: 'text', req: true },
-                    { k: 'description', label: 'Description', type: 'text' },
-                    { k: 'status', label: 'Status', type: 'select', options: ['active','inactive'], req: true }
-                ] },
-            announcements: { title: 'Announcements', table: 'announcements', order: 'show_from', desc: true,
-                note: 'Active announcements show on every portal page (and the login screen) between the two timestamps.',
-                cols: [
-                    { k: 'message', label: 'Message', type: 'textarea', req: true },
-                    { k: 'severity', label: 'Tone', type: 'select', options: ['info','important'], req: true },
-                    { k: 'show_from', label: 'Show From', type: 'datetime' },
-                    { k: 'show_until', label: 'Show Until', type: 'datetime' },
-                    { k: 'active', label: 'Active', type: 'bool', fmt: yesNo }
-                ] }
-        };
-
-        let current = 'clients';
-        let rows = [];
-        let editing = null;   // null | {} (new) | row (edit)
-        let auditRows = [];
-
-        // ---------- data ----------
-        async function load() {
-            const spec = ENTITIES[current];
-            if (current === 'audit') {
-                const table = document.getElementById('f_table') ? document.getElementById('f_table').value : '';
-                const who = document.getElementById('f_actor') ? document.getElementById('f_actor').value.trim() : '';
-                let q = sb.from('audit_log').select('*').order('at', { ascending: false }).limit(300);
-                if (table) q = q.eq('table_name', table);
-                if (who) q = q.ilike('actor_email', '%' + who + '%');
-                const r = await q;
-                auditRows = r.data || [];
-                return;
-            }
-            const r = await sb.from(spec.table).select('*').order(spec.order, { ascending: !spec.desc });
-            if (r.error) alert('Load failed: ' + r.error.message);
-            rows = r.data || [];
+    function visible() {
+        const f = FL[current]||{};
+        let rs = rows;
+        for (const flt of (spec().filters||[])) {
+            const v = f[flt.k];
+            if (v) rs = rs.filter(r => String(flt.col==='status'&&spec().statusField==='active' ? (r.active?'active':'inactive') : r[flt.col]||'').toLowerCase() === v.toLowerCase());
         }
+        if (f.fstatus && spec().statusField==='active') rs = rs.filter(r => (r.active?'active':'inactive')===f.fstatus);
+        const q = (f.q||'').toLowerCase();
+        if (q) rs = rs.filter(r => JSON.stringify(r).toLowerCase().includes(q));
+        return rs;
+    }
+    function sorted(rs) {
+        const s = SRT[current]||{};
+        const col = s.col || spec().order, dir = s.col ? s.dir : (spec().desc?'desc':'asc');
+        return rs.slice().sort((a,b)=>{
+            let x=a[col], y=b[col];
+            const nx=parseFloat(x), ny=parseFloat(y);
+            if(!isNaN(nx)&&!isNaN(ny)&&String(x).trim()!==''&&String(y).trim()!=='') { x=nx; y=ny; }
+            else { x=String(x??'').toLowerCase(); y=String(y??'').toLowerCase(); }
+            return (x<y?-1:x>y?1:0)*(dir==='asc'?1:-1);
+        });
+    }
 
-        async function save() {
-            const spec = ENTITIES[current];
-            const obj = {};
-            for (const c of spec.cols) {
-                const el = document.getElementById('fld_' + c.k);
-                let v = c.type === 'bool' ? el.checked : el.value;
-                if (v === '' || v === undefined) v = null;
-                if (c.req && (v === null || v === false && c.type !== 'bool')) {
-                    alert(c.label + ' is required'); return;
+    const gtc = () => spec().cols.map(c=>c.w||'1fr').join(' ') + ' 64px';
+
+    function rowsHtml() {
+        const rs = sorted(visible());
+        const g = gtc();
+        const out = rs.map(r=>{
+            const cells = spec().cols.map(c=>{
+                let v = r[c.k];
+                if (c.t==='status') {
+                    const act = !isInactive(r);
+                    return `<div><button class="pill" style="background:${act?'var(--okbg)':'var(--badbg)'};color:${act?'var(--ok)':'var(--bad)'}" title="Click to toggle" onclick="ADM.flip('${r.id}')">${act?'Active':'Inactive'}</button></div>`;
                 }
-                obj[c.k] = v;
-            }
-            // logical validations
-            if (current === 'announcements' && obj.show_from && obj.show_until && obj.show_until <= obj.show_from) {
-                alert('Show Until must be after Show From'); return;
-            }
-            if (current === 'employees') {
-                if (obj.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(obj.email)) { alert('Invalid email format'); return; }
-                if (obj.joined_on && obj.exited_on && obj.exited_on < obj.joined_on) { alert('Exit date cannot be before joining date'); return; }
-            }
-            if (current === 'holidays' && obj.raw_email && obj.raw_email !== 'All' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(obj.raw_email)) {
-                alert("Applies To must be 'All' or a valid email"); return;
-            }
-            let r;
-            if (editing && editing.id) r = await sb.from(spec.table).update(obj).eq('id', editing.id);
-            else r = await sb.from(spec.table).insert([obj]);
-            if (r.error) { alert('Save failed: ' + r.error.message); return; }
-            editing = null;
-            await load(); render();
-        }
-
-        async function toggleStatus(id) {
-            const spec = ENTITIES[current];
-            const row = rows.find(x => x.id === id);
-            if (!row) return;
-            const field = ('status' in row) ? 'status' : ('active' in row ? 'active' : null);
-            if (!field) return;
-            const nv = field === 'active' ? !row.active
-                     : (String(row.status).toLowerCase() === 'active' ? 'inactive' : 'active');
-            if (!confirm('Change status of this record?')) return;
-            const r = await sb.from(spec.table).update({ [field]: nv }).eq('id', id);
-            if (r.error) { alert(r.error.message); return; }
-            await load(); render();
-        }
-
-        function exportCSV() {
-            const spec = ENTITIES[current];
-            const cols = spec ? spec.cols.map(c => c.k) : [];
-            const data = current === 'audit' ? auditRows : rows;
-            const heads = current === 'audit' ? ['at','actor_email','table_name','row_id','action'] : cols;
-            const esc = v => '"' + String(v === null || v === undefined ? '' : (typeof v === 'object' ? JSON.stringify(v) : v)).replace(/"/g, '""') + '"';
-            const lines = [heads.join(',')].concat(data.map(r => heads.map(h => esc(r[h])).join(',')));
-            const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = 'ems2-' + current + '-' + new Date().toISOString().slice(0, 10) + '.csv';
-            a.click();
-        }
-
-        // ---------- render ----------
-        function h(s) { return String(s === null || s === undefined ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-
-        function render() {
-            const tabs = Object.keys(ENTITIES).map(k =>
-                `<button onclick="ADM.go('${k}')" class="px-4 py-2 rounded-lg text-sm font-semibold ${current === k ? 'tab-active' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}">${ENTITIES[k].title}</button>`
-            ).join('') +
-            `<button onclick="ADM.go('audit')" class="px-4 py-2 rounded-lg text-sm font-semibold ${current === 'audit' ? 'tab-active' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}">Audit Log</button>`;
-
-            let bodyHTML = '';
-            if (current === 'audit') bodyHTML = renderAudit();
-            else bodyHTML = renderEntity();
-
-            document.getElementById('app').innerHTML = `
-                <header class="flex items-center justify-between mb-6">
-                    <div class="flex items-center gap-4">
-                        <a href="home.html"><img src="https://drpca.com/assets/drpca-logo.png" alt="DRP" class="h-10" onerror="this.outerHTML='<span class=&quot;font-bold&quot; style=&quot;color:#102a43&quot;>drp&amp;co.</span>'"></a>
-                        <div class="border-l border-gray-200 pl-4">
-                            <p class="font-semibold" style="color:#102a43">TimeWise EMS · Admin</p>
-                            <p class="text-xs text-gray-500">Signed in as ${h(me.name)} · every change is audit-logged</p>
-                        </div>
-                    </div>
-                    <a href="home.html" class="text-sm text-gray-500 hover:text-gray-700 font-medium">← Back to Home</a>
-                </header>
-                <div class="flex flex-wrap gap-2 mb-5">${tabs}</div>
-                ${bodyHTML}
-                ${editing !== null ? renderModal() : ''}`;
-        }
-
-        function renderEntity() {
-            const spec = ENTITIES[current];
-            const cols = spec.cols;
-            const head = cols.map(c => `<th>${h(c.label)}</th>`).join('') + '<th></th>';
-            const body = rows.map(r => {
-                const tds = cols.map(c => {
-                    let v = r[c.k];
-                    if (c.fmt) v = c.fmt(v);
-                    if (c.k === 'status') {
-                        const act = String(r.status).toLowerCase() === 'active';
-                        v = `<span class="badge" style="background:${act ? '#e6f4ea' : '#f0f4f8'};color:${act ? '#1f7a4d' : '#627d98'}">${h(r.status)}</span>`;
-                        return `<td>${v}</td>`;
-                    }
-                    if (c.type === 'datetime' && v) v = String(v).slice(0, 16).replace('T', ' ');
-                    return `<td>${h(v)}</td>`;
-                }).join('');
-                return `<tr>${tds}<td class="whitespace-nowrap text-right">
-                    <button onclick="ADM.edit('${r.id}')" class="text-sm font-medium" style="color:#8f6b1e">Edit</button>
-                    <button onclick="ADM.toggle('${r.id}')" class="text-sm text-gray-400 hover:text-gray-600 ml-3">Toggle</button>
-                </td></tr>`;
+                if (c.t==='bool') v = v ? 'Yes' : 'No';
+                if (c.t==='datetime' && v) v = String(v).slice(0,16).replace('T',' ');
+                if (c.num) return `<div class="num">${v==null?'':fmt1(v)}</div>`;
+                return `<div title="${h(v)}">${h(v)}</div>`;
             }).join('');
-            return `
-                <div class="bg-white rounded-xl border border-gray-200">
-                    <div class="flex items-center justify-between p-4 border-b border-gray-100">
-                        <div>
-                            <h2 class="font-bold" style="color:#102a43">${spec.title} <span class="text-gray-400 font-normal">(${rows.length})</span></h2>
-                            ${spec.note ? `<p class="text-xs text-gray-500 mt-1">${spec.note}</p>` : ''}
-                        </div>
-                        <div class="flex gap-2">
-                            <button onclick="ADM.csv()" class="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 bg-white hover:bg-gray-50" style="color:#102a43">⬇ CSV</button>
-                            <button onclick="ADM.add()" class="btn-primary px-4 py-2 rounded-lg text-sm font-semibold">+ Add</button>
-                        </div>
-                    </div>
-                    <div class="overflow-auto" style="max-height:65vh">
-                        <table class="w-full adm-table text-sm" style="color:#243b53"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
-                    </div>
-                </div>`;
-        }
+            return `<div class="xr" style="grid-template-columns:${g};${isInactive(r)?'background:var(--badbg);':''}">${cells}<div><button class="btn2" style="padding:2px 8px;font-size:11px" onclick="ADM.edit('${r.id}')">Edit</button></div></div>`;
+        }).join('') || '<div class="sub" style="padding:24px">No rows match.</div>';
+        return out + `<div style="display:flex;padding:9px 12px;background:var(--bg);border-top:1px solid var(--line);font:600 11px Inter;color:#486581">Σ ${rs.length} of ${rows.length} rows</div>`;
+    }
 
-        function renderAudit() {
-            const tables = ['', 'employees','clients','tasks','holidays','expense_heads','announcements','timesheets','leaves','expenses','assignments','work_plans'];
-            const body = auditRows.map(r => `
-                <tr>
-                    <td class="whitespace-nowrap">${h(String(r.at).slice(0, 19).replace('T', ' '))}</td>
-                    <td>${h(r.actor_email || 'system')}</td>
-                    <td>${h(r.table_name)}</td>
-                    <td><span class="badge" style="background:#f0f4f8;color:#334e68">${h(r.action)}</span></td>
-                    <td class="text-xs text-gray-500" style="max-width:480px;overflow-wrap:anywhere">${h(diff(r))}</td>
-                </tr>`).join('');
-            return `
-                <div class="bg-white rounded-xl border border-gray-200">
-                    <div class="flex flex-wrap items-center gap-3 p-4 border-b border-gray-100">
-                        <h2 class="font-bold mr-auto" style="color:#102a43">Audit Log <span class="text-gray-400 font-normal">(last ${auditRows.length})</span></h2>
-                        <select id="f_table" class="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white" onchange="ADM.reload()">${tables.map(t => `<option value="${t}">${t || 'All tables'}</option>`).join('')}</select>
-                        <input id="f_actor" placeholder="Filter by person…" class="border border-gray-200 rounded-lg px-3 py-2 text-sm" onchange="ADM.reload()">
-                        <button onclick="ADM.csv()" class="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 bg-white hover:bg-gray-50" style="color:#102a43">⬇ CSV</button>
-                    </div>
-                    <div class="overflow-auto" style="max-height:65vh">
-                        <table class="w-full adm-table text-sm" style="color:#243b53">
-                            <thead><tr><th>When (UTC)</th><th>Who</th><th>Table</th><th>Action</th><th>Change</th></tr></thead>
-                            <tbody>${body}</tbody>
-                        </table>
-                    </div>
-                </div>`;
+    function render() {
+        const tabs = Object.keys(ENTITIES).map(k=>`<button class="tab ${current===k?'on':''}" onclick="ADM.go('${k}')">${ENTITIES[k].title}</button>`).join('')
+            + `<button class="tab ${current==='audit'?'on':''}" onclick="ADM.go('audit')">Audit Log</button>`;
+        let body;
+        if (current === 'audit') body = auditHtml();
+        else {
+            const f = FL[current] = FL[current]||{};
+            const flts = (spec().filters||[]).map(fl=>`<select style="width:130px" onchange="ADM.fGo('${fl.k}',this.value)"><option value="">${fl.label}: All</option>${fl.opts.map(o=>`<option ${f[fl.k]===o?'selected':''}>${o}</option>`).join('')}</select>`).join('');
+            body = `
+            <div class="card" style="overflow:hidden">
+              <div style="padding:12px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <b style="font:700 14px Inter;color:var(--navy)">${spec().title}</b>
+                ${flts}
+                <input id="q_adm" style="width:190px" placeholder="🔍 Search…" value="${h(f.q||'')}" oninput="ADM.qGo(this.value)">
+                <span style="flex:1"></span>
+                <button class="btn2" onclick="ADM.tpl()" title="Blank CSV with the right columns">⬇ Template</button>
+                <button class="btn2" onclick="ADM.exp()" title="Current data as CSV/Excel — edit and re-import to bulk-update">⬇ Excel</button>
+                <button class="btn2" onclick="document.getElementById('imp_file').click()" title="Import a filled template — preview before apply">⬆ Import</button>
+                <button class="btn" onclick="ADM.add()">+ Add</button>
+                <input type="file" id="imp_file" accept=".csv,text/csv" style="display:none" onchange="ADM.imp(this.files[0]); this.value=''">
+              </div>
+              <div class="xh" style="grid-template-columns:${gtc()}">${spec().cols.map(c=>{
+                  const on = (SRT[current]||{}).col===c.k;
+                  return `<div onclick="ADM.sort('${c.k}')" style="${c.num?'text-align:right;':''}${on?'color:var(--navy);':''}">${c.l}${on?((SRT[current].dir==='asc')?' ▲':' ▼'):' ↕'}</div>`;
+              }).join('')}<div></div></div>
+              <div id="tb_adm" style="max-height:62vh;overflow:auto">${rowsHtml()}</div>
+            </div>`;
         }
+        $('app').innerHTML = `
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+            <img src="https://drpca.com/assets/drpca-logo.png" style="height:34px" onerror="this.outerHTML='<b style=color:#102a43>drp&amp;co.</b>'">
+            <div style="border-left:1px solid var(--line);padding-left:12px"><b style="font:700 15px Inter;color:var(--navy)">TimeWise Admin</b><div class="sub">${h(me.name)} · every change is audit-logged</div></div>
+            <a href="app.html" class="btn2" style="margin-left:auto;text-decoration:none">← Back to portal</a>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${tabs}</div>
+          ${body}
+          ${editing!==null?editModal():''}`;
+    }
 
-        function diff(r) {
-            try {
-                if (r.action === 'INSERT') return 'created: ' + short(r.new_data);
-                if (r.action === 'DELETE') return 'removed: ' + short(r.old_data);
-                const o = r.old_data || {}, n = r.new_data || {};
-                const parts = [];
-                for (const k of Object.keys(n)) {
-                    if (['updated_at','updated_by','created_at','created_by','trailstamp'].includes(k)) continue;
-                    if (JSON.stringify(o[k]) !== JSON.stringify(n[k])) parts.push(k + ': ' + short(o[k]) + ' → ' + short(n[k]));
-                }
-                return parts.join(' · ') || '(no visible change)';
-            } catch (e) { return ''; }
-        }
-        function short(v) {
-            if (v === null || v === undefined) return '∅';
-            const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
-            return s.length > 60 ? s.slice(0, 57) + '…' : s;
-        }
+    function auditHtml() {
+        const tables = ['','employees','clients','tasks','holidays','expense_heads','announcements','timesheets','leaves','expenses','work_plans','comp_off_claims'];
+        const f = FL.audit = FL.audit||{};
+        const g = '150px 170px 130px 90px 1fr';
+        return `<div class="card" style="overflow:hidden">
+          <div style="padding:12px 14px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <b style="font:700 14px Inter;color:var(--navy)">Audit Log</b><span class="sub">last ${auditRows.length}</span>
+            <select style="width:170px" onchange="ADM.fGo('ftable',this.value,1)">${tables.map(t=>`<option value="${t}" ${f.ftable===t?'selected':''}>${t||'All tables'}</option>`).join('')}</select>
+            <input id="q_adm" style="width:190px" placeholder="🔍 Search…" value="${h(f.q||'')}" oninput="ADM.qGo(this.value)">
+          </div>
+          <div class="xh" style="grid-template-columns:${g}"><div>When (UTC)</div><div>Who</div><div>Table</div><div>Action</div><div>Change</div></div>
+          <div id="tb_adm" style="max-height:62vh;overflow:auto">${auditRowsHtml()}</div></div>`;
+    }
+    function auditRowsHtml() {
+        const q = ((FL.audit||{}).q||'').toLowerCase();
+        const g = '150px 170px 130px 90px 1fr';
+        let rs = auditRows;
+        if (q) rs = rs.filter(r=>JSON.stringify(r).toLowerCase().includes(q));
+        return rs.map(r=>`<div class="xr" style="grid-template-columns:${g}">
+            <div>${h(String(r.at).slice(0,19).replace('T',' '))}</div><div>${h(r.actor_email||'system')}</div><div>${h(r.table_name)}</div>
+            <div><span class="pill" style="background:var(--line2);color:var(--ink);cursor:default">${h(r.action)}</span></div>
+            <div title="${h(diff(r))}" style="color:#486581">${h(diff(r))}</div></div>`).join('') || '<div class="sub" style="padding:24px">Nothing.</div>';
+    }
+    function diff(r) {
+        try {
+            if (r.action==='INSERT') return 'created: ' + shortJ(r.new_data);
+            if (r.action==='DELETE') return 'removed: ' + shortJ(r.old_data);
+            const o=r.old_data||{}, n=r.new_data||{}, parts=[];
+            for (const k of Object.keys(n)) { if(['updated_at','updated_by','created_at','created_by','trailstamp'].includes(k)) continue;
+                if (JSON.stringify(o[k])!==JSON.stringify(n[k])) parts.push(k+': '+shortJ(o[k])+' → '+shortJ(n[k])); }
+            return parts.join(' · ') || '(no visible change)';
+        } catch(e){ return ''; }
+    }
+    const shortJ = v => { if(v==null) return '∅'; const s=typeof v==='object'?JSON.stringify(v):String(v); return s.length>50?s.slice(0,47)+'…':s; };
 
-        function renderModal() {
-            const spec = ENTITIES[current];
-            const f = spec.cols.map(c => {
-                const v = editing && editing.id ? editing[c.k] : (c.def !== undefined ? c.def : '');
-                if (c.type === 'select') {
-                    return `<div><label class="block text-xs font-medium mb-1 text-gray-600">${c.label}</label>
-                        <select id="fld_${c.k}" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
-                        ${c.options.map(o => `<option ${o === v ? 'selected' : ''}>${o}</option>`).join('')}</select></div>`;
-                }
-                if (c.type === 'bool') {
-                    return `<div class="flex items-center gap-2 pt-5"><input type="checkbox" id="fld_${c.k}" ${v ? 'checked' : ''} class="w-4 h-4"><label for="fld_${c.k}" class="text-sm text-gray-700">${c.label}</label></div>`;
-                }
-                if (c.type === 'textarea') {
-                    return `<div class="col-span-2"><label class="block text-xs font-medium mb-1 text-gray-600">${c.label}</label>
-                        <textarea id="fld_${c.k}" rows="3" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">${h(v)}</textarea></div>`;
-                }
-                const t = c.type === 'date' ? 'date' : c.type === 'datetime' ? 'datetime-local' : c.type === 'number' ? 'number' : 'text';
-                const val = c.type === 'datetime' && v ? String(v).slice(0, 16) : h(v);
-                return `<div><label class="block text-xs font-medium mb-1 text-gray-600">${c.label}${c.req ? ' *' : ''}</label>
-                    <input type="${t}" id="fld_${c.k}" value="${val}" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"></div>`;
-            }).join('');
-            return `
-                <div class="fixed inset-0 z-50 flex items-center justify-center p-4" style="background:rgba(16,42,67,.55)">
-                    <div class="bg-white rounded-xl w-full max-w-2xl p-6 max-h-[85vh] overflow-auto">
-                        <h3 class="font-bold text-lg mb-4" style="color:#102a43">${editing && editing.id ? 'Edit' : 'Add'} — ${spec.title}</h3>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">${f}</div>
-                        <div class="flex justify-end gap-2 mt-6">
-                            <button onclick="ADM.cancel()" class="px-4 py-2 rounded-lg text-sm border border-gray-200">Cancel</button>
-                            <button onclick="ADM.save()" class="btn-primary px-5 py-2 rounded-lg text-sm font-semibold">Save</button>
-                        </div>
-                    </div>
-                </div>`;
-        }
+    // ---------- edit / add modal ----------
+    function editModal() { return ''; }
+    function openForm(r) {
+        const isEdit = !!(r && r.id);
+        const f = spec().cols.filter(c=>c.t!=='status').map(c=>{
+            const v = isEdit ? r[c.k] : (c.def!==undefined?c.def:'');
+            if (c.t==='select') return `<div><label class="sub">${c.l}</label><select id="fld_${c.k}">${c.opts.map(o=>`<option ${o===v?'selected':''}>${o}</option>`).join('')}</select></div>`;
+            if (c.t==='bool') return `<div style="display:flex;align-items:center;gap:8px;padding-top:18px"><input type="checkbox" id="fld_${c.k}" ${v?'checked':''} style="width:auto"><label class="sub" for="fld_${c.k}" style="font-size:12px">${c.l}</label></div>`;
+            if (c.t==='textarea') return `<div style="grid-column:1/-1"><label class="sub">${c.l}</label><textarea id="fld_${c.k}" rows="3" style="width:100%">${h(v)}</textarea></div>`;
+            const typ = c.t==='date'?'date':c.t==='datetime'?'datetime-local':c.t==='num'?'number':'text';
+            const val = c.t==='datetime'&&v ? String(v).slice(0,16) : h(v==null?'':v);
+            return `<div><label class="sub">${c.l}${c.req?' *':''}</label><input type="${typ}" id="fld_${c.k}" value="${val}" style="width:100%"></div>`;
+        }).join('');
+        const sf = spec().statusField;
+        const stEd = sf ? `<div><label class="sub">Status</label><select id="fld__status"><option value="active" ${!isEdit||!isInactive(r)?'selected':''}>active</option><option value="inactive" ${isEdit&&isInactive(r)?'selected':''}>inactive</option></select></div>` : '';
+        modal((isEdit?'Edit':'Add')+' — '+spec().title, `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${f}${stEd}</div>
+          <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end"><button class="btn2" onclick="document.getElementById('modal').remove()">Cancel</button><button class="btn" onclick="ADM.save(${isEdit?`'${r.id}'`:'null'})">Save</button></div>`);
+    }
 
-        // ---------- wire up ----------
-        window.ADM = {
-            go: async k => { current = k; editing = null; await load(); render(); },
-            add: () => { editing = {}; render(); },
-            edit: id => { editing = rows.find(x => x.id === id) || null; render(); },
-            cancel: () => { editing = null; render(); },
-            save, toggle: toggleStatus, csv: exportCSV,
-            reload: async () => { await load(); render(); }
-        };
+    function collectForm() {
+        const obj = {};
+        for (const c of spec().cols) {
+            if (c.t==='status') continue;
+            const el = $('fld_'+c.k); if (!el) continue;
+            let v = c.t==='bool' ? el.checked : el.value;
+            if (v==='' ) v = null;
+            if (c.t==='num' && v!=null) { v = parseFloat(v); if (isNaN(v)) v = null; }
+            obj[c.k] = v;
+        }
+        const sf = spec().statusField;
+        if (sf && $('fld__status')) obj[sf] = sf==='active' ? ($('fld__status').value==='active') : $('fld__status').value;
+        return obj;
+    }
+    function validate(obj) {
+        for (const c of spec().cols) if (c.req && c.t!=='status' && (obj[c.k]==null || obj[c.k]==='')) return c.l+' is required';
+        if (current==='employees') {
+            if (obj.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(obj.email)) return 'Invalid email format';
+            if (obj.joined_on && obj.exited_on && obj.exited_on < obj.joined_on) return 'Exit date cannot be before joining date';
+        }
+        if (current==='announcements' && obj.show_from && obj.show_until && obj.show_until <= obj.show_from) return 'Show Until must be after Show From';
+        if (current==='holidays' && obj.raw_email && obj.raw_email!=='All' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(obj.raw_email)) return "Applies To must be 'All' or a valid email";
+        return null;
+    }
+    async function save(id) {
+        const obj = collectForm();
+        const err = validate(obj);
+        if (err) return toast(err, true);
+        const r = id ? await sb.from(spec().table).update(obj).eq('id', id) : await sb.from(spec().table).insert([obj]);
+        if (r.error) return toast('Save failed: '+r.error.message, true);
+        closeModal(); toast('Saved ✓'); await load(); render();
+    }
+    async function flip(id) {
+        const r = rows.find(x=>x.id===id); if (!r) return;
+        const sf = spec().statusField || 'status';
+        const nowInactive = isInactive(r);
+        if (!confirm((nowInactive?'Activate':'Deactivate')+' this record?')) return;
+        const patch = sf==='active' ? { active: nowInactive } : { [sf]: nowInactive?'active':'inactive' };
+        const q = await sb.from(spec().table).update(patch).eq('id', id);
+        if (q.error) return toast(q.error.message, true);
+        toast('Status updated ✓'); await load(); render();
+    }
+
+    // ---------- CSV: template / export / import with preview ----------
+    const csvCell = v => '"' + String(v==null?'':v).replace(/"/g,'""') + '"';
+    function download(name, text) { const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['\ufeff'+text],{type:'text/csv'})); a.download=name; a.click(); }
+    const csvHeads = () => ['id'].concat(spec().cols.filter(c=>c.t!=='status').map(c=>c.k)).concat(spec().statusField?[spec().statusField==='active'?'active':'status']:['status']);
+    function tpl() { download(current+'-template.csv', csvHeads().join(',')+'\n'); toast('Template downloaded — fill rows, leave id blank for new entries'); }
+    function exp() {
+        const heads = csvHeads();
+        const lines = [heads.join(',')].concat(rows.map(r=>heads.map(k=>{
+            let v=r[k]; if (typeof v==='boolean') v = v?'TRUE':'FALSE'; return csvCell(v);
+        }).join(',')));
+        download(current+'-data.csv', lines.join('\n'));
+        toast('Exported '+rows.length+' rows — edit in Excel, then ⬆ Import to bulk-update');
+    }
+    function parseCSV(text) {
+        const out=[]; let row=[],cell='',inQ=false;
+        for (let i=0;i<text.length;i++){ const ch=text[i];
+            if(inQ){ if(ch==='"'){ if(text[i+1]==='"'){cell+='"';i++;} else inQ=false; } else cell+=ch; }
+            else if(ch==='"') inQ=true;
+            else if(ch===',') { row.push(cell); cell=''; }
+            else if(ch==='\n'||ch==='\r'){ if(ch==='\r'&&text[i+1]==='\n')i++; row.push(cell); if(row.some(x=>x!=='')) out.push(row); row=[]; cell=''; }
+            else cell+=ch; }
+        if (cell!==''||row.length){ row.push(cell); if(row.some(x=>x!=='')) out.push(row); }
+        return out;
+    }
+    function coerce(c, v) {
+        v = String(v).trim();
+        if (v==='') return undefined;
+        if (c.t==='bool') return /^(true|yes|1|active)$/i.test(v);
+        if (c.t==='num') { const n=parseFloat(v); return isNaN(n)?undefined:n; }
+        return v;
+    }
+    let _ops = null;
+    async function imp(file) {
+        if (!file) return;
+        const text = (await file.text()).replace(/^\ufeff/, '');
+        const grid = parseCSV(text);
+        if (grid.length < 2) return toast('CSV has no data rows', true);
+        const hdr = grid[0].map(x=>String(x).trim().toLowerCase());
+        const colByKey = {}; spec().cols.forEach(c=>{ if(c.t!=='status') colByKey[c.k]=c; });
+        const sf = spec().statusField==='active' ? 'active' : 'status';
+        const idIx = hdr.indexOf('id');
+        const known = hdr.map(hh => hh==='id'?'id' : (colByKey[hh]?hh : (hh===sf?sf:null)));
+        if (!known.some(k=>k&&k!=='id')) return toast('No recognizable columns — start from ⬇ Template or ⬇ Excel', true);
+        const byId = {}; rows.forEach(r=>byId[r.id]=r);
+        const uniqIx = {}; (spec().uniq||[]).forEach(u=>{ rows.forEach(r=>{ const key=String(r[u]??'').toLowerCase(); if(key) (uniqIx[u]=uniqIx[u]||{})[u==='holiday_date'?key+'|'+String(r.raw_email??'').toLowerCase():key]=r; }); });
+        const ops = [], errs = [];
+        for (let i=1;i<grid.length;i++) {
+            const rowArr = grid[i]; const patch = {}; let idv = '';
+            known.forEach((k,ci)=>{ if(!k) return; const raw = rowArr[ci]??'';
+                if (k==='id') { idv = String(raw).trim(); return; }
+                if (k===sf) { const cv = String(raw).trim(); if(cv!=='') patch[sf] = sf==='active' ? /^(true|yes|1|active)$/i.test(cv) : (/^(inactive|false|no|0)$/i.test(cv)?'inactive':'active'); return; }
+                const cv = coerce(colByKey[k], raw); if (cv!==undefined) patch[k]=cv; });
+            let target = idv && byId[idv];
+            if (!target && !idv) {
+                for (const u of (spec().uniq||[])) {
+                    const key = u==='holiday_date' ? String(patch.holiday_date??'').toLowerCase()+'|'+String(patch.raw_email??'').toLowerCase() : String(patch[u]??'').toLowerCase();
+                    if (key && uniqIx[u] && uniqIx[u][key]) { target = uniqIx[u][key]; break; }
+                }
+            }
+            if (idv && !byId[idv]) { errs.push('Row '+(i+1)+': id not found'); continue; }
+            if (Object.keys(patch).length===0) { errs.push('Row '+(i+1)+': nothing to apply'); continue; }
+            if (target) ops.push({a:'update', id:target.id, patch, n:i+1});
+            else {
+                const missing = spec().cols.filter(c=>c.req&&c.t!=='status'&&patch[c.k]==null);
+                if (missing.length) { errs.push('Row '+(i+1)+': missing '+missing.map(c=>c.l).join(', ')); continue; }
+                ops.push({a:'create', patch, n:i+1});
+            }
+        }
+        _ops = ops;
+        const up = ops.filter(o=>o.a==='update').length, cr = ops.length-up;
+        modal('Import preview — '+spec().title, `
+          <div style="display:flex;gap:10px;margin-bottom:12px">
+            <span class="pill" style="background:var(--okbg);color:var(--ok);cursor:default">${up} update${up===1?'':'s'}</span>
+            <span class="pill" style="background:var(--goldbg);color:var(--goldd);cursor:default">${cr} new</span>
+            <span class="pill" style="background:${errs.length?'var(--badbg)':'var(--line2)'};color:${errs.length?'var(--bad)':'var(--mut)'};cursor:default">${errs.length} skipped</span>
+          </div>
+          <div class="sub" style="margin-bottom:8px">Blank cells never overwrite existing values. All changes are audit-logged.</div>
+          ${errs.length?`<div style="background:var(--badbg);border-radius:8px;padding:10px;font:500 11.5px Inter;color:var(--bad);margin-bottom:10px">${errs.slice(0,10).map(h).join('<br>')}${errs.length>10?'<br>…':''}</div>`:''}
+          <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn2" onclick="document.getElementById('modal').remove()">Cancel</button><button class="btn" ${ops.length?'':'disabled'} onclick="ADM.impGo()">Apply ${ops.length} change${ops.length===1?'':'s'}</button></div>`, true);
+    }
+    async function impGo() {
+        closeModal();
+        const ops = _ops||[]; _ops = null;
+        let ok=0, fail=0;
+        toast('Applying '+ops.length+' changes…');
+        for (let i=0;i<ops.length;i+=15) {
+            const batch = ops.slice(i,i+15).map(o =>
+                (o.a==='update' ? sb.from(spec().table).update(o.patch).eq('id',o.id) : sb.from(spec().table).insert([o.patch]))
+                .then(r=>{ if(r.error){fail++; console.warn('row',o.n,r.error.message);} else ok++; }));
+            await Promise.all(batch);
+        }
+        toast(fail? ('Done: '+ok+' applied, '+fail+' failed (see console)') : ('Done: '+ok+' applied ✓'), !!fail);
         await load(); render();
-    })();
-    </script>
+    }
+
+    // ---------- wire ----------
+    window.ADM = {
+        go: async k => { current=k; editing=null; await load(); render(); },
+        sort: k => { const s=SRT[current]=SRT[current]||{}; if(s.col===k) s.dir=s.dir==='asc'?'desc':'asc'; else {s.col=k;s.dir='asc';} render(); },
+        fGo: async (k,v,reload) => { (FL[current]=FL[current]||{})[k]=v; if(reload){ await load(); } render(); },
+        qGo: v => { (FL[current]=FL[current]||{}).q=v.trim(); clearTimeout(_qdeb); _qdeb=setTimeout(()=>{ const tb=$('tb_adm'); if(tb) tb.innerHTML = current==='audit'?auditRowsHtml():rowsHtml(); },200); },
+        add: () => openForm(null),
+        edit: id => openForm(rows.find(x=>x.id===id)),
+        save, flip, tpl, exp, imp, impGo
+    };
+    await load(); render();
+})();
+</script>
 </body>
 </html>
