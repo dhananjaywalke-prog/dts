@@ -95,7 +95,7 @@ const APP = (() => {
   const VIEW_OF = { exp:'expenses', apl:'approvals', apx:'approvals' };
   function tsort(view, col){ const s=TSORT[view]=TSORT[view]||{}; if(s.col===col) s.dir=s.dir==='asc'?'desc':'asc'; else { s.col=col; s.dir='asc'; } RENDER[VIEW_OF[view]||view](); }
   function fGo(view, key, val){ (TSORT[view]=TSORT[view]||{})[key]=val; RENDER[VIEW_OF[view]||view](); }
-  let _qdeb; function qGo(view, val){ (TSORT[view]=TSORT[view]||{}).q=val.trim(); clearTimeout(_qdeb); _qdeb=setTimeout(()=>{ RENDER[VIEW_OF[view]||view](); const el=document.getElementById('q_'+view); if(el){ el.focus(); const n=el.value.length; try{ el.setSelectionRange(n,n); }catch(e){} } },150); }
+  let _qdeb; function qGo(view, val){ const s=(TSORT[view]=TSORT[view]||{}); s.qraw=val; s.q=val.trim(); clearTimeout(_qdeb); _qdeb=setTimeout(async ()=>{ try { await RENDER[VIEW_OF[view]||view](); } catch(e) {} const el=document.getElementById('q_'+view); if(el){ el.value=s.qraw||''; el.focus(); const n=el.value.length; try{ el.setSelectionRange(n,n); }catch(e){} } },250); }
   function tq(view, rows){ const q=(TSORT[view]&&TSORT[view].q||'').toLowerCase(); return q ? rows.filter(r=>JSON.stringify(r).toLowerCase().includes(q)) : rows; }
   function applySort(view, rows, defCol, defDir){ const s=TSORT[view]||{}; const col=s.col||defCol, dir=s.col?s.dir:(defDir||'asc'); const isD=v=>/^\d{4}-\d{2}/.test(String(v)); return rows.slice().sort((a,b)=>{ let x=a[col], y=b[col]; const nx=parseFloat(x), ny=parseFloat(y); if(isD(x)&&isD(y)){ x=String(x); y=String(y); } else if(!isNaN(nx)&&!isNaN(ny)&&String(x).trim()!==''&&String(y).trim()!==''){ x=nx; y=ny; } else { x=String(x??'').toLowerCase(); y=String(y??'').toLowerCase(); } return (x<y?-1:x>y?1:0)*(dir==='asc'?1:-1); }); }
   function thdr(view, cols, gtc, top){ const s=TSORT[view]||{}; return `<div class="xh" style="grid-template-columns:${gtc};top:${top||0}">` + cols.map(c=>`<div ${c.k?`onclick=\"APP.tsortGo('${view}','${c.k}')\"`:''} style="${c.r?'text-align:right;':''}${s.col===c.k?'color:var(--navy);':''}">${c.l}${c.k?(s.col===c.k?(s.dir==='asc'?' ▲':' ▼'):' ↕'):''}</div>`).join('') + '</div>'; }
@@ -115,7 +115,7 @@ const APP = (() => {
       S.myday = d; S.me = d.employee; S.isApprover = !!d.isApprover;
       S.isAdmin = (d.employee && d.employee['Role']) === 'admin';
       $('uName').textContent = S.me['Employee Name'] || email;
-      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'');
+      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b3';
       $('uAv').textContent = (S.me['Employee Name']||email).split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
       buildNav();
       show(S.isApprover ? 'dashboard' : 'myday');
