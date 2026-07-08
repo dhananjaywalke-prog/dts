@@ -92,9 +92,10 @@ const APP = (() => {
   function sane(t){ t=String(t||'').trim(); if(t.length<10) return false; const w=t.split(/\s+/); return w.length>=5 && w.filter(x=>/[A-Za-z]{3,}/.test(x)).length>=3; }
   const SANE_HINT = 'meaningful sentence: 10+ characters, 5+ real words';
   const TSORT = {};
-  function tsort(view, col){ const s=TSORT[view]=TSORT[view]||{}; if(s.col===col) s.dir=s.dir==='asc'?'desc':'asc'; else { s.col=col; s.dir='asc'; } RENDER[view](); }
-  function fGo(view, key, val){ (TSORT[view]=TSORT[view]||{})[key]=val; RENDER[view](); }
-  let _qdeb; function qGo(view, val){ (TSORT[view]=TSORT[view]||{}).q=val.trim(); clearTimeout(_qdeb); _qdeb=setTimeout(()=>RENDER[view](),300); }
+  const VIEW_OF = { exp:'expenses', apl:'approvals', apx:'approvals' };
+  function tsort(view, col){ const s=TSORT[view]=TSORT[view]||{}; if(s.col===col) s.dir=s.dir==='asc'?'desc':'asc'; else { s.col=col; s.dir='asc'; } RENDER[VIEW_OF[view]||view](); }
+  function fGo(view, key, val){ (TSORT[view]=TSORT[view]||{})[key]=val; RENDER[VIEW_OF[view]||view](); }
+  let _qdeb; function qGo(view, val){ (TSORT[view]=TSORT[view]||{}).q=val.trim(); clearTimeout(_qdeb); _qdeb=setTimeout(()=>RENDER[VIEW_OF[view]||view](),300); }
   function tq(view, rows){ const q=(TSORT[view]&&TSORT[view].q||'').toLowerCase(); return q ? rows.filter(r=>JSON.stringify(r).toLowerCase().includes(q)) : rows; }
   function applySort(view, rows, defCol, defDir){ const s=TSORT[view]||{}; const col=s.col||defCol, dir=s.col?s.dir:(defDir||'asc'); const isD=v=>/^\d{4}-\d{2}/.test(String(v)); return rows.slice().sort((a,b)=>{ let x=a[col], y=b[col]; const nx=parseFloat(x), ny=parseFloat(y); if(isD(x)&&isD(y)){ x=String(x); y=String(y); } else if(!isNaN(nx)&&!isNaN(ny)&&String(x).trim()!==''&&String(y).trim()!==''){ x=nx; y=ny; } else { x=String(x??'').toLowerCase(); y=String(y??'').toLowerCase(); } return (x<y?-1:x>y?1:0)*(dir==='asc'?1:-1); }); }
   function thdr(view, cols, gtc, top){ const s=TSORT[view]||{}; return `<div class="xh" style="grid-template-columns:${gtc};top:${top||0}">` + cols.map(c=>`<div ${c.k?`onclick=\"APP.tsortGo('${view}','${c.k}')\"`:''} style="${c.r?'text-align:right;':''}${s.col===c.k?'color:var(--navy);':''}">${c.l}${c.k?(s.col===c.k?(s.dir==='asc'?' ▲':' ▼'):' ↕'):''}</div>`).join('') + '</div>'; }
