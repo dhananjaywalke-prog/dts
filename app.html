@@ -92,10 +92,12 @@ const APP = (() => {
   function sane(t){ t=String(t||'').trim(); if(t.length<10) return false; const w=t.split(/\s+/); return w.length>=5 && w.filter(x=>/[A-Za-z]{3,}/.test(x)).length>=3; }
   const SANE_HINT = 'meaningful sentence: 10+ characters, 5+ real words';
   const TSORT = {};
-  const VIEW_OF = { exp:'expenses', apl:'approvals', apx:'approvals' };
+  const VIEW_OF = { exp:'expenses', apl:'approvals', apx:'approvals', tsm:'timesheet' };
+  const TBODY = {};
+  function addDaysIso(iso, n){ const d = new Date(iso+'T00:00:00'); d.setDate(d.getDate()+n); const p=x=>String(x).padStart(2,'0'); return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()); }
   function tsort(view, col){ const s=TSORT[view]=TSORT[view]||{}; if(s.col===col) s.dir=s.dir==='asc'?'desc':'asc'; else { s.col=col; s.dir='asc'; } RENDER[VIEW_OF[view]||view](); }
   function fGo(view, key, val){ (TSORT[view]=TSORT[view]||{})[key]=val; RENDER[VIEW_OF[view]||view](); }
-  let _qdeb; function qGo(view, val){ const s=(TSORT[view]=TSORT[view]||{}); s.qraw=val; s.q=val.trim(); clearTimeout(_qdeb); _qdeb=setTimeout(async ()=>{ try { await RENDER[VIEW_OF[view]||view](); } catch(e) {} const el=document.getElementById('q_'+view); if(el){ el.value=s.qraw||''; el.focus(); const n=el.value.length; try{ el.setSelectionRange(n,n); }catch(e){} } },250); }
+  let _qdeb; function qGo(view, val){ const s=(TSORT[view]=TSORT[view]||{}); s.q=val.trim(); clearTimeout(_qdeb); _qdeb=setTimeout(()=>{ const tb=document.getElementById('tb_'+view); if (tb && TBODY[view]) tb.innerHTML = TBODY[view](); },200); }
   function tq(view, rows){ const q=(TSORT[view]&&TSORT[view].q||'').toLowerCase(); return q ? rows.filter(r=>JSON.stringify(r).toLowerCase().includes(q)) : rows; }
   function applySort(view, rows, defCol, defDir){ const s=TSORT[view]||{}; const col=s.col||defCol, dir=s.col?s.dir:(defDir||'asc'); const isD=v=>/^\d{4}-\d{2}/.test(String(v)); return rows.slice().sort((a,b)=>{ let x=a[col], y=b[col]; const nx=parseFloat(x), ny=parseFloat(y); if(isD(x)&&isD(y)){ x=String(x); y=String(y); } else if(!isNaN(nx)&&!isNaN(ny)&&String(x).trim()!==''&&String(y).trim()!==''){ x=nx; y=ny; } else { x=String(x??'').toLowerCase(); y=String(y??'').toLowerCase(); } return (x<y?-1:x>y?1:0)*(dir==='asc'?1:-1); }); }
   function thdr(view, cols, gtc, top){ const s=TSORT[view]||{}; return `<div class="xh" style="grid-template-columns:${gtc};top:${top||0}">` + cols.map(c=>`<div ${c.k?`onclick=\"APP.tsortGo('${view}','${c.k}')\"`:''} style="${c.r?'text-align:right;':''}${s.col===c.k?'color:var(--navy);':''}">${c.l}${c.k?(s.col===c.k?(s.dir==='asc'?' ▲':' ▼'):' ↕'):''}</div>`).join('') + '</div>'; }
@@ -177,29 +179,17 @@ const APP = (() => {
     $('view').innerHTML = `
     <div class="grid" style="grid-template-columns:1.4fr 1fr">
       <div class="card">
-        <div style="display:flex;align-items:baseline;gap:10px"><span class="h">Today</span>
-          <span class="sub">${fmt1(t.loggedTotal)}h logged of 6h${t.loggedTotal<6?' · '+fmt1(6-t.loggedTotal)+'h to go':''}</span></div>
+        <div style="display:flex;align-items:center;gap:10px"><span class="h">Today</span>
+          <span class="sub">${fmt1(t.loggedTotal)}h logged of 6h${t.loggedTotal<6?' · '+fmt1(6-t.loggedTotal)+'h to go':''}</span>
+          <button class="btn" style="margin-left:auto;padding:6px 12px" onclick="APP.quickLog()">+ Add entry</button></div>
         <div style="margin-top:10px;height:10px;background:var(--line2);border-radius:99px;overflow:hidden"><div style="width:${pct}%;height:100%;background:${t.loggedTotal>=6?'var(--ok)':'var(--gold)'}"></div></div>
         <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
           ${(t.entries||[]).map(e=>`<div style="display:flex;align-items:center;gap:10px;font:500 12px Inter">
             <span style="width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none"></span>
-            <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h(e.Client)} — ${h(e.Task)} · <b>${fmt1(e.Hours)}h</b>${e.Location?' · '+h(e.Location):''}</span></div>`).join('') || '<div class="sub">Nothing logged yet today.</div>'}
+            <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h(e.Client)} — ${h(e.Task)} · <b>${fmt1(e.Hours)}h</b>${e.Location?' · '+h(e.Location):''}</span></div>`).join('') || '<div class="sub">Nothing logged yet today — click a day below or + Add entry.</div>'}
           ${planned.map(p=>`<div style="display:flex;align-items:center;gap:10px;font:500 12px Inter;color:var(--goldd);background:var(--goldbg);border:1px dashed var(--goldline);border-radius:8px;padding:7px 10px">
             ⚠️ Planned, not logged: ${h(p.client)} — ${h(p.task)} · ${fmt1(p.hours)}h
             <button class="btn" style="margin-left:auto;padding:4px 10px;font-size:11px" onclick='APP.logPlan(${JSON.stringify(p).replace(/'/g,"&#39;")})'>Log it</button></div>`).join('')}
-        </div>
-      </div>
-      <div class="card"><div class="h" style="margin-bottom:10px">Quick entry</div><div id="qe"></div></div>
-      <div class="card">
-        <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><span class="h">Last 7 days</span><span class="sub">ending today · 6h standard day</span>
-          <span style="margin-left:auto" class="sub"><b style="color:var(--ok)">${fmt1(wk.reduce((s,x)=>s+(+x.hours||0),0))}h</b> logged</span></div>
-        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px">
-          ${wk.map(x=>{
-            const off = x.isSunday || x.isHoliday;
-            const bg = x.isToday ? 'var(--goldbg);border:1px solid var(--goldline)' : off ? 'var(--line2)' : (+x.hours>=6 ? 'var(--okbg)' : +x.hours>0 ? 'var(--badbg)' : '#f1f5f9');
-            const col = x.isToday ? 'var(--goldd)' : off ? 'var(--fog)' : +x.hours>=6 ? 'var(--ok)' : +x.hours>0 ? 'var(--bad)' : 'transparent';
-            return `<div style="text-align:center"><div style="height:52px;background:${bg};border-radius:8px;display:flex;align-items:center;justify-content:center;font:700 13px Inter;color:${col}">${off? '🏖' : (+x.hours? fmt1(x.hours):'')}</div><div style="font:500 10px Inter;color:${x.isToday?'var(--navy)':'var(--fog)'};margin-top:4px">${x.dayName} ${x.dayNum}${x.isToday?' · today':''}</div></div>`;
-          }).join('')}
         </div>
       </div>
       <div class="card">
@@ -213,72 +203,88 @@ const APP = (() => {
           ${(d.pendings.leaves||[]).map(l=>`<div>🌴 ${h(l['Leave Type'])} ${fmtD(l['From Date'])} → ${fmtD(l['To Date'])} — <b style="color:${l.Status==='Approved'?'var(--ok)':'var(--goldd)'}">${h(l.Status)}</b></div>`).join('') || '<div class="sub">No upcoming leaves.</div>'}
         </div>
       </div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><span class="h">Last 7 days</span><span class="sub">ending today · click a day to add or edit entries</span>
+        <span style="margin-left:auto" class="sub"><b style="color:var(--ok)">${fmt1(wk.reduce((s,x)=>s+(+x.hours||0),0))}h</b> logged</span></div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px">
+        ${wk.map(x=>{
+          const off = x.isSunday || x.isHoliday;
+          const bg = x.isToday ? 'var(--goldbg);border:1px solid var(--goldline)' : off ? 'var(--line2)' : (+x.hours>=6 ? 'var(--okbg)' : +x.hours>0 ? 'var(--badbg)' : '#f1f5f9');
+          const col = x.isToday ? 'var(--goldd)' : off ? 'var(--fog)' : +x.hours>=6 ? 'var(--ok)' : +x.hours>0 ? 'var(--bad)' : 'transparent';
+          return `<div onclick="APP.tsPopup('${x.date}')" style="text-align:center;cursor:pointer">
+            <div style="height:52px;background:${bg};border-radius:8px;display:flex;align-items:center;justify-content:center;font:700 13px Inter;color:${col}">${off?'🏖':(+x.hours?fmt1(x.hours):'')}</div>
+            <div style="font:600 10.5px Inter;color:${x.isToday?'var(--navy)':'var(--ink)'};margin-top:4px">${fmtD(x.date).slice(0,6)}</div>
+            <div style="font:500 10px Inter;color:var(--fog)">${x.dayName}${x.isToday?' · today':''}</div>
+          </div>`;
+        }).join('')}
+      </div>
     </div>`;
-    renderQuickEntry('qe');
     buildNav();
   }
 
   // quick entry (shared by My Day and modal)
-  async function renderQuickEntry(mountId, prefill) {
+  async function tsPopup(dateStr, pre) {
+    closeModal();
     const m = await masters();
-    const asg = m.assignments || [];
-    const clients = [...new Set(asg.map(a=>a['Client Name']))].sort();
-    const lastLoc = localStorage.getItem('ems2_lastloc') || '';
-    const el = $(mountId);
-    el.innerHTML = `
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <select id="qe_loc"><option value="">📍 Location…</option>${['Office','Client Place','WFH','Travelling'].map(l=>`<option ${l===(prefill&&prefill.location||lastLoc)?'selected':''}>${l}</option>`).join('')}</select>
-        <select id="qe_client"><option value="">Client…</option>${clients.map(c=>`<option ${prefill&&prefill.client===c?'selected':''}>${h(c)}</option>`).join('')}</select>
-        <select id="qe_task"><option value="">Task…</option></select>
-        <input id="qe_hours" type="number" step="0.5" min="0.5" max="24" placeholder="Hours" value="${prefill&&prefill.hours||''}">
-        <textarea id="qe_desc" rows="2" placeholder="What did you work on?" style="grid-column:1/-1"></textarea>
-      </div>
-      <div style="margin-top:10px;display:flex;align-items:center;gap:10px">
-        <button class="btn" id="qe_add">Add entry</button>
-        <button class="btn2" id="qe_copy">↺ Copy yesterday</button>
-        <span id="qe_st" class="sub"></span>
+    const todayStr = S.myday.today.date;
+    const isEdit = !!(pre && pre.rowId);
+    const locked = dateStr < addDaysIso(todayStr, -7);
+    const future = dateStr > todayStr;
+    const dayRows = (m.timesheets||[]).filter(e=>e.Date===dateStr);
+    const tot = dayRows.reduce((s,e)=>s+(+e.Hours||0),0);
+    const asg = m.assignments||[];
+    const clientsArr = [...new Set(asg.map(a=>a['Client Name']))].sort();
+    const lastLoc = localStorage.getItem('ems2_lastloc')||'';
+    const locSel = (pre && pre.location) || lastLoc;
+    const rowsHtml = dayRows.map(e=>{
+      const ed = !e.Auto && !locked && !future;
+      return `<div style="display:flex;align-items:center;gap:8px;font:500 12px Inter;padding:6px 8px;border:1px solid var(--line2);border-radius:8px${isEdit&&e['Row ID']===pre.rowId?';background:var(--goldbg)':''}">
+        <span style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h(e.Client)} — ${h(e.Task)} · <b>${fmt1(e.Hours)}h</b>${e.Location?' · '+h(e.Location):''}</span>
+        ${ed?`<button class="btn2" style="padding:2px 8px;font-size:11px" onclick='APP.tsEdit(${JSON.stringify(e).replace(/'/g,"&#39;")})'>Edit</button><button class="btn2" style="padding:2px 8px;font-size:11px;color:var(--bad)" onclick="APP.tsDel('${e['Row ID']}')">Del</button>`:''}
       </div>`;
-    const taskSel = $('qe_task');
-    function fillTasks() {
-      const c = $('qe_client').value;
-      const tasks = [...new Set(asg.filter(a=>a['Client Name']===c).map(a=>a['Task Assigned']))].sort();
-      taskSel.innerHTML = '<option value="">Task…</option>' + tasks.map(t=>`<option ${prefill&&prefill.task===t?'selected':''}>${h(t)}</option>`).join('');
-    }
-    $('qe_client').onchange = fillTasks; if (prefill&&prefill.client || clients.length) fillTasks();
-    $('qe_copy').onclick = async () => {
-      const y = (m.timesheets||[]).filter(e=>!e.Auto).sort((a,b)=>b.Date<a.Date?-1:1);
-      const last = y.find(e=>e.Date < (S.myday.today.date));
-      if (!last) return toast('No earlier entry to copy', true);
-      $('qe_loc').value = last.Location||lastLoc; $('qe_client').value = last.Client; fillTasks();
-      $('qe_task').value = last.Task; $('qe_hours').value = last.Hours; $('qe_desc').value = last.Description||'';
-    };
-    $('qe_add').onclick = async () => {
-      const payload = { timesheet: {
-        employeeEmail: S.me['Employee Email'], date: S.myday.today.date,
-        client: $('qe_client').value, task: $('qe_task').value,
-        hours: $('qe_hours').value, description: $('qe_desc').value.trim(),
-        location: $('qe_loc').value, expenseType:'Not Applicable', expenseAmount:'0' } };
-      if (!payload.timesheet.location) return toast('Select a location', true);
-      if (!payload.timesheet.client || !payload.timesheet.task) return toast('Select client and task', true);
-      if (!(+payload.timesheet.hours > 0)) return toast('Enter hours', true);
-      $('qe_add').disabled = true; $('qe_st').textContent = 'Saving…';
+    }).join('');
+    const formHtml = (locked||future)
+      ? `<div class="sub" style="margin-top:10px">${locked?'Entries older than 7 days are locked.':'Future dates cannot be logged.'}</div>`
+      : `<div style="margin-top:12px;border-top:1px solid var(--line2);padding-top:12px">
+        <div class="h" style="font-size:13px;margin-bottom:8px">${isEdit?'Edit entry':'Add entry'}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div><label class="sub">Location</label><select id="tp_loc"><option value="">📍 Location…</option>${['Office','Client Place','WFH','Travelling'].map(l=>`<option ${l===locSel?'selected':''}>${l}</option>`).join('')}</select></div>
+          <div><label class="sub">Client</label><select id="tp_client"><option value="">Client…</option>${clientsArr.map(c=>`<option ${pre&&pre.client===c?'selected':''}>${h(c)}</option>`).join('')}</select></div>
+          <div><label class="sub">Task</label><select id="tp_task"><option value="">Task…</option></select></div>
+          <div><label class="sub">Hours</label><input id="tp_hours" type="number" step="0.5" min="0.5" max="24" value="${(pre&&pre.hours)||''}"></div>
+          <div style="grid-column:1/-1"><label class="sub">Description — ${SANE_HINT}</label><textarea id="tp_desc" rows="2">${pre&&pre.description?h(pre.description):''}</textarea></div>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:10px"><button class="btn" id="tp_save">${isEdit?'Update':'Save'}</button><button class="btn2" id="tp_reset">Reset</button></div>
+      </div>`;
+    modal('Timesheet — ' + fmtD(dateStr), `<div class="sub">${fmt1(tot)}h logged this day</div><div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">${rowsHtml||'<div class="sub">No entries yet.</div>'}</div>` + formHtml);
+    if (locked || future) return;
+    const fillTasks = () => { const c=$('tp_client').value; const ts=[...new Set(asg.filter(a=>a['Client Name']===c).map(a=>a['Task Assigned']))].sort(); $('tp_task').innerHTML = '<option value="">Task…</option>' + ts.map(t=>`<option ${pre&&pre.task===t?'selected':''}>${h(t)}</option>`).join(''); };
+    $('tp_client').onchange = fillTasks; fillTasks();
+    $('tp_reset').onclick = () => { $('tp_client').value=''; fillTasks(); $('tp_hours').value=''; $('tp_desc').value=''; $('tp_loc').value=lastLoc; };
+    $('tp_save').onclick = async () => {
+      const desc = $('tp_desc').value.trim();
+      if (!$('tp_loc').value) return toast('Select a location', true);
+      if (!$('tp_client').value || !$('tp_task').value) return toast('Select client and task', true);
+      if (!(+$('tp_hours').value > 0)) return toast('Enter hours', true);
+      if (!sane(desc)) return toast('Description must be a ' + SANE_HINT, true);
+      const payload = { timesheet: { employeeEmail: S.me['Employee Email'], date: dateStr, client: $('tp_client').value, task: $('tp_task').value, hours: $('tp_hours').value, description: desc, location: $('tp_loc').value, expenseType: 'Not Applicable', expenseAmount: '0' } };
+      if (isEdit) payload.timesheet.rowId = pre.rowId;
+      $('tp_save').disabled = true;
       try {
-        if (prefill && prefill.rowId && prefill.edit) { payload.timesheet.rowId = prefill.rowId; await EMS2.callAPI('updateTimesheet', payload); }
-        else await EMS2.callAPI('addTimesheet', payload);
+        await EMS2.callAPI(isEdit?'updateTimesheet':'addTimesheet', payload);
         localStorage.setItem('ems2_lastloc', payload.timesheet.location);
-        S.masters = null; toast('Entry saved ✓');
-        const tot = (+S.myday.today.loggedTotal||0) + (+payload.timesheet.hours);
-        if (tot < 6) toast('Day total ' + fmt1(tot) + 'h — remember your 6h day');
-        else if (tot > 6) toast('Day total ' + fmt1(tot) + 'h — above the standard day');
-        rMyday();
-      } catch (e) { toast(e.message, true); $('qe_add').disabled = false; $('qe_st').textContent=''; }
+        S.masters = null; closeModal(); toast(isEdit?'Updated ✓':'Entry saved ✓');
+        const newTot = dayRows.reduce((s,e)=> s + ((isEdit && e['Row ID']===pre.rowId) ? 0 : (+e.Hours||0)), 0) + (+payload.timesheet.hours);
+        if (dateStr===todayStr && newTot<6) toast('Day total '+fmt1(newTot)+'h — remember your 6h day');
+        else if (newTot>6) toast('Day total '+fmt1(newTot)+'h — above the standard day');
+        RENDER[S.view]();
+      } catch (e) { toast(e.message, true); $('tp_save').disabled = false; }
     };
   }
 
-  function logPlan(p) {
-    show('myday').then(()=>{ renderQuickEntry('qe', p); window.scrollTo({top:0, behavior:'smooth'}); });
-  }
-  function quickLog() { S.view==='myday' ? window.scrollTo({top:0,behavior:'smooth'}) : show('myday'); }
+  function logPlan(p) { tsPopup(S.myday.today.date, { client: p.client, task: p.task, hours: p.hours, location: p.location }); }
+  function quickLog() { tsPopup(S.myday.today.date); }
 
   // ---------------- DASHBOARD (approver landing) ----------------
   async function dashData(force) {
@@ -387,7 +393,7 @@ const APP = (() => {
     const d = await dashData(!S.cache.dashboard); buildNav();
     const card = (view, kind, title, items, cols, gtc, rowFn) => {
       const F = TSORT[view]||{};
-      const rows = applySort(view, tq(view, items), cols[1].k, 'asc');
+      TBODY[view] = () => applySort(view, tq(view, items), cols[1].k, 'asc').map(rowFn).join('') || '<div style="padding:24px" class="sub">Nothing pending 🎉</div>';
       const nSel = Object.keys(BULK[kind]).length;
       return `<div class="card" style="padding:0;overflow:hidden;margin-top:12px">
         <div style="padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -396,7 +402,7 @@ const APP = (() => {
           <button class="btn2" style="margin-left:auto" onclick="APP.rfshAppr()">↺ Refresh</button>
           <button class="btn" ${nSel?'':'disabled'} onclick="APP.bulkApprove('${kind}')">✓ Approve selected (${nSel})</button>
         </div>
-        <div class="xt">${thdr(view, cols, gtc)}${rows.map(rowFn).join('') || '<div style=\"padding:24px\" class=\"sub\">Nothing pending 🎉</div>'}</div>
+        <div class="xt">${thdr(view, cols, gtc)}<div id="tb_${view}">${TBODY[view]()}</div></div>
       </div>`;
     };
     const lvCols = [{l:''},{k:'Employee Name',l:'Person'},{k:'Leave Type',l:'Type'},{k:'From Date',l:'From'},{k:'To Date',l:'To'},{k:'Total Days',l:'Days',r:1},{k:'Reason',l:'Reason'},{k:'Applied On',l:'Applied'}];
@@ -515,41 +521,89 @@ const APP = (() => {
 
   // ---------------- TIMESHEET ----------------
   async function rTimesheet() {
-    const m = await masters(true);
-    const rows = (m.timesheets||[]).slice().sort((a,b)=> a.Date<b.Date?1:-1).slice(0,200);
-    const today = S.myday.today.date;
-    const cutoff = new Date(new Date(today+'T00:00:00').getTime() - 7*86400000).toISOString().slice(0,10);
-    const gtc = '92px 1fr 150px 64px 100px 1.4fr 110px';
+    const m = await masters();
+    const todayStr = S.myday.today.date;
+    const hrs = {}; (m.timesheets||[]).forEach(e=>{ hrs[e.Date]=(hrs[e.Date]||0)+(+e.Hours||0); });
+    const hol = {}; (m.holidays||[]).forEach(hd=>{ const sc=String(hd['Employee Email']||'All'); if(/^all$/i.test(sc)||sc.toLowerCase()===String(S.me['Employee Email']).toLowerCase()) hol[hd.Date]=hd.Description||'Holiday'; });
+    const [ty,tmm] = todayStr.split('-').map(Number);
+    const months = [ tmm===1?{y:ty-1,m:12}:{y:ty,m:tmm-1}, {y:ty,m:tmm} ];
+    const pad = x=>String(x).padStart(2,'0');
+    const MONF = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const calHtml = months.map(({y,m})=>{
+      const firstDow = new Date(y,m-1,1).getDay();
+      const dim = new Date(y,m,0).getDate();
+      let cells = '';
+      for (let i=0;i<firstDow;i++) cells += '<div></div>';
+      for (let dd=1;dd<=dim;dd++){
+        const iso = y+'-'+pad(m)+'-'+pad(dd);
+        const dow = new Date(y,m-1,dd).getDay();
+        const future = iso > todayStr;
+        const total = hrs[iso]||0;
+        const isHol = !!hol[iso] || dow===0;
+        let bg='transparent', fg='var(--ink)';
+        if (future) { fg='#c5d2de'; }
+        else if (total>=6) { bg='var(--ok)'; fg='#fff'; }
+        else if (total>0) { bg='#d69e06'; fg='#fff'; }
+        else if (isHol) { bg='#3B82F6'; fg='#fff'; }
+        const ring = iso===todayStr ? 'outline:2px solid var(--gold);outline-offset:-2px;font-weight:800;' : '';
+        const tip = hol[iso] ? hol[iso] : (total ? fmt1(total)+'h logged' : (dow===0?'Sunday':''));
+        cells += `<button ${future?'disabled':''} onclick="APP.tsPopup('${iso}')" title="${h(tip)}" style="border:0;cursor:${future?'default':'pointer'};padding:8px 0;border-radius:8px;background:${bg};color:${fg};font:600 12px Inter;${ring}">${dd}</button>`;
+      }
+      return `<div><div style="font:700 13px Inter;color:var(--navy);margin-bottom:8px">${MONF[m-1]} ${y}</div>
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center">
+        ${['Su','Mo','Tu','We','Th','Fr','Sa'].map(w=>`<div style="font:600 10px Inter;color:var(--fog);padding:4px 0">${w}</div>`).join('')}${cells}</div></div>`;
+    }).join('');
+    const all = (m.timesheets||[]).slice(0,400);
+    const clientsList = [...new Set(all.map(r=>r.Client).filter(Boolean))].sort();
+    const F = TSORT['tsm'] = TSORT['tsm']||{};
+    const gtc = '96px 1fr 150px 64px 100px 1.4fr 110px';
+    const cols = [{k:'Date',l:'Date'},{k:'Client',l:'Client'},{k:'Task',l:'Task'},{k:'Hours',l:'Hrs',r:1},{k:'Location',l:'Location'},{k:'Description',l:'Description'},{l:''}];
+    const cutoff = addDaysIso(todayStr,-7);
+    TBODY.tsm = () => {
+      let rows = all;
+      if (F.fclient) rows = rows.filter(r=>r.Client===F.fclient);
+      if (F.floc) rows = rows.filter(r=>r.Location===F.floc);
+      rows = applySort('tsm', tq('tsm', rows), 'Date', 'desc');
+      return rows.map(r=>{
+        const ed = !r.Auto && r.Date>=cutoff;
+        return `<div class="xr" style="grid-template-columns:${gtc};${r.Auto?'color:var(--fog)':''}">
+          <div style="color:var(--mut)">${fmtD(r.Date)}</div><div>${h(r.Client)}</div><div>${h(r.Task)}</div>
+          <div class="num">${fmt1(r.Hours)}</div><div style="color:var(--mut)">${h(r.Location||'—')}</div>
+          <div title="${h(r.Description)}" style="color:#486581">${h(r.Description||'')}</div>
+          <div style="white-space:nowrap">${ed?`<button class="btn2" style="padding:2px 8px;font-size:11px" onclick='APP.tsEdit(${JSON.stringify(r).replace(/'/g,"&#39;")})'>Edit</button> <button class="btn2" style="padding:2px 8px;font-size:11px;color:var(--bad)" onclick="APP.tsDel('${r['Row ID']}')">Del</button>`:''}</div>
+        </div>`;}).join('')
+        + `<div style="display:flex;gap:16px;padding:10px 16px;background:var(--bg);border-top:1px solid var(--line);font:600 11.5px Inter;color:#486581"><span>Σ ${rows.length} rows · <b style="color:var(--navy)">${fmt1(rows.reduce((s,r)=>s+(+r.Hours||0),0))} hours</b></span></div>`;
+    };
     $('view').innerHTML = `
-    <div class="grid" style="grid-template-columns:1fr 340px">
-      <div class="card" style="padding:0;overflow:hidden">
-        <div style="padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center"><span class="h">My entries</span><span class="sub" style="margin-left:8px">latest 200 · edit/delete within 7 days</span></div>
-        <div class="xt">
-          <div class="xh" style="grid-template-columns:${gtc};top:0"><div>Date</div><div>Client</div><div>Task</div><div style="text-align:right">Hrs</div><div>Location</div><div>Description</div><div></div></div>
-          ${rows.map(r=>{
-            const editable = !r.Auto && r.Date >= cutoff;
-            return `<div class="xr" style="grid-template-columns:${gtc};${r.Auto?'color:var(--fog)':''}">
-              <div style="color:var(--mut)">${fmtD(r.Date)}</div><div>${h(r.Client)}</div><div>${h(r.Task)}</div>
-              <div class="num">${fmt1(r.Hours)}</div><div style="color:var(--mut)">${h(r.Location||'—')}</div>
-              <div title="${h(r.Description)}" style="color:#486581">${h(r.Description||'')}</div>
-              <div style="white-space:nowrap">${editable?`<button class=\"btn2\" style=\"padding:2px 8px;font-size:11px\" onclick='APP.tsEdit(${JSON.stringify(r).replace(/'/g,"&#39;")})'>Edit</button> <button class=\"btn2\" style=\"padding:2px 8px;font-size:11px;color:var(--bad)\" onclick=\"APP.tsDel('${r['Row ID']}')\">Del</button>`:''}</div>
-            </div>`;}).join('') || '<div style="padding:24px" class="sub">No entries yet.</div>'}
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;flex-wrap:wrap">
+        <span class="h">Calendar</span><span class="sub">click any day to view, add or edit entries</span>
+        <div style="margin-left:auto;display:flex;gap:14px;font:500 11px Inter;color:var(--mut)">
+          <span><span style="display:inline-block;width:12px;height:12px;background:var(--ok);border-radius:3px;vertical-align:-2px"></span> ≥6h</span>
+          <span><span style="display:inline-block;width:12px;height:12px;background:#d69e06;border-radius:3px;vertical-align:-2px"></span> &lt;6h</span>
+          <span><span style="display:inline-block;width:12px;height:12px;background:#3B82F6;border-radius:3px;vertical-align:-2px"></span> Holiday/Sunday, no entry</span>
+          <span><span style="display:inline-block;width:12px;height:12px;outline:2px solid var(--gold);outline-offset:-2px;border-radius:3px;vertical-align:-2px"></span> today</span>
         </div>
       </div>
-      <div class="card" style="align-self:start"><div class="h" style="margin-bottom:10px">Add entry</div><div id="ts_qe"></div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:28px">${calHtml}</div>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden;margin-top:12px">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span class="h">My Timesheet</span><span class="sub">latest 400 · edit within 7 days</span>
+        <select style="width:190px;margin-left:12px" onchange="APP.fGo('tsm','fclient',this.value)"><option value="">Client: All</option>${clientsList.map(c=>`<option ${c===F.fclient?'selected':''}>${h(c)}</option>`).join('')}</select>
+        <select style="width:140px" onchange="APP.fGo('tsm','floc',this.value)"><option value="">Location: All</option>${['Office','Client Place','WFH','Travelling'].map(l=>`<option ${l===F.floc?'selected':''}>${l}</option>`).join('')}</select>
+        <input id="q_tsm" style="width:180px" placeholder="🔍 Search…" value="${h(F.q||'')}" oninput="APP.qGo('tsm', this.value)">
+        <button class="btn" style="margin-left:auto" onclick="APP.quickLog()">+ Add entry</button>
+      </div>
+      <div class="xt">${thdr('tsm', cols, gtc)}<div id="tb_tsm">${TBODY.tsm()}</div></div>
     </div>`;
-    renderQuickEntry('ts_qe');
   }
 
-  function tsEdit(r) {
-    renderQuickEntry('ts_qe', { rowId: r['Row ID'], edit: true, client: r.Client, task: r.Task, hours: r.Hours, location: r.Location });
-    setTimeout(()=>{ const d = $('qe_desc'); if (d) d.value = r.Description||''; const b = $('qe_add'); if (b) b.textContent = 'Update entry'; }, 60);
-    toast('Editing entry of ' + r.Date);
-  }
+  function tsEdit(r) { tsPopup(r.Date, { rowId: r['Row ID'], client: r.Client, task: r.Task, hours: r.Hours, location: r.Location, description: r.Description }); }
 
   async function tsDel(rowId) {
     if (!confirm('Delete this entry?')) return;
-    try { await EMS2.callAPI('deleteTimesheet', { rowId }); S.masters = null; toast('Deleted ✓'); rTimesheet(); }
+    try { await EMS2.callAPI('deleteTimesheet', { rowId }); S.masters = null; closeModal(); toast('Deleted ✓'); RENDER[S.view](); }
     catch (e) { toast(e.message, true); }
   }
 
@@ -680,16 +734,28 @@ const APP = (() => {
     const mine = all.filter(x=>String(x.Date||'').startsWith(S.exMonth));
     const sum = st => mine.filter(x=>!st||x.Status===st).reduce((s,x)=>s+(+x.Amount||0),0);
     const F = TSORT['exp'] = TSORT['exp']||{};
-    let rows = mine;
-    if (F.ftype) rows = rows.filter(x=>x['Expense Type']===F.ftype);
-    if (F.fstatus) rows = rows.filter(x=>x.Status===F.fstatus);
-    rows = applySort('exp', tq('exp', rows), 'Date', 'desc');
     const gtc = '86px 120px 84px 1.4fr 160px 100px 92px 118px';
     const cols = [{k:'Date',l:'Date'},{k:'Expense Type',l:'Type'},{k:'Amount',l:'₹',r:1},{k:'Description',l:'Description'},{k:'Client Name',l:'Client'},{k:'Reimbursement By',l:'Reimb.'},{k:'Status',l:'Status'},{l:''}];
     const types = [...new Set(all.map(x=>x['Expense Type']).filter(Boolean))].sort();
+    TBODY.exp = () => {
+      let rows = mine;
+      if (F.ftype) rows = rows.filter(x=>x['Expense Type']===F.ftype);
+      if (F.fstatus) rows = rows.filter(x=>x.Status===F.fstatus);
+      rows = applySort('exp', tq('exp', rows), 'Date', 'desc');
+      return rows.map(x=>{
+        const p = x.Status==='Pending';
+        return `<div class="xr" style="grid-template-columns:${gtc}">
+          <div style="color:var(--mut)">${fmtD(x.Date)}</div><div>${h(x['Expense Type'])}</div><div class="num">${fmt1(x.Amount)}</div>
+          <div style="color:#486581" title="${h(x.Description)}">${h(x.Description||'')}</div><div style="color:var(--mut)">${h(x['Client Name']||'—')}</div>
+          <div style="color:var(--mut)">${h(x['Reimbursement By']||'')}</div>
+          <div><span class="pill" style="background:${x.Status==='Approved'?'var(--okbg)':p?'var(--goldbg)':'var(--line2)'};color:${x.Status==='Approved'?'var(--ok)':p?'var(--goldd)':'var(--mut)'}">${h(x.Status)}</span></div>
+          <div style="white-space:nowrap">${p?`<button class="btn2" style="padding:2px 8px;font-size:11px" onclick='APP.exForm(${JSON.stringify(x).replace(/'/g,"&#39;")})'>Edit</button> <button class="btn2" style="padding:2px 8px;font-size:11px;color:var(--bad)" onclick="APP.exCancel('${x['Row ID']}')">Cancel</button>`:''}</div>
+        </div>`;}).join('')
+        + `<div style="display:flex;gap:16px;padding:10px 16px;background:var(--bg);border-top:1px solid var(--line);font:600 11.5px Inter;color:#486581"><span>Σ ${rows.length} rows · <b style="color:var(--navy)">₹${fmt1(rows.reduce((s,x)=>s+(+x.Amount||0),0))}</b></span></div>`;
+    };
     $('view').innerHTML = `
     <div class="grid" style="grid-template-columns:170px repeat(4,1fr)">
-      <div class="card"><div class="sub" style="margin-bottom:6px">Month</div><select onchange="APP.exMonthGo(this.value)">${months.map(m=>`<option value="${m}" ${m===S.exMonth?'selected':''}>${fmtM(m)}</option>`).join('')}</select></div>
+      <div class="card"><div class="sub" style="margin-bottom:6px">Month</div><select onchange="APP.exMonthGo(this.value)">${months.map(mm=>`<option value="${mm}" ${mm===S.exMonth?'selected':''}>${fmtM(mm)}</option>`).join('')}</select></div>
       <div class="card"><div style="font:800 22px Inter;color:var(--navy)">₹${fmt1(sum())}</div><div class="sub">Claimed</div></div>
       <div class="card"><div style="font:800 22px Inter;color:var(--ok)">₹${fmt1(sum('Approved'))}</div><div class="sub">Approved</div></div>
       <div class="card"><div style="font:800 22px Inter;color:var(--bad)">₹${fmt1(sum('Rejected'))}</div><div class="sub">Rejected</div></div>
@@ -703,19 +769,7 @@ const APP = (() => {
         <input id="q_exp" style="width:170px" placeholder="🔍 Search…" value="${h(F.q||'')}" oninput="APP.qGo('exp', this.value)">
         <button class="btn" style="margin-left:auto" onclick="APP.exForm()">+ Submit expense</button>
       </div>
-      <div class="xt">
-        ${thdr('exp', cols, gtc)}
-        ${rows.map(x=>{
-          const p = x.Status==='Pending';
-          return `<div class="xr" style="grid-template-columns:${gtc}">
-          <div style="color:var(--mut)">${fmtD(x.Date)}</div><div>${h(x['Expense Type'])}</div><div class="num">${fmt1(x.Amount)}</div>
-          <div style="color:#486581" title="${h(x.Description)}">${h(x.Description||'')}</div><div style="color:var(--mut)">${h(x['Client Name']||'—')}</div>
-          <div style="color:var(--mut)">${h(x['Reimbursement By']||'')}</div>
-          <div><span class="pill" style="background:${x.Status==='Approved'?'var(--okbg)':p?'var(--goldbg)':'var(--line2)'};color:${x.Status==='Approved'?'var(--ok)':p?'var(--goldd)':'var(--mut)'}">${h(x.Status)}</span></div>
-          <div style="white-space:nowrap">${p?`<button class=\"btn2\" style=\"padding:2px 8px;font-size:11px\" onclick='APP.exForm(${JSON.stringify(x).replace(/'/g,"&#39;")})'>Edit</button> <button class=\"btn2\" style=\"padding:2px 8px;font-size:11px;color:var(--bad)\" onclick=\"APP.exCancel('${x['Row ID']}')\">Cancel</button>`:''}</div>
-        </div>`;}).join('') || '<div style="padding:24px" class="sub">No expenses this month.</div>'}
-        <div style="display:flex;gap:16px;padding:10px 16px;background:var(--bg);border-top:1px solid var(--line);font:600 11.5px Inter;color:#486581"><span>Σ ${rows.length} rows · <b style="color:var(--navy)">₹${fmt1(rows.reduce((s,x)=>s+(+x.Amount||0),0))}</b></span></div>
-      </div>
+      <div class="xt">${thdr('exp', cols, gtc)}<div id="tb_exp">${TBODY.exp()}</div></div>
     </div>`;
   }
   async function exCancel(rowId) {
@@ -765,7 +819,7 @@ const APP = (() => {
   async function signout() { await EMS2.signOut(); location.replace('home.html'); }
 
   boot();
-  return { show, signout, quickLog, logPlan, actGo, openAppr, selAppr, bulkApprove, rfshAppr, tsortGo: tsort, qGo, fGo, exForm, exMonthGo, rtSort, rtCSV, tsEdit, tsDel, wpForm, wpEnd, wpDel, lvCancel, exCancel, S, RENDER, masters, renderQuickEntry, h, fmt1, toast, $ };
+  return { show, signout, quickLog, logPlan, tsPopup, actGo, openAppr, selAppr, bulkApprove, rfshAppr, tsortGo: tsort, qGo, fGo, exForm, exMonthGo, rtSort, rtCSV, tsEdit, tsDel, wpForm, wpEnd, wpDel, lvCancel, exCancel, S, RENDER, masters, h, fmt1, toast, $ };
 })();
 </script>
 </body>
