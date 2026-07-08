@@ -117,7 +117,7 @@ const APP = (() => {
       S.myday = d; S.me = d.employee; S.isApprover = !!d.isApprover;
       S.isAdmin = (d.employee && d.employee['Role']) === 'admin';
       $('uName').textContent = S.me['Employee Name'] || email;
-      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b7';
+      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b8';
       $('uAv').textContent = (S.me['Employee Name']||email).split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
       buildNav();
       show(S.isApprover ? 'dashboard' : 'myday');
@@ -1141,6 +1141,7 @@ const APP = (() => {
       } else {
         const d = await EMS2.callAPI('viz_client', { client: opts.client || '' });
         mount.innerHTML = vizClientHtml(d, opts);
+        const sc2 = $('stk_scroll'); if (sc2) sc2.scrollLeft = sc2.scrollWidth;
       }
     } catch (e) { mount.innerHTML = '<div class="sub" style="padding:12px">' + h(e.message) + '</div>'; }
   }
@@ -1190,18 +1191,27 @@ const APP = (() => {
       arr = arr.slice(0,11);
       arr.push({ name: 'Others (' + rest.length + ')', hours: Math.round(rest.reduce((s,x)=>s+(+x.hours||0),0)*10)/10, _others: true });
     }
-    const RAMP = ['#0b1f33','#102a43','#1c3a5c','#2a4d69','#3d5a80','#486581','#627d98','#829ab1','#9fb3c8','#bcccdc','#d9e2ec'];
+    const RAMP = ['#1e3a8a','#2563eb','#0284c7','#0d9488','#059669','#16a34a','#4d7c0f','#a16207','#d97706','#ea580c','#fb923c'];
     const tot = arr.reduce((s,x)=>s+(+x.hours||0),0) || 1;
     const n = arr.length;
-    return `<div style="display:flex;flex-wrap:wrap;gap:3px;align-content:flex-start">${arr.map((x,i)=>{
-      const idx = Math.round((n<2?0:i/(n-1)) * (RAMP.length-1));
-      const bg = RAMP[idx]; const light = idx >= 7;
-      const share = (+x.hours||0) / tot;
-      const js = (clickJs && !x._others) ? clickJs.split('__NAME__').join(String(x.name).split("'").join("\\'")) : '';
-      return `<div ${js?`onclick=\"${js}\"`:''} title="${h(x.name)}: ${fmt1(x.hours)}h (${fmt1(100*share)}%)" style="flex:${Math.max(1, Math.round(share*100))} 1 ${Math.max(62, Math.round(share*380))}px;background:${bg};color:${light?'var(--navy)':'#fff'};border-radius:6px;padding:6px 8px;min-width:0;${js?'cursor:pointer;':''}">
-        <div style="font:600 10.5px Inter;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h(x.name)}</div>
-        <div style="font:500 9.5px Inter;opacity:.8">${fmt1(x.hours)}h · ${fmt1(100*share)}%</div></div>`;
-    }).join('')}</div>`;
+    // chunk into rows so tiles proportionally fill the WHOLE area
+    const target = tot / Math.max(2, Math.round(Math.sqrt(n)));
+    const rows = []; let cur = [], curSum = 0;
+    arr.forEach(x => {
+      cur.push(x); curSum += (+x.hours||0);
+      if (curSum >= target * 0.9 && rows.length < 3) { rows.push({ items: cur, sum: curSum }); cur = []; curSum = 0; }
+    });
+    if (cur.length) rows.push({ items: cur, sum: curSum });
+    let rank = 0;
+    return `<div style="height:100%;display:flex;flex-direction:column;gap:3px">${rows.map(r=>`
+      <div style="flex:${Math.max(1, Math.round(1000*r.sum/tot))} 1 0;display:flex;gap:3px;min-height:0">${r.items.map(x=>{
+        const idx = Math.round((n<2?0:(rank)/(n-1)) * (RAMP.length-1)); rank++;
+        const share = (+x.hours||0) / tot;
+        const js = (clickJs && !x._others) ? clickJs.split('__NAME__').join(String(x.name).split("'").join("\\'")) : '';
+        return `<div ${js?`onclick=\"${js}\"`:''} title="${h(x.name)}: ${fmt1(x.hours)}h (${fmt1(100*share)}%)" style="flex:${Math.max(1, Math.round(1000*(+x.hours||0)/r.sum))} 1 0;background:${RAMP[idx]};color:#fff;border-radius:6px;padding:6px 8px;min-width:0;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-start;${js?'cursor:pointer;':''}">
+          <div style="font:600 10.5px Inter;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h(x.name)}</div>
+          <div style="font:500 9.5px Inter;opacity:.85">${fmt1(x.hours)}h · ${fmt1(100*share)}%</div></div>`;
+      }).join('')}</div>`).join('')}</div>`;
   }
 
   function vTaskBars(tasks) {
@@ -1274,20 +1284,34 @@ const APP = (() => {
   }
 
   function vizClientHtml(d, opts) {
+    const k = d.kpis || {};
+    const fmt0 = n => Math.round(+n||0).toLocaleString('en-IN');
     const sel = `<select style="width:240px" onchange="APP.vizGo('c',{client:this.value})"><option value="">All clients (firm)</option>${(d.clients||[]).map(c=>`<option ${opts.client===c?'selected':''}>${h(c)}</option>`).join('')}</select>`;
-    const tc = d.taskCost||[];
-    const tcTot = tc.reduce((s,x)=>s+(+x.cost||0),0);
+    const topEmp = (d.employees||[]).slice(0,3).map(x=>`<div style="font:600 11px Inter;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${h(x.name)}">${h(x.name)} <span style="font:500 10px Inter;color:var(--fog)">${fmt1(x.hours)}h</span></div>`).join('') || '<span class="sub">—</span>';
+    const topSvc = (d.taskCost||[]).slice(0,3).map(x=>`<div style="font:600 11px Inter;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${h(x.task)}">${h(x.task)} <span style="font:500 10px Inter;color:var(--fog)">₹${fmt0((+x.bcost||0)+(+x.ncost||0))}</span></div>`).join('') || '<span class="sub">—</span>';
+    const tile = (v, lbl, col) => `<div style="border:1px solid var(--line2);border-radius:10px;padding:12px 14px"><div style="font:800 19px Inter;color:${col||'var(--navy)'};white-space:nowrap">${v}</div><div class="sub">${lbl}</div></div>`;
+    const card = (t, b) => `<div style="border:1px solid var(--line2);border-radius:10px;padding:12px;height:296px;display:flex;flex-direction:column;min-width:0"><div class="sub" style="font-weight:700;color:var(--navy);margin-bottom:8px">${t}</div><div style="flex:1;min-height:0;overflow:auto">${b}</div></div>`;
+    const tc = d.taskCost || [];
+    const tcRow = (a,b2,c2,dd,bold) => `<div style="display:grid;grid-template-columns:1.4fr 70px 110px 110px;gap:8px;font:${bold?'700':'500'} 11.5px Inter;color:var(--ink);border-bottom:1px solid var(--line2);padding:5px 0"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${h(a)}">${h(a)}</span><span style="text-align:right">${b2}</span><span style="text-align:right">${c2}</span><span style="text-align:right">${dd}</span></div>`;
+    const tcTable = tcRow('Task Type','Hours','Billable ₹','Non-billable ₹',1)
+      + tc.map(x=>tcRow(x.task, fmt0(x.hours), fmt0(x.bcost), fmt0(x.ncost))).join('')
+      + tcRow('Σ Total', fmt0(tc.reduce((s,x)=>s+(+x.hours||0),0)), fmt0(tc.reduce((s,x)=>s+(+x.bcost||0),0)), fmt0(tc.reduce((s,x)=>s+(+x.ncost||0),0)), 1);
     return `
-    <div style="display:flex;gap:10px;align-items:center;margin:12px 0">${sel}<span class="sub">pick a client to focus every chart</span></div>
-    <div class="sub" style="font-weight:700;color:var(--navy);margin-bottom:6px">Engagement — hours by month (green = billable share)</div>
-    ${vMonthBars(d.monthly||[], {split:'billable'})}
-    <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:14px">
-      <div><div class="sub" style="font-weight:700;color:var(--navy);margin-bottom:6px">Work by task type</div>${vTreemap(d.tasks||[])}</div>
-      <div><div class="sub" style="font-weight:700;color:var(--navy);margin-bottom:6px">Hours by employee</div>${vTreemap(d.employees||[])}</div>
+    <div style="display:flex;gap:10px;align-items:center;margin:12px 0;flex-wrap:wrap">${sel}<span class="sub">pick a client — every number below follows it</span></div>
+    <div class="grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:12px">
+      ${tile(fmt1(k.billableHours)+'h', 'Total billable hours', 'var(--ok)')}
+      ${tile('₹'+fmt0(k.billableCost), 'Total billable cost')}
+      ${tile('₹'+fmt0(k.expensesClaimed), 'Expenses claimed by staff', 'var(--goldd)')}
+      <div style="border:1px solid var(--line2);border-radius:10px;padding:10px 14px"><div class="sub" style="margin-bottom:4px">Top 3 employees</div>${topEmp}</div>
+      <div style="border:1px solid var(--line2);border-radius:10px;padding:10px 14px"><div class="sub" style="margin-bottom:4px">Top 3 services (by cost)</div>${topSvc}</div>
     </div>
-    <div class="sub" style="font-weight:700;color:var(--navy);margin:14px 0 6px">Task cost (hours × hourly cost · legacy cost verbatim)</div>
-    <div style="max-width:560px">${tc.map(x=>`<div style="display:flex;gap:10px;font:500 12px Inter;border-bottom:1px solid var(--line2);padding:4px 0"><span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h(x.task)}</span><span class="sub" style="width:70px;text-align:right">${fmt1(x.hours)}h</span><b style="width:110px;text-align:right">₹${fmt1(x.cost)}</b></div>`).join('') || '<div class="sub">No data.</div>'}
-    <div style="display:flex;gap:10px;font:600 12px Inter;padding:6px 0"><span style="flex:1">Σ Total</span><b style="width:110px;text-align:right;color:var(--navy)">₹${fmt1(tcTot)}</b></div></div>`;
+    <div class="grid" style="grid-template-columns:1fr 1fr">
+      ${card('% work by task', vTreemap(d.tasks||[], null))}
+      ${card('Hours by employee', vTreemap(d.employees||[], null))}
+      ${card('Months — billable hours &amp; % billable', vStack6(d.monthly||[]))}
+      ${card('Task cost working', tcTable)}
+      <div style="grid-column:1/-1">${card('Location', vTreemap(d.locations||[], null))}</div>
+    </div>`;
   }
 
   const RENDER = { myday:rMyday, dashboard:rDashboard, approvals:rApprovals, review:rReview, timesheet:rTimesheet, workplan:rWorkplan, leave:rLeave, expenses:rExpenses };
