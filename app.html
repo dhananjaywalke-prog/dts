@@ -117,7 +117,7 @@ const APP = (() => {
       S.myday = d; S.me = d.employee; S.isApprover = !!d.isApprover;
       S.isAdmin = (d.employee && d.employee['Role']) === 'admin';
       $('uName').textContent = S.me['Employee Name'] || email;
-      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b5';
+      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b6';
       $('uAv').textContent = (S.me['Employee Name']||email).split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
       buildNav();
       show(S.isApprover ? 'dashboard' : 'myday');
@@ -219,7 +219,7 @@ const APP = (() => {
           </div>`;
         }).join('')}
       </div>
-    </div>`;
+    </div>` + vizShell('u', 'My analytics');
     buildNav();
   }
 
@@ -393,7 +393,7 @@ const APP = (() => {
         <div style="display:flex;flex-direction:column;gap:8px;overflow:auto;max-height:340px">${inbox.slice(0,6).map(x=>apprRow(x[0],x[1])).join('') || '<div class="sub">Nothing pending 🎉</div>'}</div>
         ${inbox.length>6?`<button class="btn2" style="margin-top:10px" onclick="APP.show('approvals')">Open all approvals →</button>`:''}
       </div>
-    </div>`;
+    </div>` + vizShell('c', 'Client analytics');
   }
 
   async function rApprovals() {
@@ -717,7 +717,7 @@ const APP = (() => {
         <span class="h">My plan — next 30 days</span><span class="sub">click a day to plan it</span>${tabBtns}
         <button class="btn" style="margin-left:auto" onclick="APP.wpNew('')">+ Plan work</button>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px">${calCells}</div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(w=>`<div style="text-align:center;font:600 10px Inter;color:var(--fog);padding:2px 0">${w}</div>`).join('')}${'<div></div>'.repeat(Math.max(0,['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].indexOf(dates[0].dayName)))}${calCells}</div>
     </div>
     <div class="card" style="padding:0;overflow:hidden;margin-top:12px">
       <div style="padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -1121,12 +1121,131 @@ const APP = (() => {
 
   function exMonthGo(v) { S.exMonth = v; rExpenses(); }
 
+  // ---------------- ANALYTICS (Drop 5) ----------------
+  const VIZPAL = ['#243b53','#334e68','#486581','#627d98','#829ab1','#9fb3c8','#2a4d69','#3d5a80'];
+
+  function vizShell(kind, title) {
+    return `<div class="card" style="margin-top:12px"><div style="display:flex;align-items:center;gap:10px"><span class="h">${title}</span><span class="sub">full history · 2022 → today</span><button class="btn2" style="margin-left:auto" id="viz_btn_${kind}" onclick="APP.vizGo('${kind}')">📈 Show</button></div><div id="viz_${kind}"></div></div>`;
+  }
+
+  async function vizGo(kind, opts) {
+    opts = opts || {};
+    const mount = $('viz_' + kind); if (!mount) return;
+    const btn = $('viz_btn_' + kind); if (btn) btn.style.display = 'none';
+    mount.innerHTML = '<div class="skel" style="height:140px;margin-top:12px"></div>';
+    try {
+      if (kind === 'u') {
+        const d = await EMS2.callAPI('viz_user', { employee: opts.employee || '', client: opts.client || '' });
+        mount.innerHTML = vizUserHtml(d, opts);
+      } else {
+        const d = await EMS2.callAPI('viz_client', { client: opts.client || '' });
+        mount.innerHTML = vizClientHtml(d, opts);
+      }
+    } catch (e) { mount.innerHTML = '<div class="sub" style="padding:12px">' + h(e.message) + '</div>'; }
+  }
+
+  function vMonthBars(monthly, opts) {
+    opts = opts || {};
+    if (!monthly.length) return '<div class="sub" style="padding:10px">No data.</div>';
+    const key = opts.key || 'hours';
+    const maxV = Math.max(1, ...monthly.map(m=>+m[key]||0));
+    const avg = monthly.reduce((s,m)=>s+(+m[key]||0),0) / monthly.length;
+    const bars = monthly.map((m,i)=>{
+      const v = +m[key]||0;
+      const bh = Math.round(78 * v / maxV);
+      const lbl = i % 3 === 0 ? fmtM(m.ym) : '';
+      const split = opts.split ? Math.round(bh * Math.min(1, (+m[opts.split]||0) / (v||1))) : 0;
+      const barInner = opts.split
+        ? `<div style="width:14px;height:${bh}px;display:flex;flex-direction:column;justify-content:flex-end"><div style="height:${bh-split}px;background:#b3261e;border-radius:3px 3px 0 0"></div><div style="height:${split}px;background:var(--ok);border-radius:${bh-split>0?'0':'3px 3px 0 0'}"></div></div>`
+        : `<div style="width:14px;height:${bh}px;background:${opts.color||'var(--navy)'};border-radius:3px 3px 0 0"></div>`;
+      return `<div title="${fmtM(m.ym)}: ${fmt1(v)}${opts.unit||'h'}${opts.split?' · billable '+fmt1(m[opts.split])+'h':''}" style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:none">
+        <div style="height:80px;display:flex;align-items:flex-end">${barInner}</div>
+        <div style="font:500 8.5px Inter;color:var(--fog);white-space:nowrap;transform:rotate(-40deg);transform-origin:top left;height:24px;width:14px">${lbl}</div></div>`;
+    }).join('');
+    const avgPct = Math.round(78 * avg / maxV);
+    return `<div style="position:relative;overflow-x:auto;padding-bottom:2px"><div style="position:absolute;left:0;right:0;bottom:${26+avgPct}px;border-top:2px dashed var(--gold);z-index:1" title="average ${fmt1(avg)}"></div><div style="display:flex;gap:4px;align-items:flex-end;min-width:min-content;position:relative">${bars}</div></div><div class="sub" style="margin-top:2px">– – gold line = monthly average (${fmt1(avg)}${opts.unit||'h'})</div>`;
+  }
+
+  function vPctBars(monthly, num, den, ref) {
+    if (!monthly.length) return '<div class="sub" style="padding:10px">No data.</div>';
+    const bars = monthly.map((m,i)=>{
+      const pct = (+m[den]||0) > 0 ? 100 * (+m[num]||0) / (+m[den]) : 0;
+      const bh = Math.round(60 * Math.min(100, pct) / 100);
+      const col = pct >= ref ? 'var(--ok)' : pct >= ref*0.6 ? '#d69e06' : '#b3261e';
+      const lbl = i % 3 === 0 ? fmtM(m.ym) : '';
+      return `<div title="${fmtM(m.ym)}: ${fmt1(pct)}%" style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:none">
+        <div style="height:62px;display:flex;align-items:flex-end"><div style="width:14px;height:${bh}px;background:${col};border-radius:3px 3px 0 0"></div></div>
+        <div style="font:500 8.5px Inter;color:var(--fog);white-space:nowrap;transform:rotate(-40deg);transform-origin:top left;height:24px;width:14px">${lbl}</div></div>`;
+    }).join('');
+    const refY = 26 + Math.round(60 * ref / 100);
+    return `<div style="position:relative;overflow-x:auto"><div style="position:absolute;left:0;right:0;bottom:${refY}px;border-top:2px dashed var(--gold);z-index:1"></div><div style="display:flex;gap:4px;align-items:flex-end;min-width:min-content">${bars}</div></div><div class="sub" style="margin-top:2px">– – reference ${ref}%</div>`;
+  }
+
+  function vTreemap(items, clickJs) {
+    if (!items.length) return '<div class="sub" style="padding:10px">No data.</div>';
+    const tot = items.reduce((s,x)=>s+(+x.hours||0),0) || 1;
+    return `<div style="display:flex;flex-wrap:wrap;gap:3px">${items.map((x,i)=>{
+      const share = (+x.hours||0) / tot;
+      const js = clickJs ? clickJs.split('__NAME__').join(String(x.name).split("'").join("\\'")) : '';
+      return `<div ${js?`onclick=\"${js}\"`:''} title="${h(x.name)}: ${fmt1(x.hours)}h (${fmt1(100*share)}%)" style="flex:${Math.max(1, Math.round(share*100))} 1 ${Math.max(64, Math.round(share*420))}px;background:${VIZPAL[i%VIZPAL.length]};color:#fff;border-radius:6px;padding:6px 8px;min-width:0;${js?'cursor:pointer;':''}">
+        <div style="font:600 10.5px Inter;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h(x.name)}</div>
+        <div style="font:500 9.5px Inter;opacity:.75">${fmt1(x.hours)}h</div></div>`;
+    }).join('')}</div>`;
+  }
+
+  function vTaskBars(tasks) {
+    if (!tasks.length) return '<div class="sub" style="padding:10px">No data.</div>';
+    const maxV = Math.max(1, ...tasks.map(t=>+t.hours||0));
+    return tasks.map(t=>{
+      const w = Math.round(100 * (+t.hours||0) / maxV);
+      const bw = Math.round(w * Math.min(1, (+t.billable||0) / ((+t.hours)||1)));
+      return `<div style="margin-bottom:6px" title="${h(t.name)}: ${fmt1(t.hours)}h · billable ${fmt1(t.billable||0)}h">
+        <div style="display:flex;justify-content:space-between;font:500 11px Inter;color:var(--ink)"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70%">${h(t.name)}</span><span class="sub">${fmt1(t.hours)}h</span></div>
+        <div style="height:8px;background:var(--line2);border-radius:99px;margin-top:2px;overflow:hidden;display:flex"><div style="width:${bw}%;background:var(--ok)"></div><div style="width:${w-bw}%;background:#b3261e"></div></div></div>`;
+    }).join('') + '<div class="sub">green = billable · red = non-billable</div>';
+  }
+
+  function vizUserHtml(d, opts) {
+    const empSel = (d.employees||[]).length ? `<select style="width:190px" onchange="APP.vizGo('u',{employee:this.value})"><option value="">Me (${h(d.employeeName)})</option>${d.employees.map(e=>`<option value="${h(e.email)}" ${opts.employee===e.email?'selected':''}>${h(e.name)}</option>`).join('')}</select>` : `<span class="sub">${h(d.employeeName)}</span>`;
+    const clientChip = opts.client ? `<span class="pill" style="background:var(--goldbg);color:var(--goldd);cursor:pointer" onclick="APP.vizGo('u',{employee:'${h(opts.employee||'')}'})">Client: ${h(opts.client)} ✕</span>` : '<span class="sub">click a client tile to focus</span>';
+    const flags = (d.flags||[]).filter(f=>f.flag!=='Ok');
+    return `
+    <div style="display:flex;gap:10px;align-items:center;margin:12px 0">${empSel}${clientChip}</div>
+    <div class="sub" style="font-weight:700;color:var(--navy);margin-bottom:6px">Monthly time reported</div>
+    ${vMonthBars(d.monthly||[], {})}
+    <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:14px">
+      <div><div class="sub" style="font-weight:700;color:var(--navy);margin-bottom:6px">Clients worked for</div>${vTreemap(d.clients||[], `APP.vizGo('u',{employee:'${h(opts.employee||'')}',client:'__NAME__'})`)}</div>
+      <div><div class="sub" style="font-weight:700;color:var(--navy);margin-bottom:6px">Work performed</div>${vTaskBars(d.tasks||[])}</div>
+      <div><div class="sub" style="font-weight:700;color:var(--navy);margin-bottom:6px">Billable % by month (vs 80%)</div>${vPctBars(d.monthly||[], 'billable', 'hours', 80)}</div>
+      <div><div class="sub" style="font-weight:700;color:var(--navy);margin-bottom:6px">Idle hours by month</div>${vMonthBars(d.monthly||[], {key:'idle', color:'#d69e06'})}
+        ${flags.length?`<div class="sub" style="font-weight:700;color:var(--navy);margin:10px 0 4px">Timesheet flags</div>${flags.map(f=>`<div style=\"display:flex;justify-content:space-between;font:500 11.5px Inter;border-bottom:1px solid var(--line2);padding:3px 0\"><span>${h(f.flag)}</span><b>${fmt1(f.hours)}h</b></div>`).join('')}`:''}
+      </div>
+    </div>`;
+  }
+
+  function vizClientHtml(d, opts) {
+    const sel = `<select style="width:240px" onchange="APP.vizGo('c',{client:this.value})"><option value="">All clients (firm)</option>${(d.clients||[]).map(c=>`<option ${opts.client===c?'selected':''}>${h(c)}</option>`).join('')}</select>`;
+    const tc = d.taskCost||[];
+    const tcTot = tc.reduce((s,x)=>s+(+x.cost||0),0);
+    return `
+    <div style="display:flex;gap:10px;align-items:center;margin:12px 0">${sel}<span class="sub">pick a client to focus every chart</span></div>
+    <div class="sub" style="font-weight:700;color:var(--navy);margin-bottom:6px">Engagement — hours by month (green = billable share)</div>
+    ${vMonthBars(d.monthly||[], {split:'billable'})}
+    <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:14px">
+      <div><div class="sub" style="font-weight:700;color:var(--navy);margin-bottom:6px">Work by task type</div>${vTreemap(d.tasks||[])}</div>
+      <div><div class="sub" style="font-weight:700;color:var(--navy);margin-bottom:6px">Hours by employee</div>${vTreemap(d.employees||[])}</div>
+    </div>
+    <div class="sub" style="font-weight:700;color:var(--navy);margin:14px 0 6px">Task cost (hours × hourly cost · legacy cost verbatim)</div>
+    <div style="max-width:560px">${tc.map(x=>`<div style="display:flex;gap:10px;font:500 12px Inter;border-bottom:1px solid var(--line2);padding:4px 0"><span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h(x.task)}</span><span class="sub" style="width:70px;text-align:right">${fmt1(x.hours)}h</span><b style="width:110px;text-align:right">₹${fmt1(x.cost)}</b></div>`).join('') || '<div class="sub">No data.</div>'}
+    <div style="display:flex;gap:10px;font:600 12px Inter;padding:6px 0"><span style="flex:1">Σ Total</span><b style="width:110px;text-align:right;color:var(--navy)">₹${fmt1(tcTot)}</b></div></div>`;
+  }
+
   const RENDER = { myday:rMyday, dashboard:rDashboard, approvals:rApprovals, review:rReview, timesheet:rTimesheet, workplan:rWorkplan, leave:rLeave, expenses:rExpenses };
 
   async function signout() { await EMS2.signOut(); location.replace('home.html'); }
 
   boot();
-  return { show, signout, quickLog, logPlan, tsPopup, actGo, openAppr, selAppr, bulkApprove, rfshAppr, tsortGo: tsort, qGo, fGo, exForm, exMonthGo, rtSort, rtCSV, tsEdit, tsDel, wpForm, wpEnd, wpDel, wpNew, wpTabGo, tpForm, lvEdit, lvCancel, coCancel, exCancel, S, RENDER, masters, h, fmt1, toast, $ };
+  return { show, signout, quickLog, logPlan, tsPopup, actGo, openAppr, selAppr, bulkApprove, rfshAppr, tsortGo: tsort, qGo, fGo, exForm, exMonthGo, rtSort, rtCSV, tsEdit, tsDel, wpForm, wpEnd, wpDel, wpNew, wpTabGo, tpForm, vizGo, lvEdit, lvCancel, coCancel, exCancel, S, RENDER, masters, h, fmt1, toast, $ };
 })();
 </script>
 </body>
