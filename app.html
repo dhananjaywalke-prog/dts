@@ -111,13 +111,13 @@ const APP = (() => {
   // ---------------- boot ----------------
   async function boot() {
     const email = await EMS2.getAuthedEmail();
-    if (!email) { location.replace('home.html'); return; }
+    if (!email) { location.replace('home.html?next=app'); return; }
     try {
       const d = await EMS2.callAPI('myday', {});   // rpc api_myday
       S.myday = d; S.me = d.employee; S.isApprover = !!d.isApprover;
       S.isAdmin = (d.employee && d.employee['Role']) === 'admin';
       $('uName').textContent = S.me['Employee Name'] || email;
-      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b10';
+      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b12';
       $('uAv').textContent = (S.me['Employee Name']||email).split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
       buildNav();
       show(S.isApprover ? 'dashboard' : 'myday');
@@ -322,7 +322,7 @@ const APP = (() => {
       ? F('Employee',h(it['Employee Name']))+F('Type',h(it['Leave Type']))+F('Day type',h(it['Day Type']))+F('From',fmtD(it['From Date']))+F('To',fmtD(it['To Date']))+F('Working days',fmt1(it['Total Days']))+F('Paid / LOP',fmt1(it['Paid Days']||0)+' / '+fmt1(it['LOP Days']||0))+F('Reason',h(it.Reason))+F('Applied on',h(it['Applied On']))
       : kind==='compoff'
       ? F('Employee',h(it['Employee Name']))+F('Worked on',fmtD(it.Date))+F('Day type',h(it['Day Type']))+F('Credit',fmt1(it.Credit)+' day(s)')+F('Client',h(it.Client))+F('Task',h(it.Task))+F('Hours logged that day',fmt1(it['Hours Logged'])+'h')+F('Reason',h(it.Reason))+F('Applied on',h(it['Applied On']))
-      : F('Employee',h(it['Employee Name']))+F('Date',fmtD(it.Date))+F('Type',h(it['Expense Type']))+F('Amount','₹'+fmt1(it.Amount))+F('Client',h(it['Client Name']))+F('Reimbursement by',h(it['Reimbursement By']))+F('Receipt ref',h(it['Receipt Reference']))+F('Description',h(it.Description))+F('Submitted on',h(it['Submitted On']));
+      : F('Employee',h(it['Employee Name']))+F('Date',fmtD(it.Date))+F('Type',h(it['Expense Type']))+F('Amount','₹'+fmt1(it.Amount))+F('Client',h(it['Client Name']))+F('Reimbursement by',h(it['Reimbursement By']))+F('Receipt ref',h(it['Receipt Reference']))+F('Bill copy', it['Receipt File']?`<a href="#" onclick="APP.viewBill('${h(it['Receipt File'])}');return false" style="font-weight:600">📎 View bill</a>`:'Not attached')+F('Description',h(it.Description))+F('Submitted on',h(it['Submitted On']));
     modal((kind==='leave'?'Leave':kind==='compoff'?'Comp-off claim':'Expense')+' — review', body +
       `<div style="margin-top:12px"><label class="sub">Comments — required to reject (${SANE_HINT})</label><textarea id="ap_cmt" rows="2"></textarea></div>
       <div style="margin-top:12px;display:flex;gap:10px">
@@ -1056,7 +1056,7 @@ const APP = (() => {
           <div style="color:#486581" title="${h(x.Description)}">${h(x.Description||'')}</div><div style="color:var(--mut)">${h(x['Client Name']||'—')}</div>
           <div style="color:var(--mut)">${h(x['Reimbursement By']||'')}</div>
           <div><span class="pill" style="background:${x.Status==='Approved'?'var(--okbg)':p?'var(--goldbg)':'var(--line2)'};color:${x.Status==='Approved'?'var(--ok)':p?'var(--goldd)':'var(--mut)'}">${h(x.Status)}</span></div>
-          <div style="white-space:nowrap">${p?`<button class="btn2" style="padding:2px 8px;font-size:11px" onclick='APP.exForm(${JSON.stringify(x).replace(/'/g,"&#39;")})'>Edit</button> <button class="btn2" style="padding:2px 8px;font-size:11px;color:var(--bad)" onclick="APP.exCancel('${x['Row ID']}')">Cancel</button>`:''}</div>
+          <div style="white-space:nowrap">${p?`<button class="btn2" style="padding:2px 8px;font-size:11px" onclick='APP.exForm(${JSON.stringify(x).replace(/'/g,"&#39;")})'>Edit</button> <button class="btn2" style="padding:2px 8px;font-size:11px;color:var(--bad)" onclick="APP.exCancel('${x['Row ID']}')">Cancel</button>`:''}${x['Receipt File']?` <button class="btn2" style="padding:2px 8px;font-size:11px" title="View bill" onclick="APP.viewBill('${x['Receipt File']}')">📎</button>`:''}</div>
         </div>`;}).join('')
         + `<div style="display:flex;gap:16px;padding:10px 16px;background:var(--bg);border-top:1px solid var(--line);font:600 11.5px Inter;color:#486581"><span>Σ ${rows.length} rows · <b style="color:var(--navy)">₹${fmt1(rows.reduce((s,x)=>s+(+x.Amount||0),0))}</b></span></div>`;
     };
@@ -1087,42 +1087,77 @@ const APP = (() => {
 
   function exForm(x) {
     const d = S.cache.exp || {}; const isEdit = !!x;
-    const types = (d.expenseTypes||[]).map(t=>t['Expense Type']).filter(Boolean);
+    const types = (d.expenseTypes||[]);
     const clients = (d.clients||[]).map(c=>c['Client Full Name']).filter(Boolean);
     modal(isEdit?'Edit expense':'Submit expense', `
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div><label class="sub">Date (within 7 days)</label><input type="date" id="ex_date" value="${x?x.Date:''}"></div>
-        <div><label class="sub">Type</label><select id="ex_type"><option value="">Type…</option>${types.map(t=>`<option ${x&&x['Expense Type']===t?'selected':''}>${h(t)}</option>`).join('')}</select><div id="ex_hint" class="sub" style="margin-top:4px"></div></div>
+        <div><label class="sub">Type</label><select id="ex_type" onchange="APP.exHint()"><option value="">Type…</option>${types.map(t=>`<option ${x&&x['Expense Type']===t['Expense Type']?'selected':''}>${h(t['Expense Type'])}</option>`).join('')}</select></div>
+        <div style="grid-column:1/-1" id="ex_hint" class="sub"></div>
         <div><label class="sub">Amount ₹</label><input type="number" id="ex_amt" min="1" step="0.01" value="${x?x.Amount:''}"></div>
         <div><label class="sub">Reimbursement by</label><select id="ex_by" onchange="document.getElementById('ex_cli_row').style.display=this.value==='Client'?'':'none'"><option value="">Select…</option>${['Client','DRP & Co. LLP'].map(v=>`<option ${x&&x['Reimbursement By']===v?'selected':''}>${v}</option>`).join('')}</select></div>
         <div id="ex_cli_row" style="grid-column:1/-1;display:${x&&x['Reimbursement By']==='Client'?'':'none'}"><label class="sub">Client</label><select id="ex_client"><option value="">Client…</option>${clients.map(c=>`<option ${x&&x['Client Name']===c?'selected':''}>${h(c)}</option>`).join('')}</select></div>
         <div style="grid-column:1/-1"><label class="sub">Receipt reference</label><input id="ex_ref" value="${x?h(x['Receipt Reference']||''):''}"></div>
+        <div style="grid-column:1/-1"><label class="sub">Bill copy (optional · photo or PDF · max 5 MB)</label><input type="file" id="ex_file" accept="image/jpeg,image/png,image/webp,application/pdf">
+          ${isEdit&&x['Receipt File']?`<div class="sub" style="margin-top:4px">📎 Bill attached — <a href="#" onclick="APP.viewBill('${h(x['Receipt File'])}');return false">view</a> · choosing a new file replaces it</div>`:''}</div>
         <div style="grid-column:1/-1"><label class="sub">Description — ${SANE_HINT}</label><textarea id="ex_desc" rows="2">${x?h(x.Description||''):''}</textarea></div>
       </div>
       <div style="margin-top:14px"><button class="btn" id="ex_save">${isEdit?'Update':'Submit'}</button></div>`);
-    const _heads = d.expenseTypes || [];
-    const _hint = () => { const hd = _heads.find(t=>t['Expense Type']===$('ex_type').value); const el = $('ex_hint'); if (!el) return;
-      el.innerHTML = hd ? `${hd['Expense Description'] ? 'ℹ️ ' + h(hd['Expense Description']) + '<br>' : ''}${(+hd['Max Allowed']>0) ? '<b style="color:var(--goldd)">Max ₹' + fmt1(hd['Max Allowed']) + ' per claim</b>' : ''}` : ''; };
-    $('ex_type').onchange = _hint; _hint();
+    exHint();
     $('ex_save').onclick = async () => {
       const desc = $('ex_desc').value.trim();
+      const tsel = types.find(t=>t['Expense Type']===$('ex_type').value);
+      const maxAllowed = tsel && tsel['Max Allowed'] != null && tsel['Max Allowed'] !== '' ? +tsel['Max Allowed'] : null;
       if (!$('ex_date').value) return toast('Pick the date', true);
       if (!$('ex_type').value) return toast('Pick the type', true);
       if (!(+$('ex_amt').value > 0)) return toast('Enter a valid amount', true);
-      const _hd = _heads.find(t=>t['Expense Type']===$('ex_type').value);
-      if (_hd && (+_hd['Max Allowed']>0) && parseFloat($('ex_amt').value) > +_hd['Max Allowed']) return toast($('ex_type').value + ' claims are capped at ₹' + fmt1(_hd['Max Allowed']) + ' per claim', true);
+      if (maxAllowed && +$('ex_amt').value > maxAllowed) return toast($('ex_type').value + ' claims are capped at ₹' + fmt1(maxAllowed) + ' per claim', true);
       if (!$('ex_by').value) return toast('Select who reimburses', true);
       if ($('ex_by').value==='Client' && !$('ex_client').value) return toast('Select the client', true);
       if ($('ex_ref').value.trim().length < 3) return toast('Receipt reference required', true);
       if (!sane(desc)) return toast('Description must be a ' + SANE_HINT, true);
-      const expense = { employeeEmail: S.me['Employee Email'], employeeName: S.me['Employee Name'],
-        date: $('ex_date').value, expenseType: $('ex_type').value, amount: parseFloat($('ex_amt').value),
-        description: desc, reimbursementBy: $('ex_by').value, clientName: $('ex_client').value, receiptReference: $('ex_ref').value.trim() };
-      if (isEdit) expense.rowId = x['Row ID'];
+      const f = ($('ex_file').files && $('ex_file').files[0]) || null;
+      if (f && f.size > 5*1024*1024) return toast('Bill file is over 5 MB — compress or rescan it', true);
+      if (f && !/^(image\/(jpeg|png|webp)|application\/pdf)$/.test(f.type)) return toast('Only photos (JPG/PNG/WebP) or PDF bills', true);
       $('ex_save').disabled = true;
-      try { await EMS2.callAPI(isEdit?'updateExpense':'submitExpense', { expense }); closeModal(); S.cache.exp = null; toast(isEdit?'Updated ✓':'Submitted ✓'); rExpenses(); }
-      catch (e) { toast(e.message, true); $('ex_save').disabled = false; }
+      try {
+        let receiptFile = '';
+        if (f) {
+          toast('Uploading bill…');
+          const c = await EMS2.ready;
+          const u = await c.auth.getUser();
+          const uid = u.data && u.data.user ? u.data.user.id : null;
+          if (!uid) throw new Error('Session expired — sign in again.');
+          const safe = f.name.replace(/[^A-Za-z0-9._-]/g,'_').slice(-60);
+          const up = await c.storage.from('expense-receipts').upload(uid + '/' + Date.now() + '_' + safe, f, { contentType: f.type });
+          if (up.error) throw new Error('Upload failed: ' + up.error.message);
+          receiptFile = up.data.path;
+        }
+        const expense = { employeeEmail: S.me['Employee Email'], employeeName: S.me['Employee Name'],
+          date: $('ex_date').value, expenseType: $('ex_type').value, amount: parseFloat($('ex_amt').value),
+          description: desc, reimbursementBy: $('ex_by').value, clientName: $('ex_client').value,
+          receiptReference: $('ex_ref').value.trim(), receiptFile };
+        if (isEdit) expense.rowId = x['Row ID'];
+        await EMS2.callAPI(isEdit?'updateExpense':'submitExpense', { expense });
+        closeModal(); S.cache.exp = null; toast(isEdit?'Updated ✓':'Submitted ✓'); rExpenses();
+      } catch (e) { toast(e.message, true); $('ex_save').disabled = false; }
     };
+  }
+
+  function exHint() {
+    const d = S.cache.exp || {}; const el = $('ex_hint'); if (!el) return;
+    const sel = $('ex_type') ? $('ex_type').value : '';
+    const t = (d.expenseTypes||[]).find(k=>k['Expense Type']===sel);
+    el.innerHTML = t ? [t['Expense Description']?('ℹ ' + h(t['Expense Description'])):'', (t['Max Allowed']!=null&&t['Max Allowed']!=='')?('<b style="color:var(--goldd)">Max ₹' + fmt1(t['Max Allowed']) + ' per claim</b>'):''].filter(Boolean).join(' · ') : '';
+  }
+
+  async function viewBill(path) {
+    try {
+      const c = await EMS2.ready;
+      const r = await c.storage.from('expense-receipts').createSignedUrl(path, 300);
+      if (r.error) throw new Error(r.error.message);
+      window.open(r.data.signedUrl, '_blank');
+    } catch (e) { toast('Could not open bill: ' + e.message, true); }
   }
 
   function exMonthGo(v) { S.exMonth = v; rExpenses(); }
@@ -1347,10 +1382,10 @@ const APP = (() => {
 
   const RENDER = { myday:rMyday, dashboard:rDashboard, approvals:rApprovals, review:rReview, timesheet:rTimesheet, workplan:rWorkplan, leave:rLeave, expenses:rExpenses };
 
-  async function signout() { await EMS2.signOut(); location.replace('home.html'); }
+  async function signout() { await EMS2.signOut(); location.replace('home.html?next=app'); }
 
   boot();
-  return { show, signout, quickLog, logPlan, tsPopup, actGo, openAppr, selAppr, bulkApprove, rfshAppr, tsortGo: tsort, qGo, fGo, exForm, exMonthGo, rtSort, rtCSV, tsEdit, tsDel, wpForm, wpEnd, wpDel, wpNew, wpTabGo, tpForm, vizGo, vizEmpGo, vizCliGo, lvEdit, lvCancel, coCancel, exCancel, S, RENDER, masters, h, fmt1, toast, $ };
+  return { show, signout, quickLog, logPlan, tsPopup, actGo, openAppr, selAppr, bulkApprove, rfshAppr, tsortGo: tsort, qGo, fGo, exForm, exMonthGo, rtSort, rtCSV, tsEdit, tsDel, wpForm, wpEnd, wpDel, wpNew, wpTabGo, tpForm, vizGo, vizEmpGo, vizCliGo, lvEdit, lvCancel, coCancel, exCancel, viewBill, exHint, S, RENDER, masters, h, fmt1, toast, $ };
 })();
 </script>
 </body>

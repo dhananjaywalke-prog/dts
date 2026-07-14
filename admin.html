@@ -130,6 +130,7 @@
     const isInactive = r => /inactive|^false$/i.test(stVal(r)) || (spec().statusField==='active' && !r.active) || (String(r.status||'').toLowerCase()==='inactive');
 
     async function load() {
+        if (current === 'bills') { rows = []; return; }
         if (current === 'audit') {
             let q = sb.from('audit_log').select('*').order('at',{ascending:false}).limit(300);
             const f = FL.audit||{};
@@ -189,9 +190,11 @@
 
     function render() {
         const tabs = Object.keys(ENTITIES).map(k=>`<button class="tab ${current===k?'on':''}" onclick="ADM.go('${k}')">${ENTITIES[k].title}</button>`).join('')
-            + `<button class="tab ${current==='audit'?'on':''}" onclick="ADM.go('audit')">Audit Log</button>`;
+            + `<button class="tab ${current==='audit'?'on':''}" onclick="ADM.go('audit')">Audit Log</button>`
+            + `<button class="tab ${current==='bills'?'on':''}" onclick="ADM.go('bills')">🧾 Bills PDF</button>`;
         let body;
-        if (current === 'audit') body = auditHtml();
+        if (current === 'bills') body = billsHtml();
+        else if (current === 'audit') body = auditHtml();
         else {
             const f = FL[current] = FL[current]||{};
             const flts = (spec().filters||[]).map(fl=>`<select style="width:130px" onchange="ADM.fGo('${fl.k}',this.value)"><option value="">${fl.label}: All</option>${fl.opts.map(o=>`<option ${f[fl.k]===o?'selected':''}>${o}</option>`).join('')}</select>`).join('');
@@ -418,12 +421,133 @@
         await load(); render();
     }
 
+    // ---------- expense bills PDF ----------
+    function billsHtml() {
+        const now = new Date(), ym = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+        return `<div class="card" style="padding:18px;max-width:620px">
+          <b style="font:700 14px Inter;color:var(--navy)">Expense bills — monthly compiled PDF</b>
+          <div class="sub" style="margin:6px 0 12px;line-height:1.6">One PDF for the month: per employee — expense summary table first, then their bill copies laid out 4 per A4 page (1 cm margins). Only bills uploaded through the portal are included; the summary lists every claim either way.</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="month" id="bp_month" style="width:170px" value="${ym}">
+            <button class="btn" id="bp_go" onclick="ADM.genBills()">Generate PDF</button>
+          </div>
+          <div id="bp_st" class="sub" style="margin-top:10px"></div>
+        </div>`;
+    }
+
+    async function pdfLib() {
+        if (window.PDFLib) return window.PDFLib;
+        await new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js'; s.onload = res; s.onerror = () => rej(new Error('Could not load the PDF library — check internet')); document.head.appendChild(s); });
+        return window.PDFLib;
+    }
+    const pdfTxt = t => String(t == null ? '' : t).replace(/\u20b9/g, 'Rs.').replace(/[^\x20-\x7E]/g, '').slice(0, 200);
+
+    async function genBills() {
+        const st = $('bp_st'), btn = $('bp_go');
+        const ym = $('bp_month').value;
+        if (!ym) { st.textContent = 'Pick a month first'; return; }
+        const say = m => { st.textContent = m; };
+        btn.disabled = true;
+        try {
+            say('Loading PDF library…');
+            const PL = await pdfLib();
+            say('Fetching expenses…');
+            const [yy0, mm0] = ym.split('-').map(Number);
+            const m0 = ym + '-01';
+            const m1 = (mm0 === 12 ? (yy0+1) + '-01' : yy0 + '-' + String(mm0+1).padStart(2,'0')) + '-01';
+            const r = await sb.from('expenses').select('*, employees(name)').gte('expense_date', m0).lt('expense_date', m1).neq('status','Cancelled').order('expense_date');
+            if (r.error) throw new Error(r.error.message);
+            const MONS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            const fD = iso => { const m = String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[3] + '-' + MONS[+m[2]-1] + '-' + m[1].slice(2) : String(iso||''); };
+            const list0 = (r.data || []).map(x => ({ ...x, emp: (x.employees && x.employees.name) || 'Unknown' }))
+                .sort((a,b) => a.emp === b.emp ? (a.expense_date < b.expense_date ? -1 : 1) : (a.emp < b.emp ? -1 : 1));
+            if (!list0.length) { say('No expenses found for ' + ym); btn.disabled = false; return; }
+            const pdf = await PL.PDFDocument.create();
+            const font = await pdf.embedFont(PL.StandardFonts.Helvetica);
+            const bold = await pdf.embedFont(PL.StandardFonts.HelveticaBold);
+            const W = 595.28, H = 841.89, M = 28.35, GAP = 10;   // A4 portrait, 1cm margins
+            const cw = (W - 2*M - GAP) / 2, chh = (H - 2*M - GAP) / 2;
+            const groups = {};
+            list0.forEach(x => { (groups[x.emp] = groups[x.emp] || []).push(x); });
+            let billsDone = 0, billsFail = 0;
+            for (const name of Object.keys(groups)) {
+                const list = groups[name];
+                // summary page(s)
+                let pg = pdf.addPage([W, H]), y = H - M - 10;
+                pg.drawText(pdfTxt(name) + '  —  ' + MONS[mm0-1] + ' ' + yy0 + '  ·  Expense claims', { x: M, y, size: 13, font: bold, color: PL.rgb(.04,.16,.26) });
+                y -= 20;
+                const heads = ['Date','Type','Amount Rs','Client','Ref','Status','Bill'];
+                const xs = [M, M+60, M+140, M+215, M+372, M+442, M+506];
+                heads.forEach((t,i) => pg.drawText(t, { x: xs[i], y, size: 8.5, font: bold }));
+                y -= 5; pg.drawLine({ start: {x:M, y}, end: {x:W-M, y}, thickness: .5, color: PL.rgb(.72,.78,.84) }); y -= 11;
+                let tot = 0;
+                for (const x of list) {
+                    if (y < M + 24) { pg = pdf.addPage([W, H]); y = H - M - 10; }
+                    const cells = [fD(x.expense_date), x.raw_head || '', (+x.amount||0).toLocaleString('en-IN'), x.raw_client || '-', x.receipt_reference || '-', x.status, x.receipt_file ? 'Yes' : '-'];
+                    const maxch = [10, 15, 12, 30, 13, 10, 4];
+                    cells.forEach((t,i) => pg.drawText(pdfTxt(t).slice(0, maxch[i]), { x: xs[i], y, size: 8.5, font }));
+                    tot += +x.amount || 0; y -= 12;
+                }
+                y -= 2; pg.drawLine({ start: {x:M, y: y+8}, end: {x:W-M, y: y+8}, thickness: .5, color: PL.rgb(.72,.78,.84) });
+                pg.drawText('Total: Rs. ' + tot.toLocaleString('en-IN') + '   ·   ' + list.length + ' claim(s)', { x: M, y: y - 6, size: 10, font: bold });
+                // bills: 4 per page (2 x 2), fresh page per employee
+                let slot = 0, bp = null;
+                for (const x of list.filter(q => q.receipt_file)) {
+                    say('Embedding bills — ' + name + ' (' + (billsDone + 1) + ')…');
+                    let items = [];
+                    try {
+                        const dl = await sb.storage.from('expense-receipts').download(x.receipt_file);
+                        if (dl.error) throw new Error(dl.error.message);
+                        const blob = dl.data;
+                        if (/\.pdf$/i.test(x.receipt_file) || blob.type === 'application/pdf') {
+                            const spdf = await PL.PDFDocument.load(await blob.arrayBuffer());
+                            const emb = await pdf.embedPdf(spdf, spdf.getPageIndices());
+                            items = emb.map(e => ({ img: false, o: e, w: e.width, h: e.height }));
+                        } else {
+                            const bmp = await createImageBitmap(blob);
+                            const cv = document.createElement('canvas'); cv.width = bmp.width; cv.height = bmp.height;
+                            cv.getContext('2d').drawImage(bmp, 0, 0);
+                            const bytes = await (await fetch(cv.toDataURL('image/png'))).arrayBuffer();
+                            const img = await pdf.embedPng(bytes);
+                            items = [{ img: true, o: img, w: img.width, h: img.height }];
+                        }
+                    } catch (e) { billsFail++; continue; }
+                    for (const it of items) {
+                        if (slot % 4 === 0) bp = pdf.addPage([W, H]);
+                        const i = slot % 4, col = i % 2, row = Math.floor(i / 2);
+                        const cx = M + col * (cw + GAP);
+                        const cy = H - M - (row + 1) * chh - row * GAP;
+                        bp.drawRectangle({ x: cx, y: cy, width: cw, height: chh, borderColor: PL.rgb(.85,.89,.93), borderWidth: .6 });
+                        const cap = pdfTxt(fD(x.expense_date) + ' · ' + (x.raw_head || '') + ' · Rs.' + (+x.amount||0).toLocaleString('en-IN') + ' · ref ' + (x.receipt_reference || '-')).slice(0, 62);
+                        bp.drawText(cap, { x: cx + 4, y: cy + chh - 11, size: 7.5, font: bold, color: PL.rgb(.04,.16,.26) });
+                        const aw = cw - 8, ah = chh - 22;
+                        const sc = Math.min(aw / it.w, ah / it.h, 1.4);
+                        const dw = it.w * sc, dh = it.h * sc;
+                        const dx = cx + 4 + (aw - dw) / 2, dy = cy + 4 + (ah - dh) / 2;
+                        if (it.img) bp.drawImage(it.o, { x: dx, y: dy, width: dw, height: dh });
+                        else bp.drawPage(it.o, { x: dx, y: dy, width: dw, height: dh });
+                        slot++;
+                    }
+                    billsDone++;
+                }
+            }
+            say('Building file…');
+            const bytes = await pdf.save();
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+            a.download = 'expense-bills-' + ym + '.pdf'; a.click();
+            say('Done ✓ · ' + Object.keys(groups).length + ' employee(s) · ' + billsDone + ' bill(s) embedded' + (billsFail ? ' · ' + billsFail + ' bill(s) could not be loaded' : ''));
+        } catch (e) { say('Error: ' + e.message); }
+        btn.disabled = false;
+    }
+
     // ---------- wire ----------
     window.ADM = {
         go: async k => { current=k; editing=null; await load(); render(); },
         sort: k => { const s=SRT[current]=SRT[current]||{}; if(s.col===k) s.dir=s.dir==='asc'?'desc':'asc'; else {s.col=k;s.dir='asc';} render(); },
         fGo: async (k,v,reload) => { (FL[current]=FL[current]||{})[k]=v; if(reload){ await load(); } render(); },
         qGo: v => { (FL[current]=FL[current]||{}).q=v.trim(); clearTimeout(_qdeb); _qdeb=setTimeout(()=>{ const tb=$('tb_adm'); if(tb) tb.innerHTML = current==='audit'?auditRowsHtml():rowsHtml(); },200); },
+        genBills,
         add: () => openForm(null),
         edit: id => openForm(rows.find(x=>x.id===id)),
         save, flip, tpl, exp, imp, impGo
