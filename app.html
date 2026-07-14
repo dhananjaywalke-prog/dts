@@ -118,7 +118,7 @@ const APP = (() => {
       S.isAdmin = (d.employee && d.employee['Role']) === 'admin';
       S.isPartner = S.isAdmin || /partner/i.test((d.employee && d.employee['Designation']) || '');
       $('uName').textContent = S.me['Employee Name'] || email;
-      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b16';
+      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b17';
       $('uAv').textContent = (S.me['Employee Name']||email).split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
       buildNav();
       const hv = (location.hash || '').slice(1);
@@ -1563,7 +1563,8 @@ const APP = (() => {
       FROW('Due date', r['Due Date']?fmtD(r['Due Date']):'—') + FROW('Created', fmtD(r.Created)) +
       (r['Closed On']?FROW('Closed on', fmtD(r['Closed On'])):'') +
       FROW('Fees ₹', r.Fees!=null?fmt0(r.Fees):'— not set') + FROW('Cost to date ₹', fmt0(r.Cost)) + FROW('Recovery', rec) +
-      FROW('Description', h(r.Description));
+      FROW('Description', h(r.Description)) +
+      FROW('Assignment ID', `<span style="font:500 10.5px ui-monospace,monospace;color:var(--fog)">${h(r['Row ID'])}</span>`);
     const acts = r.Status==='Active'
       ? `<div style="margin-top:12px;display:flex;gap:10px"><button class="btn" onclick='closeModalAnd(()=>APP.asgForm(${JSON.stringify(r).replace(/'/g,"&#39;")}))'>Edit</button><button class="btn2" style="color:var(--goldd)" onclick="closeModalAnd(()=>APP.asgClose('${r['Row ID']}'))">Close assignment</button></div>` : '';
     modal('Assignment — ' + h(r.Client), body + acts);
@@ -1604,17 +1605,20 @@ const APP = (() => {
 
   function asgCSVt() {
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob(['Client,Service,Partner,Manager,Due Date,Fees,Description\n'], { type: 'text/csv' }));
+    a.href = URL.createObjectURL(new Blob(['Assignment ID,Client,Service,Partner,Manager,Due Date,Fees,Description,Status\n'], { type: 'text/csv' }));
     a.download = 'assignments-template.csv'; a.click();
+    toast('Leave Assignment ID blank for NEW rows; keep it to UPDATE existing ones');
   }
   function asgCSVe() {
     const d = S.cache.asg || {};
-    const heads = ['Client','Service','Partner','Manager','Due Date','Created','Fees','Cost','Status','Description'];
+    const heads = ['Assignment ID','Client','Service','Partner','Manager','Due Date','Fees','Description','Status','Created','Cost'];
+    const key = { 'Assignment ID':'Row ID' };
     const esc = v => '"' + String(v??'').replace(/"/g,'""') + '"';
-    const csv = [heads.join(',')].concat((d.rows||[]).map(r=>heads.map(k=>esc(r[k])).join(','))).join('\n');
+    const csv = [heads.join(',')].concat((d.rows||[]).map(r=>heads.map(k=>esc(r[key[k]||k])).join(','))).join('\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
     a.download = 'assignments.csv'; a.click();
+    toast('Edit Due/Fees/Manager/Description/Status in Excel, keep Assignment ID, re-import to update');
   }
   function parseCSVtext(t) {
     const rows = []; let row = [], cell = '', q = false;
@@ -1635,23 +1639,35 @@ const APP = (() => {
     if (rows.length < 2) return toast('CSV has no data rows', true);
     const hd = rows[0].map(x=>x.trim().toLowerCase());
     const ix = k => hd.indexOf(k);
-    if (ix('client') < 0 || ix('service') < 0) return toast('CSV must have Client and Service columns', true);
-    const items = rows.slice(1).filter(r=>r.join('').trim()).map(r=>({
-      client: (r[ix('client')]||'').trim(), service: (r[ix('service')]||'').trim(),
-      partner: ix('partner')>=0?(r[ix('partner')]||'').trim():'', manager: ix('manager')>=0?(r[ix('manager')]||'').trim():'',
-      dueDate: ix('due date')>=0?(r[ix('due date')]||'').trim():'', fees: ix('fees')>=0?(r[ix('fees')]||'').trim():'',
-      description: ix('description')>=0?(r[ix('description')]||'').trim():'' }));
-    modal('Import assignments', `<div style="font:500 12.5px Inter">${items.length} row(s) parsed. Each becomes a NEW active assignment (duplicates of active client+service pairs are rejected row-by-row).</div><div style="margin-top:12px"><button class="btn" id="as_imp_go">Import ${items.length} assignment(s)</button></div><div id="as_imp_st" class="sub" style="margin-top:8px"></div>`);
+    if (ix('client') < 0 && ix('assignment id') < 0) return toast('CSV needs a Client column (new rows) or Assignment ID column (updates)', true);
+    const g = (r,k) => ix(k) >= 0 ? (r[ix(k)]||'').trim() : '';
+    const items = rows.slice(1).filter(r=>r.join('').trim()).map((r,i)=>({
+      line: i+2, rowId: g(r,'assignment id'),
+      client: g(r,'client'), service: g(r,'service'), partner: g(r,'partner'), manager: g(r,'manager'),
+      dueDate: g(r,'due date'), fees: g(r,'fees'), description: g(r,'description'),
+      status: (s=>['Active','Completed','Cancelled'].includes(s)?s:'')(g(r,'status')) }));
+    const nUpd = items.filter(x=>x.rowId).length, nNew = items.length - nUpd;
+    modal('Import assignments', `<div style="font:500 12.5px Inter;line-height:1.6">${items.length} row(s) parsed → <b>${nUpd} update(s)</b> (rows with an Assignment ID — blank cells are left unchanged) and <b>${nNew} new</b> assignment(s).</div><div style="margin-top:12px"><button class="btn" id="as_imp_go">Apply</button></div><div id="as_imp_st" class="sub" style="margin-top:8px"></div>`);
     $('as_imp_go').onclick = async () => {
       $('as_imp_go').disabled = true;
       let ok = 0; const errs = [];
       for (let i = 0; i < items.length; i++) {
-        $('as_imp_st').textContent = 'Importing ' + (i+1) + ' / ' + items.length + '…';
-        try { await EMS2.callAPI('createAssignment', items[i]); ok++; }
-        catch (e) { errs.push('Row ' + (i+2) + ': ' + e.message); }
+        const it = items[i];
+        $('as_imp_st').textContent = 'Applying ' + (i+1) + ' / ' + items.length + '…';
+        try {
+          if (it.rowId) {
+            const pl = { rowId: it.rowId };
+            for (const k of ['partner','manager','dueDate','fees','description','status']) if (it[k]) pl[k] = it[k];
+            if (Object.keys(pl).length === 1) throw new Error('nothing to update');
+            await EMS2.callAPI('updateAssignment', pl);
+          } else {
+            await EMS2.callAPI('createAssignment', it);
+          }
+          ok++;
+        } catch (e) { errs.push('Row ' + it.line + ': ' + e.message); }
       }
       closeModal(); S.masters = null;
-      toast('Imported ' + ok + ' of ' + items.length + (errs.length ? ' — ' + errs.length + ' failed' : ' ✓'), errs.length > 0);
+      toast('Applied ' + ok + ' of ' + items.length + (errs.length ? ' — ' + errs.length + ' failed' : ' ✓'), errs.length > 0);
       if (errs.length) alert('Import issues:\n' + errs.slice(0, 12).join('\n'));
       rAssignments();
     };
