@@ -117,7 +117,7 @@ const APP = (() => {
       S.myday = d; S.me = d.employee; S.isApprover = !!d.isApprover;
       S.isAdmin = (d.employee && d.employee['Role']) === 'admin';
       $('uName').textContent = S.me['Employee Name'] || email;
-      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b13';
+      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b14';
       $('uAv').textContent = (S.me['Employee Name']||email).split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
       buildNav();
       show(S.isApprover ? 'dashboard' : 'myday');
@@ -545,6 +545,7 @@ const APP = (() => {
     return w;
   }
   const closeModal = () => { const m = $('modal'); if (m) m.remove(); };
+  window.closeModalAnd = (fn) => { closeModal(); setTimeout(fn, 30); };
 
   // ---------------- TIMESHEET ----------------
   async function rTimesheet() {
@@ -1060,13 +1061,13 @@ const APP = (() => {
       rows = applySort('exp', tq('exp', rows), 'Date', 'desc');
       return rows.map(x=>{
         const p = x.Status==='Pending';
-        return `<div class="xr" style="grid-template-columns:${gtc}">
+        return `<div class="xr" style="grid-template-columns:${gtc};cursor:pointer" onclick="APP.exView('${x['Row ID']}')">
           <div style="color:var(--mut)">${fmtD(x.Date)}</div><div>${h(x['Expense Type'])}</div><div class="num">${fmt1(x.Amount)}</div>
           <div class="num" style="color:${x['Approved Amount']!=null&&+x['Approved Amount']<+x.Amount?'var(--goldd)':'var(--ok)'}">${x['Approved Amount']!=null?fmt1(x['Approved Amount']):'—'}</div>
           <div style="color:#486581" title="${h(x.Description)}">${h(x.Description||'')}</div><div style="color:var(--mut)">${h(x['Client Name']||'—')}</div>
           <div style="color:var(--mut)">${h(x['Reimbursement By']||'')}</div>
           <div><span class="pill" style="background:${x.Status==='Approved'?'var(--okbg)':p?'var(--goldbg)':'var(--line2)'};color:${x.Status==='Approved'?'var(--ok)':p?'var(--goldd)':'var(--mut)'}">${h(x.Status)}</span></div>
-          <div style="white-space:nowrap">${p?`<button class="btn2" style="padding:2px 8px;font-size:11px" onclick='APP.exForm(${JSON.stringify(x).replace(/'/g,"&#39;")})'>Edit</button> <button class="btn2" style="padding:2px 8px;font-size:11px;color:var(--bad)" onclick="APP.exCancel('${x['Row ID']}')">Cancel</button>`:''}${x['Receipt File']?` <button class="btn2" style="padding:2px 8px;font-size:11px" title="View bill" onclick="APP.viewBill('${x['Receipt File']}')">📎</button>`:''}</div>
+          <div style="white-space:nowrap" onclick="event.stopPropagation()">${p?`<button class="btn2" style="padding:2px 8px;font-size:11px" onclick='APP.exForm(${JSON.stringify(x).replace(/'/g,"&#39;")})'>Edit</button> <button class="btn2" style="padding:2px 8px;font-size:11px;color:var(--bad)" onclick="APP.exCancel('${x['Row ID']}')">Cancel</button>`:''}${x['Receipt File']?` <button class="btn2" style="padding:2px 8px;font-size:11px" title="View bill" onclick="APP.viewBill('${x['Receipt File']}')">📎</button>`:''}</div>
         </div>`;}).join('')
         + `<div style="display:flex;gap:16px;padding:10px 16px;background:var(--bg);border-top:1px solid var(--line);font:600 11.5px Inter;color:#486581"><span>Σ ${rows.length} rows · <b style="color:var(--navy)">₹${fmt1(rows.reduce((s,x)=>s+(+x.Amount||0),0))}</b></span></div>`;
     };
@@ -1168,6 +1169,32 @@ const APP = (() => {
       if (r.error) throw new Error(r.error.message);
       window.open(r.data.signedUrl, '_blank');
     } catch (e) { toast('Could not open bill: ' + e.message, true); }
+  }
+
+  function exView(rowId) {
+    const d = S.cache.exp || {};
+    const x = (d.expenses||[]).find(q=>String(q['Row ID'])===String(rowId)); if (!x) return;
+    const F = (l,v)=>`<div style="display:flex;gap:8px;padding:6px 0;border-bottom:1px solid var(--line2)"><span class="sub" style="width:150px;flex:none">${l}</span><span style="font:500 12.5px Inter;min-width:0;overflow-wrap:anywhere">${v||'—'}</span></div>`;
+    const trimmed = x['Approved Amount']!=null && +x['Approved Amount'] < +x.Amount;
+    const stCol = x.Status==='Approved'?'var(--ok)':x.Status==='Pending'?'var(--goldd)':x.Status==='Rejected'?'var(--bad)':'var(--mut)';
+    const body =
+      F('Status', `<span class="pill" style="background:${x.Status==='Approved'?'var(--okbg)':x.Status==='Pending'?'var(--goldbg)':x.Status==='Rejected'?'var(--badbg)':'var(--line2)'};color:${stCol}">${h(x.Status)}</span>`) +
+      F('Date', fmtD(x.Date)) +
+      F('Type', h(x['Expense Type'])) +
+      F('Claimed ₹', fmt1(x.Amount)) +
+      F('Approved ₹', x['Approved Amount']!=null ? `<b style="color:${trimmed?'var(--goldd)':'var(--ok)'}">${fmt1(x['Approved Amount'])}</b>${trimmed?' <span class="sub">(reduced from '+fmt1(x.Amount)+')</span>':''}` : '— not yet decided') +
+      F('Description', h(x.Description)) +
+      F('Reimbursement by', h(x['Reimbursement By'])) +
+      F('Client', h(x['Client Name'])) +
+      F('Receipt ref', h(x['Receipt Reference'])) +
+      F('Bill copy', x['Receipt File']?`<a href="#" onclick="APP.viewBill('${h(x['Receipt File'])}');return false" style="font-weight:600">📎 View bill</a>`:'Not attached') +
+      F('Submitted on', h(x['Submitted On'])) +
+      (x['Actioned On']?F('Decided on', h(x['Actioned On'])):'') +
+      (x['Approver Name']?F('Approver', h(x['Approver Name'])):'') +
+      (x['Approver Comments']?F('Approver comments', `<span style="color:${trimmed||x.Status==='Rejected'?'var(--goldd)':'var(--ink)'}">${h(x['Approver Comments'])}</span>`):'');
+    const acts = x.Status==='Pending'
+      ? `<div style="margin-top:12px;display:flex;gap:10px"><button class="btn" onclick='closeModalAnd(()=>APP.exForm(${JSON.stringify(x).replace(/'/g,"&#39;")}))'>Edit</button><button class="btn2" style="color:var(--bad)" onclick="closeModalAnd(()=>APP.exCancel('${x['Row ID']}'))">Cancel claim</button></div>` : '';
+    modal('Expense claim — ' + fmtD(x.Date), body + acts);
   }
 
   function exMonthGo(v) { S.exMonth = v; rExpenses(); }
@@ -1395,7 +1422,7 @@ const APP = (() => {
   async function signout() { await EMS2.signOut(); location.replace('home.html?next=app'); }
 
   boot();
-  return { show, signout, quickLog, logPlan, tsPopup, actGo, openAppr, selAppr, bulkApprove, rfshAppr, tsortGo: tsort, qGo, fGo, exForm, exMonthGo, rtSort, rtCSV, tsEdit, tsDel, wpForm, wpEnd, wpDel, wpNew, wpTabGo, tpForm, vizGo, vizEmpGo, vizCliGo, lvEdit, lvCancel, coCancel, exCancel, viewBill, exHint, S, RENDER, masters, h, fmt1, toast, $ };
+  return { show, signout, quickLog, logPlan, tsPopup, actGo, openAppr, selAppr, bulkApprove, rfshAppr, tsortGo: tsort, qGo, fGo, exForm, exMonthGo, rtSort, rtCSV, tsEdit, tsDel, wpForm, wpEnd, wpDel, wpNew, wpTabGo, tpForm, vizGo, vizEmpGo, vizCliGo, lvEdit, lvCancel, coCancel, exCancel, viewBill, exHint, exView, S, RENDER, masters, h, fmt1, toast, $ };
 })();
 </script>
 </body>
