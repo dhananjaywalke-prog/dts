@@ -117,7 +117,7 @@ const APP = (() => {
       S.myday = d; S.me = d.employee; S.isApprover = !!d.isApprover;
       S.isAdmin = (d.employee && d.employee['Role']) === 'admin';
       $('uName').textContent = S.me['Employee Name'] || email;
-      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b12';
+      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b13';
       $('uAv').textContent = (S.me['Employee Name']||email).split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
       buildNav();
       show(S.isApprover ? 'dashboard' : 'myday');
@@ -322,7 +322,7 @@ const APP = (() => {
       ? F('Employee',h(it['Employee Name']))+F('Type',h(it['Leave Type']))+F('Day type',h(it['Day Type']))+F('From',fmtD(it['From Date']))+F('To',fmtD(it['To Date']))+F('Working days',fmt1(it['Total Days']))+F('Paid / LOP',fmt1(it['Paid Days']||0)+' / '+fmt1(it['LOP Days']||0))+F('Reason',h(it.Reason))+F('Applied on',h(it['Applied On']))
       : kind==='compoff'
       ? F('Employee',h(it['Employee Name']))+F('Worked on',fmtD(it.Date))+F('Day type',h(it['Day Type']))+F('Credit',fmt1(it.Credit)+' day(s)')+F('Client',h(it.Client))+F('Task',h(it.Task))+F('Hours logged that day',fmt1(it['Hours Logged'])+'h')+F('Reason',h(it.Reason))+F('Applied on',h(it['Applied On']))
-      : F('Employee',h(it['Employee Name']))+F('Date',fmtD(it.Date))+F('Type',h(it['Expense Type']))+F('Amount','₹'+fmt1(it.Amount))+F('Client',h(it['Client Name']))+F('Reimbursement by',h(it['Reimbursement By']))+F('Receipt ref',h(it['Receipt Reference']))+F('Bill copy', it['Receipt File']?`<a href="#" onclick="APP.viewBill('${h(it['Receipt File'])}');return false" style="font-weight:600">📎 View bill</a>`:'Not attached')+F('Description',h(it.Description))+F('Submitted on',h(it['Submitted On']));
+      : F('Employee',h(it['Employee Name']))+F('Date',fmtD(it.Date))+F('Type',h(it['Expense Type']))+F('Amount','₹'+fmt1(it.Amount))+F('Client',h(it['Client Name']))+F('Reimbursement by',h(it['Reimbursement By']))+F('Receipt ref',h(it['Receipt Reference']))+F('Bill copy', it['Receipt File']?`<a href="#" onclick="APP.viewBill('${h(it['Receipt File'])}');return false" style="font-weight:600">📎 View bill</a>`:'Not attached')+F('Description',h(it.Description))+F('Submitted on',h(it['Submitted On']))+`<div style="display:flex;gap:8px;padding:8px 0 2px;align-items:center"><span class="sub" style="width:140px;flex:none">Approve amount ₹</span><input type="number" id="ap_amt" min="1" step="0.01" max="${it.Amount}" value="${it.Amount}" style="width:140px"><span class="sub">claimed ₹${fmt1(it.Amount)} · lower needs a comment</span></div>`;
     modal((kind==='leave'?'Leave':kind==='compoff'?'Comp-off claim':'Expense')+' — review', body +
       `<div style="margin-top:12px"><label class="sub">Comments — required to reject (${SANE_HINT})</label><textarea id="ap_cmt" rows="2"></textarea></div>
       <div style="margin-top:12px;display:flex;gap:10px">
@@ -335,10 +335,19 @@ const APP = (() => {
     const cEl = $('ap_cmt');
     const comments = (cEl && cEl.value.trim()) || '';
     if (what==='reject' && !sane(comments)) return toast('Rejection needs a ' + SANE_HINT, true);
+    let approvedAmount = '';
+    const amtEl = $('ap_amt');
+    if (what==='approve' && kind==='expense' && amtEl) {
+      approvedAmount = amtEl.value;
+      const claimed = +amtEl.getAttribute('max');
+      if (!(+approvedAmount > 0)) return toast('Enter a valid approved amount', true);
+      if (+approvedAmount > claimed) return toast('Approved amount cannot exceed claimed ₹' + fmt1(claimed), true);
+      if (+approvedAmount < claimed && !sane(comments)) return toast('Approving less than claimed needs a ' + SANE_HINT + ' so the person knows why', true);
+    }
     closeModal();
     try {
       await EMS2.callAPI((what==='approve'?'approve':'reject')+(kind==='leave'?'Leave':kind==='compoff'?'CompOff':'Expense'),
-        { rowId: id, approverEmail: S.me['Employee Email'], approverName: S.me['Employee Name'], comments });
+        { rowId: id, approverEmail: S.me['Employee Email'], approverName: S.me['Employee Name'], comments, approvedAmount });
       toast((what==='approve'?'Approved':'Rejected')+' ✓');
       delete BULK[kind][id];
       await dashData(true); buildNav(); RENDER[S.view]();
@@ -1041,8 +1050,8 @@ const APP = (() => {
     const mine = all.filter(x=>String(x.Date||'').startsWith(S.exMonth));
     const sum = st => mine.filter(x=>!st||x.Status===st).reduce((s,x)=>s+(+x.Amount||0),0);
     const F = TSORT['exp'] = TSORT['exp']||{};
-    const gtc = '86px 120px 84px 1.4fr 160px 100px 92px 118px';
-    const cols = [{k:'Date',l:'Date'},{k:'Expense Type',l:'Type'},{k:'Amount',l:'₹',r:1},{k:'Description',l:'Description'},{k:'Client Name',l:'Client'},{k:'Reimbursement By',l:'Reimb.'},{k:'Status',l:'Status'},{l:''}];
+    const gtc = '84px 112px 80px 84px 1.3fr 150px 94px 90px 118px';
+    const cols = [{k:'Date',l:'Date'},{k:'Expense Type',l:'Type'},{k:'Amount',l:'Claimed ₹',r:1},{k:'Approved Amount',l:'Appr. ₹',r:1},{k:'Description',l:'Description'},{k:'Client Name',l:'Client'},{k:'Reimbursement By',l:'Reimb.'},{k:'Status',l:'Status'},{l:''}];
     const types = [...new Set(all.map(x=>x['Expense Type']).filter(Boolean))].sort();
     TBODY.exp = () => {
       let rows = mine;
@@ -1053,6 +1062,7 @@ const APP = (() => {
         const p = x.Status==='Pending';
         return `<div class="xr" style="grid-template-columns:${gtc}">
           <div style="color:var(--mut)">${fmtD(x.Date)}</div><div>${h(x['Expense Type'])}</div><div class="num">${fmt1(x.Amount)}</div>
+          <div class="num" style="color:${x['Approved Amount']!=null&&+x['Approved Amount']<+x.Amount?'var(--goldd)':'var(--ok)'}">${x['Approved Amount']!=null?fmt1(x['Approved Amount']):'—'}</div>
           <div style="color:#486581" title="${h(x.Description)}">${h(x.Description||'')}</div><div style="color:var(--mut)">${h(x['Client Name']||'—')}</div>
           <div style="color:var(--mut)">${h(x['Reimbursement By']||'')}</div>
           <div><span class="pill" style="background:${x.Status==='Approved'?'var(--okbg)':p?'var(--goldbg)':'var(--line2)'};color:${x.Status==='Approved'?'var(--ok)':p?'var(--goldd)':'var(--mut)'}">${h(x.Status)}</span></div>

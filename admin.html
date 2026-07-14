@@ -476,20 +476,21 @@
                 let pg = pdf.addPage([W, H]), y = H - M - 10;
                 pg.drawText(pdfTxt(name) + '  —  ' + MONS[mm0-1] + ' ' + yy0 + '  ·  Expense claims', { x: M, y, size: 13, font: bold, color: PL.rgb(.04,.16,.26) });
                 y -= 20;
-                const heads = ['Date','Type','Amount Rs','Client','Ref','Status','Bill'];
-                const xs = [M, M+60, M+140, M+215, M+372, M+442, M+506];
+                const heads = ['Date','Type','Claimed Rs','Approved Rs','Client','Ref','Status','Bill'];
+                const xs = [M, M+54, M+118, M+180, M+244, M+374, M+440, M+502];
                 heads.forEach((t,i) => pg.drawText(t, { x: xs[i], y, size: 8.5, font: bold }));
                 y -= 5; pg.drawLine({ start: {x:M, y}, end: {x:W-M, y}, thickness: .5, color: PL.rgb(.72,.78,.84) }); y -= 11;
-                let tot = 0;
+                let tot = 0, totAppr = 0;
                 for (const x of list) {
                     if (y < M + 24) { pg = pdf.addPage([W, H]); y = H - M - 10; }
-                    const cells = [fD(x.expense_date), x.raw_head || '', (+x.amount||0).toLocaleString('en-IN'), x.raw_client || '-', x.receipt_reference || '-', x.status, x.receipt_file ? 'Yes' : '-'];
-                    const maxch = [10, 15, 12, 30, 13, 10, 4];
+                    const apprAmt = x.status === 'Approved' ? (x.approved_amount != null ? +x.approved_amount : +x.amount || 0) : null;
+                    const cells = [fD(x.expense_date), x.raw_head || '', (+x.amount||0).toLocaleString('en-IN'), apprAmt != null ? apprAmt.toLocaleString('en-IN') : '-', x.raw_client || '-', x.receipt_reference || '-', x.status, x.receipt_file ? 'Yes' : '-'];
+                    const maxch = [10, 12, 11, 11, 24, 12, 9, 3];
                     cells.forEach((t,i) => pg.drawText(pdfTxt(t).slice(0, maxch[i]), { x: xs[i], y, size: 8.5, font }));
-                    tot += +x.amount || 0; y -= 12;
+                    tot += +x.amount || 0; if (apprAmt != null) totAppr += apprAmt; y -= 12;
                 }
                 y -= 2; pg.drawLine({ start: {x:M, y: y+8}, end: {x:W-M, y: y+8}, thickness: .5, color: PL.rgb(.72,.78,.84) });
-                pg.drawText('Total: Rs. ' + tot.toLocaleString('en-IN') + '   ·   ' + list.length + ' claim(s)', { x: M, y: y - 6, size: 10, font: bold });
+                pg.drawText('Claimed: Rs. ' + tot.toLocaleString('en-IN') + '   ·   Approved: Rs. ' + totAppr.toLocaleString('en-IN') + '   ·   ' + list.length + ' claim(s)', { x: M, y: y - 6, size: 10, font: bold });
                 // bills: 4 per page (2 x 2), fresh page per employee
                 let slot = 0, bp = null;
                 for (const x of list.filter(q => q.receipt_file)) {
