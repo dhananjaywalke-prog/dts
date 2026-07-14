@@ -117,10 +117,11 @@ const APP = (() => {
       S.myday = d; S.me = d.employee; S.isApprover = !!d.isApprover;
       S.isAdmin = (d.employee && d.employee['Role']) === 'admin';
       $('uName').textContent = S.me['Employee Name'] || email;
-      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b14';
+      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b15';
       $('uAv').textContent = (S.me['Employee Name']||email).split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
       buildNav();
-      show(S.isApprover ? 'dashboard' : 'myday');
+      const hv = (location.hash || '').slice(1);
+      show(RENDER[hv] ? hv : (S.isApprover ? 'dashboard' : 'myday'));
     } catch (e) {
       $('view').innerHTML = '<div class="card" style="margin-top:20px"><b>Could not load.</b><div class="sub" style="margin-top:6px">'+h(e.message)+'</div><button class="btn" style="margin-top:12px" onclick="location.reload()">Retry</button></div>';
     }
@@ -160,7 +161,7 @@ const APP = (() => {
     $('vTitle').textContent = TITLES[id] || id;
     $('vDate').textContent = new Date().toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
     $('view').innerHTML = '<div class="grid" style="grid-template-columns:2fr 1fr;margin-top:4px"><div class="skel" style="height:180px"></div><div class="skel" style="height:180px"></div></div>';
-    try { await RENDER[id](); } catch (e) { $('view').innerHTML = '<div class="card"><b>Error:</b> '+h(e.message)+' <button class="btn2" onclick="APP.show(\''+id+'\')">Retry</button></div>'; }
+    try { history.replaceState(null, '', '#' + id); await RENDER[id](); } catch (e) { $('view').innerHTML = '<div class="card"><b>Error:</b> '+h(e.message)+' <button class="btn2" onclick="APP.show(\''+id+'\')">Retry</button></div>'; }
   }
 
   // masters (assignments etc.) cached for quick entry
@@ -323,7 +324,8 @@ const APP = (() => {
       : kind==='compoff'
       ? F('Employee',h(it['Employee Name']))+F('Worked on',fmtD(it.Date))+F('Day type',h(it['Day Type']))+F('Credit',fmt1(it.Credit)+' day(s)')+F('Client',h(it.Client))+F('Task',h(it.Task))+F('Hours logged that day',fmt1(it['Hours Logged'])+'h')+F('Reason',h(it.Reason))+F('Applied on',h(it['Applied On']))
       : F('Employee',h(it['Employee Name']))+F('Date',fmtD(it.Date))+F('Type',h(it['Expense Type']))+F('Amount','₹'+fmt1(it.Amount))+F('Client',h(it['Client Name']))+F('Reimbursement by',h(it['Reimbursement By']))+F('Receipt ref',h(it['Receipt Reference']))+F('Bill copy', it['Receipt File']?`<a href="#" onclick="APP.viewBill('${h(it['Receipt File'])}');return false" style="font-weight:600">📎 View bill</a>`:'Not attached')+F('Description',h(it.Description))+F('Submitted on',h(it['Submitted On']))+`<div style="display:flex;gap:8px;padding:8px 0 2px;align-items:center"><span class="sub" style="width:140px;flex:none">Approve amount ₹</span><input type="number" id="ap_amt" min="1" step="0.01" max="${it.Amount}" value="${it.Amount}" style="width:140px"><span class="sub">claimed ₹${fmt1(it.Amount)} · lower needs a comment</span></div>`;
-    modal((kind==='leave'?'Leave':kind==='compoff'?'Comp-off claim':'Expense')+' — review', body +
+    const lvDates = kind==='leave' ? `<div style="display:flex;gap:10px;align-items:end;margin-top:10px;background:var(--goldbg);border:1px solid var(--goldline);border-radius:8px;padding:8px 10px"><div><label class="sub">Approve From</label><input type="date" id="ap_from" value="${it['From Date']}" style="width:150px"></div><div><label class="sub">Approve To</label><input type="date" id="ap_to" value="${it['To Date']}" style="width:150px"></div><span class="sub" style="padding-bottom:8px">change dates to approve a modified period — comment required; days &amp; paid/LOP recompute</span></div>` : '';
+    modal((kind==='leave'?'Leave':kind==='compoff'?'Comp-off claim':'Expense')+' — review', body + lvDates +
       `<div style="margin-top:12px"><label class="sub">Comments — required to reject (${SANE_HINT})</label><textarea id="ap_cmt" rows="2"></textarea></div>
       <div style="margin-top:12px;display:flex;gap:10px">
         <button class="btn" style="background:var(--ok)" onclick="APP.actGo('${kind}','approve','${id}')">✓ Approve</button>
@@ -344,10 +346,21 @@ const APP = (() => {
       if (+approvedAmount > claimed) return toast('Approved amount cannot exceed claimed ₹' + fmt1(claimed), true);
       if (+approvedAmount < claimed && !sane(comments)) return toast('Approving less than claimed needs a ' + SANE_HINT + ' so the person knows why', true);
     }
+    let fromDate = '', toDate = '';
+    const fEl = $('ap_from'), tEl = $('ap_to');
+    if (what==='approve' && kind==='leave' && fEl && tEl) {
+      const list = (S.cache.dashboard && S.cache.dashboard.approvals.leaves) || [];
+      const orig = list.find(x=>String(x['Row ID'])===String(id)) || {};
+      if (fEl.value !== orig['From Date'] || tEl.value !== orig['To Date']) {
+        fromDate = fEl.value; toDate = tEl.value;
+        if (!fromDate || !toDate || toDate < fromDate) return toast('Invalid modified date range', true);
+        if (!sane(comments)) return toast('Approving modified dates needs a ' + SANE_HINT + ' so the person knows why', true);
+      }
+    }
     closeModal();
     try {
       await EMS2.callAPI((what==='approve'?'approve':'reject')+(kind==='leave'?'Leave':kind==='compoff'?'CompOff':'Expense'),
-        { rowId: id, approverEmail: S.me['Employee Email'], approverName: S.me['Employee Name'], comments, approvedAmount });
+        { rowId: id, approverEmail: S.me['Employee Email'], approverName: S.me['Employee Name'], comments, approvedAmount, fromDate, toDate });
       toast((what==='approve'?'Approved':'Rejected')+' ✓');
       delete BULK[kind][id];
       await dashData(true); buildNav(); RENDER[S.view]();
@@ -506,7 +519,7 @@ const APP = (() => {
 
   function rtRows() {
     const gtc = RT_COLS.map(c=>c[2]).join(' ');
-    return RT.rows.map(r=>`<div class="xr" style="grid-template-columns:${gtc};${r.Auto?'color:var(--fog)':''}">
+    return RT.rows.map(r=>`<div class="xr" style="grid-template-columns:${gtc};cursor:pointer;${r.Auto?'color:var(--fog)':''}" onclick="APP.rtView('${r['Row ID']}')">
       <div style="color:var(--mut)">${fmtD(r.Date)}</div>
       <div>${h(r.Person)}</div><div>${h(r.Client)}</div><div>${h(r.Task)}</div>
       <div class="num">${fmt1(r.Hours)}</div><div style="color:var(--mut)">${h(r.Location||'—')}</div>
@@ -693,13 +706,13 @@ const APP = (() => {
         const acts = fut
           ? `<button class="btn2" style="padding:2px 8px;font-size:11px" onclick='APP.wpForm(${JSON.stringify(w).replace(/'/g,"&#39;")})'>Edit</button> <button class="btn2" style="padding:2px 8px;font-size:11px;color:var(--bad)" onclick="APP.wpDel('${w['Row ID']}')">Del</button>`
           : inprog ? `<button class="btn2" style="padding:2px 8px;font-size:11px" onclick='APP.wpForm(${JSON.stringify(w).replace(/'/g,"&#39;")},"revise")'>Revise</button> <button class="btn2" style="padding:2px 8px;font-size:11px;color:var(--goldd)" onclick="APP.wpEnd('${w['Row ID']}')">End</button>` : '';
-        return `<div class="xr" style="grid-template-columns:${gtc}">
+        return `<div class="xr" style="grid-template-columns:${gtc};cursor:pointer" onclick="APP.wpView('${w['Row ID']}')">
           <div style="color:var(--mut)">${fmtD(w['From Date'])}</div><div style="color:var(--mut)">${fmtD(w['To Date'])}</div>
           <div>${h(w.Client)}</div><div>${h(w.Task)}</div><div class="num">${fmt1(w['Daily Hours'])}</div>
           <div style="color:var(--mut)">${h(w.Location||'—')}</div><div style="color:#486581" title="${h(w.Description)}">${h(w.Description||'')}</div>
           <div>${w['Include Off Days']==='Yes'?'<span class="pill" style="background:var(--goldbg);color:var(--goldd)">Yes</span>':'<span class="sub">No</span>'}</div>
           <div style="color:var(--mut)">${h(w['Planned By']||'Self')}</div>
-          <div style="white-space:nowrap">${acts}</div></div>`;
+          <div style="white-space:nowrap" onclick="event.stopPropagation()">${acts}</div></div>`;
       }).join('') || '<div style="padding:24px" class="sub">No plan yet — click + Plan work or any day above.</div>';
     };
     const calCells = dates.map(x=>{
@@ -900,7 +913,7 @@ const APP = (() => {
 
   // ---------------- LEAVE ----------------
   async function rLeave() {
-    const d = await EMS2.callAPI('initLeave', {});
+    const d = S.cache.lv = await EMS2.callAPI('initLeave', {});
     const m = await masters();
     const b = d.leaveBalance || {};
     const asg = m.assignments || [];
@@ -916,11 +929,11 @@ const APP = (() => {
       let rows = d.leaves || [];
       if (Flv.fstatus) rows = rows.filter(l=>l.Status===Flv.fstatus);
       rows = applySort('lvt', tq('lvt', rows), 'From Date', 'desc');
-      return rows.map(l=>`<div class="xr" style="grid-template-columns:${gtcL}">
+      return rows.map(l=>`<div class="xr" style="grid-template-columns:${gtcL};cursor:pointer" onclick="APP.lvView('${l['Row ID']}')">
         <div>${h(l['Leave Type'])}</div><div style="color:var(--mut)">${fmtD(l['From Date'])}</div><div style="color:var(--mut)">${fmtD(l['To Date'])}</div>
         <div class="num">${fmt1(l['Total Days'])}</div><div class="num" style="color:var(--ok)">${l['Paid Days']==null?'—':fmt1(l['Paid Days'])}</div><div class="num" style="color:${(+l['LOP Days']||0)>0?'var(--bad)':'var(--mut)'}">${l['LOP Days']==null?'—':fmt1(l['LOP Days'])}</div>
         <div>${stPill(l.Status)}</div><div style="color:#486581" title="${h(l.Reason)}">${h(l.Reason||'')}</div><div style="color:var(--mut)">${h(l['Approver Name']||'—')}</div>
-        <div style="white-space:nowrap">${l.Status==='Pending'?`<button class="btn2" style="padding:2px 8px;font-size:11px" onclick='APP.lvEdit(${JSON.stringify(l).replace(/'/g,"&#39;")})'>Edit</button> <button class="btn2" style="padding:2px 8px;font-size:11px;color:var(--bad)" onclick="APP.lvCancel('${l['Row ID']}')">Cancel</button>`:''}</div>
+        <div style="white-space:nowrap" onclick="event.stopPropagation()">${l.Status==='Pending'?`<button class="btn2" style="padding:2px 8px;font-size:11px" onclick='APP.lvEdit(${JSON.stringify(l).replace(/'/g,"&#39;")})'>Edit</button> <button class="btn2" style="padding:2px 8px;font-size:11px;color:var(--bad)" onclick="APP.lvCancel('${l['Row ID']}')">Cancel</button>`:''}</div>
       </div>`).join('') || '<div style="padding:24px" class="sub">No applications yet.</div>';
     };
     TBODY.cot = () => {
@@ -1197,6 +1210,51 @@ const APP = (() => {
     modal('Expense claim — ' + fmtD(x.Date), body + acts);
   }
 
+  const FROW = (l,v)=>`<div style="display:flex;gap:8px;padding:6px 0;border-bottom:1px solid var(--line2)"><span class="sub" style="width:150px;flex:none">${l}</span><span style="font:500 12.5px Inter;min-width:0;overflow-wrap:anywhere">${v||'—'}</span></div>`;
+  const STP = s => `<span class="pill" style="background:${s==='Approved'?'var(--okbg)':s==='Pending'?'var(--goldbg)':s==='Rejected'?'var(--badbg)':'var(--line2)'};color:${s==='Approved'?'var(--ok)':s==='Pending'?'var(--goldd)':s==='Rejected'?'var(--bad)':'var(--mut)'}">${h(s)}</span>`;
+
+  function lvView(rowId) {
+    const d = S.cache.lv || {};
+    const l = (d.leaves||[]).find(q=>String(q['Row ID'])===String(rowId)); if (!l) return;
+    const body = FROW('Status', STP(l.Status)) + FROW('Type', h(l['Leave Type'])) + FROW('Day type', h(l['Day Type'])) +
+      FROW('From', fmtD(l['From Date'])) + FROW('To', fmtD(l['To Date'])) +
+      FROW('Working days', fmt1(l['Total Days'])) +
+      FROW('Paid / LOP', (l['Paid Days']==null?'—':fmt1(l['Paid Days'])) + ' / ' + (l['LOP Days']==null?'—':fmt1(l['LOP Days']))) +
+      FROW('Reason', h(l.Reason)) + FROW('Applied on', h(l['Applied On'])) +
+      (l['Actioned On']?FROW('Decided on', h(l['Actioned On'])):'') +
+      (l['Approver Name']?FROW('Approver', h(l['Approver Name'])):'') +
+      (l['Approver Comments']?FROW('Approver comments', `<span style="color:var(--goldd)">${h(l['Approver Comments'])}</span>`):'');
+    const acts = l.Status==='Pending'
+      ? `<div style="margin-top:12px;display:flex;gap:10px"><button class="btn" onclick='closeModalAnd(()=>APP.lvEdit(${JSON.stringify(l).replace(/'/g,"&#39;")}))'>Edit</button><button class="btn2" style="color:var(--bad)" onclick="closeModalAnd(()=>APP.lvCancel('${l['Row ID']}'))">Cancel application</button></div>` : '';
+    modal('Leave application — ' + fmtD(l['From Date']), body + acts);
+  }
+
+  function wpView(rowId) {
+    const d = S.cache.wp || {};
+    const w = (d.myPlan||[]).find(q=>String(q['Row ID'])===String(rowId)); if (!w) return;
+    const todayStr = S.myday.today.date;
+    const fut = w['From Date'] >= todayStr, inprog = !fut && w['To Date'] >= todayStr;
+    const body = FROW('Client', h(w.Client)) + FROW('Task', h(w.Task)) +
+      FROW('From', fmtD(w['From Date'])) + FROW('To', fmtD(w['To Date'])) +
+      FROW('Hours/day', fmt1(w['Daily Hours'])) + FROW('Location', h(w.Location)) +
+      FROW('Description', h(w.Description)) +
+      FROW('Include off-days', h(w['Include Off Days']||'No')) +
+      FROW('Planned by', h(w['Planned By']||'Self')) +
+      FROW('Created', h(w['Created On'])) + (w['Updated On']?FROW('Updated', h(w['Updated On'])):'');
+    const acts = fut
+      ? `<div style="margin-top:12px;display:flex;gap:10px"><button class="btn" onclick='closeModalAnd(()=>APP.wpForm(${JSON.stringify(w).replace(/'/g,"&#39;")}))'>Edit</button><button class="btn2" style="color:var(--bad)" onclick="closeModalAnd(()=>APP.wpDel('${w['Row ID']}'))">Delete</button></div>`
+      : inprog ? `<div style="margin-top:12px;display:flex;gap:10px"><button class="btn" onclick='closeModalAnd(()=>APP.wpForm(${JSON.stringify(w).replace(/'/g,"&#39;")},"revise"))'>Revise from today</button><button class="btn2" style="color:var(--goldd)" onclick="closeModalAnd(()=>APP.wpEnd('${w['Row ID']}'))">End as of yesterday</button></div>` : '';
+    modal('Plan entry — ' + h(w.Client), body + acts);
+  }
+
+  function rtView(rowId) {
+    const r = (RT.rows||[]).find(q=>String(q['Row ID'])===String(rowId)); if (!r) return;
+    modal('Timesheet entry — ' + fmtD(r.Date),
+      FROW('Person', h(r.Person)) + FROW('Date', fmtD(r.Date)) + FROW('Client', h(r.Client)) +
+      FROW('Task', h(r.Task)) + FROW('Hours', fmt1(r.Hours)) + FROW('Location', h(r.Location)) +
+      FROW('Description', h(r.Description)) + FROW('Entry type', r.Auto ? 'Auto-generated' : 'Manual'));
+  }
+
   function exMonthGo(v) { S.exMonth = v; rExpenses(); }
 
   // ---------------- ANALYTICS (Drop 5) ----------------
@@ -1422,7 +1480,7 @@ const APP = (() => {
   async function signout() { await EMS2.signOut(); location.replace('home.html?next=app'); }
 
   boot();
-  return { show, signout, quickLog, logPlan, tsPopup, actGo, openAppr, selAppr, bulkApprove, rfshAppr, tsortGo: tsort, qGo, fGo, exForm, exMonthGo, rtSort, rtCSV, tsEdit, tsDel, wpForm, wpEnd, wpDel, wpNew, wpTabGo, tpForm, vizGo, vizEmpGo, vizCliGo, lvEdit, lvCancel, coCancel, exCancel, viewBill, exHint, exView, S, RENDER, masters, h, fmt1, toast, $ };
+  return { show, signout, quickLog, logPlan, tsPopup, actGo, openAppr, selAppr, bulkApprove, rfshAppr, tsortGo: tsort, qGo, fGo, exForm, exMonthGo, rtSort, rtCSV, tsEdit, tsDel, wpForm, wpEnd, wpDel, wpNew, wpTabGo, tpForm, vizGo, vizEmpGo, vizCliGo, lvEdit, lvCancel, coCancel, exCancel, viewBill, exHint, exView, lvView, wpView, rtView, S, RENDER, masters, h, fmt1, toast, $ };
 })();
 </script>
 </body>

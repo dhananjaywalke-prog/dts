@@ -31,10 +31,19 @@
         .num { text-align:right; }
         .toast { position:fixed; bottom:20px; right:20px; background:var(--navy); color:#fff; font:500 12.5px Inter; padding:10px 16px; border-radius:10px; z-index:99; box-shadow:0 8px 30px rgba(16,42,67,.35); }
         .toast.err { background:var(--bad); }
+            #sideA { width:216px; background:var(--navy); color:#fff; display:flex; flex-direction:column; position:sticky; top:0; height:100vh; flex:none; }
+        #sideA .brand { padding:18px; display:flex; align-items:center; gap:10px; border-bottom:1px solid rgba(255,255,255,.08); }
+        #sideA .brand img { height:36px; filter:brightness(0) invert(1); opacity:.95; display:block; }
+        #sideA .brand .bar { height:24px; width:1px; background:rgba(255,255,255,.25); }
+        #sideA .brand b { font-size:12px; font-weight:700; }
+        .nitemA { display:flex; align-items:center; gap:10px; padding:8px 12px; border:0; border-left:3px solid transparent; border-radius:0 8px 8px 0; background:none; color:rgba(255,255,255,.72); font:500 13px Inter; cursor:pointer; text-align:left; width:100%; text-decoration:none; }
+        .nitemA:hover { color:#fff; background:rgba(255,255,255,.05); }
+        .nitemA.on { background:rgba(212,168,83,.16); border-left-color:var(--gold); color:#fff; font-weight:600; }
+        .ngrpA { font:700 9.5px Inter; letter-spacing:.12em; text-transform:uppercase; color:rgba(255,255,255,.38); padding:12px 14px 4px; }
     </style>
 </head>
 <body>
-<div class="wrap" id="app"><p class="sub" style="padding:40px;text-align:center">Loading admin…</p></div>
+<div id="app" style="min-height:100vh;display:flex;align-items:stretch"><p class="sub" style="padding:40px;text-align:center">Loading admin…</p></div>
 <script src="config.js"></script>
 <script src="api.js"></script>
 <script>
@@ -189,9 +198,21 @@
     }
 
     function render() {
-        const tabs = Object.keys(ENTITIES).map(k=>`<button class="tab ${current===k?'on':''}" onclick="ADM.go('${k}')">${ENTITIES[k].title}</button>`).join('')
-            + `<button class="tab ${current==='audit'?'on':''}" onclick="ADM.go('audit')">Audit Log</button>`
-            + `<button class="tab ${current==='bills'?'on':''}" onclick="ADM.go('bills')">🧾 Bills PDF</button>`;
+        const tabs = '';
+        const APPV = [['dashboard','📊','Dashboard'],['approvals','✅','Approvals'],['review','🔎','Review'],['myday','☀️','My Day'],['timesheet','🗓','Timesheet'],['workplan','📋','Work Plan'],['leave','🌴','Leave'],['expenses','💳','Expenses']];
+        const AICON = { clients:'🏢', tasks:'🧰', employees:'👥', holidays:'📅', expense_heads:'🧾', announcements:'📣' };
+        const side = `<div id="sideA">
+          <div class="brand"><img src="https://drpca.com/assets/drpca-logo.png" alt="DRP" onerror="this.outerHTML='<b style=color:#d4a853>drp&amp;co.</b>'"><div class="bar"></div><b>TimeWise</b></div>
+          <div style="padding:10px 10px 0;display:flex;flex-direction:column;gap:1px;overflow:auto">
+            <div class="ngrpA">Portal</div>
+            ${APPV.map(v=>`<a class="nitemA" href="app.html#${v[0]}"><span>${v[1]}</span>${v[2]}</a>`).join('')}
+            <div class="ngrpA">Administration</div>
+            ${Object.keys(ENTITIES).map(k=>`<button class="nitemA ${current===k?'on':''}" onclick="ADM.go('${k}')"><span>${AICON[k]||'▪'}</span>${ENTITIES[k].title}</button>`).join('')}
+            <button class="nitemA ${current==='audit'?'on':''}" onclick="ADM.go('audit')"><span>🕘</span>Audit Log</button>
+            <button class="nitemA ${current==='bills'?'on':''}" onclick="ADM.go('bills')"><span>🧾</span>Bills PDF</button>
+          </div>
+          <div style="margin-top:auto;padding:12px 16px;border-top:1px solid rgba(255,255,255,.08)"><a href="app.html" style="color:rgba(255,255,255,.6);font:500 12px Inter;text-decoration:none">← Back to portal</a></div>
+        </div>`;
         let body;
         if (current === 'bills') body = billsHtml();
         else if (current === 'audit') body = auditHtml();
@@ -218,7 +239,7 @@
               <div id="tb_adm" style="max-height:62vh;overflow:auto">${rowsHtml()}</div>
             </div>`;
         }
-        $('app').innerHTML = `
+        $('app').innerHTML = side + `<div style="flex:1;min-width:0;padding:18px 22px;max-width:1360px">` + `
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
             <img src="https://drpca.com/assets/drpca-logo.png" style="height:34px" onerror="this.outerHTML='<b style=color:#102a43>drp&amp;co.</b>'">
             <div style="border-left:1px solid var(--line);padding-left:12px"><b style="font:700 15px Inter;color:var(--navy)">TimeWise Admin</b><div class="sub">${h(me.name)} · every change is audit-logged</div></div>
@@ -227,6 +248,7 @@
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${tabs}</div>
           ${body}
           ${editing!==null?editModal():''}`;
+        $('app').innerHTML += '</div>';
     }
 
     function auditHtml() {
