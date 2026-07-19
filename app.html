@@ -118,7 +118,7 @@ const APP = (() => {
       S.isAdmin = (d.employee && d.employee['Role']) === 'admin';
       S.isPartner = S.isAdmin || /partner/i.test((d.employee && d.employee['Designation']) || '');
       $('uName').textContent = S.me['Employee Name'] || email;
-      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b17';
+      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b18';
       $('uAv').textContent = (S.me['Employee Name']||email).split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
       buildNav();
       const hv = (location.hash || '').slice(1);
@@ -139,8 +139,7 @@ const APP = (() => {
     { id:'workplan', icon:'📋', label:'Work Plan' },
     { id:'leave', icon:'🌴', label:'Leave' },
     { id:'expenses', icon:'💳', label:'Expenses' },
-    S.isAdmin && { id:'admin', icon:'⚙️', label:'Admin', href:'admin.html' },
-    { id:'legacy', icon:'⋯', label:'Classic pages', href:'home.html' }
+    S.isAdmin && { id:'admin', icon:'⚙️', label:'Admin', href:'admin.html' }
   ].filter(Boolean);
 
   function missingYday() {
