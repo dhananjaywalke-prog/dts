@@ -14,7 +14,7 @@ const CONFIG = {
     SUPABASE_URL: 'https://kwwveapuniegeahbxeee.supabase.co',
     SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3d3ZlYXB1bmllZ2VhaGJ4ZWVlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM0MDU4ODYsImV4cCI6MjA5ODk4MTg4Nn0.pjQ3sgh8iUo_cZNrgow24qcFL4ihMwYkVLgIQTpnI7c',
 
-    IS_TEST_PORTAL: true,          // shows the gold TEST PORTAL ribbon on every page
+    IS_TEST_PORTAL: window.location.hostname.indexOf('ems2') === 0,          // shows the gold TEST PORTAL ribbon on every page
 
     // App
     VERSION: '4.0-ems2',
