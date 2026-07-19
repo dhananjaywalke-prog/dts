@@ -112,7 +112,7 @@
     if (r.error) {
       if (/JWT|not authenticated|401/i.test(r.error.message || '')) {
         await signOut();
-        if (!/home\.html|\/$/.test(location.pathname)) location.href = 'home.html';
+        if (!/home\.html|\/$/.test(location.pathname)) location.href = 'home.html?next=app';
       }
       throw new Error(cleanErr(r.error.message));
     }

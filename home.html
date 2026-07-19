@@ -175,6 +175,7 @@
                 taskCounts = initData.taskCounts || { total: 0, pending: 0, overdue: 0 };
                 isLoggedIn = true;
                 saveSession();
+                if (new URLSearchParams(location.search).get('next') === 'app') { window.location.replace('app.html'); return; }
                 render();
             } catch (error) {
                 btn.disabled = false; btn.innerHTML = 'Verify & Sign In';
@@ -392,6 +393,7 @@
                         isLoggedIn = true;
                         saveSession();
                         hideLoading();
+                        if (new URLSearchParams(location.search).get('next') === 'app') { window.location.replace('app.html'); return; }
                     }
                 } catch (e) { hideLoading(); }
                 render();
