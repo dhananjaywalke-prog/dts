@@ -118,7 +118,7 @@ const APP = (() => {
       S.isAdmin = (d.employee && d.employee['Role']) === 'admin';
       S.isPartner = S.isAdmin || /partner/i.test((d.employee && d.employee['Designation']) || '');
       $('uName').textContent = S.me['Employee Name'] || email;
-      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b19';
+      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b20';
       $('uAv').textContent = (S.me['Employee Name']||email).split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
       buildNav();
       const hv = (location.hash || '').slice(1);
@@ -1492,32 +1492,45 @@ const APP = (() => {
   }
   const fmt0 = n => Math.round(+n||0).toLocaleString('en-IN');
 
+  function asgPill(s) {
+    const m = { 'To Start':['#eff6ff','#2563EB'], 'WIP':['var(--goldbg)','var(--goldd)'], 'Complete':['var(--okbg)','var(--ok)'], 'Hold':['#f3e8ff','#7c3aed'], 'Cancelled':['var(--line2)','var(--mut)'] };
+    const c = m[s] || ['var(--line2)','var(--mut)'];
+    return `<span class="pill" style="background:${c[0]};color:${c[1]}">${h(s)}</span>`;
+  }
+  const ASG_OPEN = ['To Start','WIP','Hold'];
+
   async function rAssignments() {
     if (!S.isPartner) { $('view').innerHTML = '<div class="card"><b>Partners/admin only.</b></div>'; return; }
     const d = await asgData(true);
     const rl = await EMS2.callAPI('realisation', {});
     const F = TSORT['asg'] = TSORT['asg']||{};
-    const rows0 = d.rows || [];
+    const t = new Date();
+    const todayStr = t.getFullYear() + '-' + String(t.getMonth()+1).padStart(2,'0') + '-' + String(t.getDate()).padStart(2,'0');
+    const rows0 = (d.rows || []).map(r=>({ ...r,
+      Rec: (r.Fees!=null && +r.Cost>0) ? Math.round(100*+r.Fees/+r.Cost) : null,
+      'Due Sort': r['Due Date'] || '9999-12-31' }));
     const partners = [...new Set(rows0.map(r=>r.Partner).filter(Boolean))].sort();
-    const act = rows0.filter(r=>r.Status==='Active');
+    const open = rows0.filter(r=>ASG_OPEN.includes(r.Status));
+    const overdue = open.filter(r=>r['Due Date'] && r['Due Date'] < todayStr).length;
     const feesTot = rows0.reduce((s,r)=>s+(+r.Fees||0),0);
     const costTot = rows0.filter(r=>r.Fees!=null).reduce((s,r)=>s+(+r.Cost||0),0);
-    const gtc = '1.2fr 130px 110px 110px 84px 84px 80px 80px 56px 86px 118px';
-    const cols = [{k:'Client',l:'Client'},{k:'Service',l:'Service'},{k:'Partner',l:'Partner'},{k:'Manager',l:'Manager'},{k:'Due Date',l:'Due'},{k:'Created',l:'Created'},{k:'Fees',l:'Fees ₹',r:1},{k:'Cost',l:'Cost ₹',r:1},{k:'Rec',l:'Rec%',r:1},{k:'Status',l:'Status'},{l:''}];
+    const gtc = '78px 1.2fr 120px 105px 105px 80px 76px 76px 52px 88px 58px';
+    const cols = [{k:'Created',l:'Created'},{k:'Client',l:'Client'},{k:'Service',l:'Service'},{k:'Partner',l:'Partner'},{k:'Manager',l:'Manager'},{k:'Due Sort',l:'Due'},{k:'Fees',l:'Fees ₹',r:1},{k:'Cost',l:'Cost ₹',r:1},{k:'Rec',l:'Rec%',r:1},{k:'Status',l:'Status'},{l:''}];
     TBODY.asg = () => {
-      let rows = rows0.map(r=>({ ...r, Rec: (r.Fees!=null && +r.Cost>0) ? Math.round(100*+r.Fees/+r.Cost) : null }));
+      let rows = rows0;
       if (F.fstatus) rows = rows.filter(r=>r.Status===F.fstatus);
       if (F.fpartner) rows = rows.filter(r=>r.Partner===F.fpartner);
-      rows = applySort('asg', tq('asg', rows), 'Created', 'desc');
+      rows = applySort('asg', tq('asg', rows), 'Due Sort', 'asc');
       return rows.map(r=>{
-        const a = r.Status==='Active';
-        return `<div class="xr" style="grid-template-columns:${gtc};cursor:pointer${a?'':';background:#fbfcfe;color:var(--mut)'}" onclick="APP.asgView('${r['Row ID']}')">
+        const od = r['Due Date'] && r['Due Date'] < todayStr && ASG_OPEN.includes(r.Status);
+        return `<div class="xr" style="grid-template-columns:${gtc};cursor:pointer${ASG_OPEN.includes(r.Status)?'':';background:#fbfcfe;color:var(--mut)'}" onclick="APP.asgView('${r['Row ID']}')">
+          <div style="color:var(--mut)">${fmtD(r.Created)}</div>
           <div>${h(r.Client)}</div><div>${h(r.Service)}</div><div>${h(r.Partner||'—')}</div><div>${h(r.Manager||'—')}</div>
-          <div style="color:var(--mut)">${r['Due Date']?fmtD(r['Due Date']):'—'}</div><div style="color:var(--mut)">${fmtD(r.Created)}</div>
+          <div style="${od?'color:var(--bad);font-weight:700;background:var(--badbg);border-radius:4px;padding:0 4px;':'color:var(--mut)'}">${r['Due Date']?fmtD(r['Due Date']):'—'}</div>
           <div class="num">${r.Fees!=null?fmt0(r.Fees):'—'}</div><div class="num">${fmt0(r.Cost)}</div>
           <div class="num" style="color:${r.Rec==null?'var(--fog)':r.Rec>=100?'var(--ok)':'var(--bad)'}">${r.Rec==null?'—':r.Rec}</div>
-          <div><span class="pill" style="background:${a?'var(--okbg)':'var(--line2)'};color:${a?'var(--ok)':'var(--mut)'}">${h(r.Status)}</span></div>
-          <div style="white-space:nowrap" onclick="event.stopPropagation()">${a?`<button class="btn2" style="padding:2px 8px;font-size:11px" onclick='APP.asgForm(${JSON.stringify(r).replace(/'/g,"&#39;")})'>Edit</button> <button class="btn2" style="padding:2px 8px;font-size:11px;color:var(--goldd)" onclick="APP.asgClose('${r['Row ID']}')">Close</button>`:''}</div>
+          <div>${asgPill(r.Status)}</div>
+          <div onclick="event.stopPropagation()"><button class="btn2" style="padding:2px 8px;font-size:11px" onclick='APP.asgForm(${JSON.stringify(r).replace(/'/g,"&#39;")})'>Edit</button></div>
         </div>`;}).join('') || '<div style="padding:24px" class="sub">No assignments match.</div>';
     };
     const rlRows = (rl||[]).map(x=>`<div class="xr" style="grid-template-columns:1.4fr 90px 110px 110px 80px">
@@ -1525,15 +1538,15 @@ const APP = (() => {
       <div class="num" style="color:${x.Recovery==null?'var(--fog)':x.Recovery>=100?'var(--ok)':'var(--bad)'}">${x.Recovery==null?'—':x.Recovery+'%'}</div></div>`).join('');
     $('view').innerHTML = `
     <div class="grid" style="grid-template-columns:repeat(4,1fr)">
-      <div class="card"><div style="font:800 22px Inter;color:var(--navy)">${act.length}</div><div class="sub">Active assignments</div></div>
+      <div class="card"><div style="font:800 22px Inter;color:var(--navy)">${open.length}</div><div class="sub">Open assignments${overdue?` · <span style="color:var(--bad);font-weight:700">${overdue} overdue</span>`:''}</div></div>
       <div class="card"><div style="font:800 22px Inter;color:var(--ok)">₹${fmt0(feesTot)}</div><div class="sub">Fees booked</div></div>
       <div class="card"><div style="font:800 22px Inter;color:var(--goldd)">₹${fmt0(costTot)}</div><div class="sub">Cost on fee'd assignments</div></div>
       <div class="card"><div style="font:800 22px Inter;color:${costTot&&feesTot/costTot>=1?'var(--ok)':'var(--bad)'}">${costTot?Math.round(100*feesTot/costTot)+'%':'—'}</div><div class="sub">Overall recovery</div></div>
     </div>
     <div class="card" style="padding:0;overflow:hidden;margin-top:12px">
       <div style="padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span class="h">Assignment register</span><span class="sub">fees &amp; cost visible to partners only · cost counts from creation date</span>
-        <select style="width:120px;margin-left:12px" onchange="APP.fGo('asg','fstatus',this.value)"><option value="">Status: All</option>${['Active','Completed','Cancelled'].map(s=>`<option ${s===F.fstatus?'selected':''}>${s}</option>`).join('')}</select>
+        <span class="h">Assignment register</span><span class="sub">sorted by due date · red = overdue · fees visible to partners only</span>
+        <select style="width:130px;margin-left:12px" onchange="APP.fGo('asg','fstatus',this.value)"><option value="">Status: All</option>${['To Start','WIP','Complete','Hold','Cancelled'].map(s=>`<option ${s===F.fstatus?'selected':''}>${s}</option>`).join('')}</select>
         <select style="width:150px" onchange="APP.fGo('asg','fpartner',this.value)"><option value="">Partner: All</option>${partners.map(x=>`<option ${x===F.fpartner?'selected':''}>${h(x)}</option>`).join('')}</select>
         <input id="q_asg" style="width:170px" placeholder="🔍 Search…" value="${h(F.q||'')}" oninput="APP.qGo('asg', this.value)">
         <span style="flex:1"></span>
@@ -1556,7 +1569,7 @@ const APP = (() => {
     const d = S.cache.asg || {};
     const r = (d.rows||[]).find(q=>String(q['Row ID'])===String(rowId)); if (!r) return;
     const rec = (r.Fees!=null && +r.Cost>0) ? Math.round(100*+r.Fees/+r.Cost)+'%' : '—';
-    const body = FROW('Status', STP(r.Status==='Active'?'Approved':'Cancelled').replace('Approved',h(r.Status)).replace('Cancelled',h(r.Status))) +
+    const body = FROW('Status', asgPill(r.Status)) +
       FROW('Client', h(r.Client)) + FROW('Service', h(r.Service)) +
       FROW('Partner', h(r.Partner)) + FROW('Manager', h(r.Manager)) +
       FROW('Due date', r['Due Date']?fmtD(r['Due Date']):'—') + FROW('Created', fmtD(r.Created)) +
@@ -1564,8 +1577,7 @@ const APP = (() => {
       FROW('Fees ₹', r.Fees!=null?fmt0(r.Fees):'— not set') + FROW('Cost to date ₹', fmt0(r.Cost)) + FROW('Recovery', rec) +
       FROW('Description', h(r.Description)) +
       FROW('Assignment ID', `<span style="font:500 10.5px ui-monospace,monospace;color:var(--fog)">${h(r['Row ID'])}</span>`);
-    const acts = r.Status==='Active'
-      ? `<div style="margin-top:12px;display:flex;gap:10px"><button class="btn" onclick='closeModalAnd(()=>APP.asgForm(${JSON.stringify(r).replace(/'/g,"&#39;")}))'>Edit</button><button class="btn2" style="color:var(--goldd)" onclick="closeModalAnd(()=>APP.asgClose('${r['Row ID']}'))">Close assignment</button></div>` : '';
+    const acts = `<div style="margin-top:12px"><button class="btn" onclick='closeModalAnd(()=>APP.asgForm(${JSON.stringify(r).replace(/'/g,"&#39;")}))'>Edit</button></div>`;
     modal('Assignment — ' + h(r.Client), body + acts);
   }
 
@@ -1575,10 +1587,11 @@ const APP = (() => {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div style="grid-column:1/-1"><label class="sub">Client</label><input id="as_client" list="as_cl" value="${r?h(r.Client):''}" ${isEdit?'disabled':''} placeholder="type to search…"><datalist id="as_cl">${(d.clients||[]).map(c=>`<option>${h(c)}</option>`).join('')}</datalist></div>
         <div style="grid-column:1/-1"><label class="sub">Service</label><select id="as_service" ${isEdit?'disabled':''}><option value="">Service…</option>${(d.services||[]).map(s=>`<option ${r&&r.Service===s?'selected':''}>${h(s)}</option>`).join('')}</select></div>
-        <div><label class="sub">Partner (locked at creation)</label><select id="as_partner" ${isEdit?'disabled':''}>${(d.partners||[]).map(x=>`<option ${(r?r.Partner:S.me['Employee Name'])===x?'selected':''}>${h(x)}</option>`).join('')}</select></div>
-        <div><label class="sub">Manager (locked at creation)</label><select id="as_manager" ${isEdit?'disabled':''}><option value="">Manager…</option>${(d.managers||[]).map(x=>`<option ${r&&r.Manager===x?'selected':''}>${h(x)}</option>`).join('')}</select></div>
+        <div><label class="sub">Partner</label><select id="as_partner">${(d.partners||[]).map(x=>`<option ${(r?r.Partner:S.me['Employee Name'])===x?'selected':''}>${h(x)}</option>`).join('')}</select></div>
+        <div><label class="sub">Manager</label><select id="as_manager"><option value="">Manager…</option>${(d.managers||[]).map(x=>`<option ${r&&r.Manager===x?'selected':''}>${h(x)}</option>`).join('')}</select></div>
         <div><label class="sub">Due date</label><input type="date" id="as_due" value="${r?r['Due Date']||'':''}"></div>
-        <div><label class="sub">Fees ₹ (editable until completion)</label><input type="number" id="as_fees" min="0" step="1" value="${r&&r.Fees!=null?r.Fees:''}"></div>
+        ${isEdit?`<div><label class="sub">Status</label><select id="as_status">${['To Start','WIP','Complete','Hold','Cancelled'].map(s=>`<option ${r.Status===s?'selected':''}>${s}</option>`).join('')}</select></div>`:''}
+        <div><label class="sub">Fees ₹ (locked when Complete/Cancelled)</label><input type="number" id="as_fees" min="0" step="1" value="${r&&r.Fees!=null?r.Fees:''}"></div>
         <div style="grid-column:1/-1"><label class="sub">Description</label><input id="as_desc" value="${r?h(r.Description||''):''}"></div>
       </div>
       <div style="margin-top:14px"><button class="btn" id="as_save">${isEdit?'Update':'Create'}</button></div>`);
@@ -1588,36 +1601,32 @@ const APP = (() => {
         dueDate: $('as_due').value, fees: $('as_fees').value, description: $('as_desc').value.trim() };
       if (!isEdit && (!pl.client || !pl.service)) return toast('Pick client and service', true);
       if (!isEdit && !pl.manager) return toast('Pick the assignment manager', true);
-      if (isEdit) pl.rowId = r['Row ID'];
+      if (isEdit) { pl.rowId = r['Row ID']; pl.status = $('as_status').value; }
       $('as_save').disabled = true;
       try { await EMS2.callAPI(isEdit?'updateAssignment':'createAssignment', pl); closeModal(); S.masters = null; toast(isEdit?'Updated ✓':'Assignment created ✓'); rAssignments(); }
       catch (e) { toast(e.message, true); $('as_save').disabled = false; }
     };
   }
 
-  async function asgClose(rowId) {
-    const st = confirm('OK = mark Completed · Cancel = keep it Active.\n(Choose Completed for finished work; use Edit for other changes.)') ? 'Completed' : null;
-    if (!st) return;
-    try { await EMS2.callAPI('updateAssignment', { rowId, status: st }); S.masters = null; toast('Closed ✓ — pair stays loggable for 7 days'); rAssignments(); }
-    catch (e) { toast(e.message, true); }
-  }
+  
 
   function asgCSVt() {
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob(['Assignment ID,Client,Service,Partner,Manager,Due Date,Fees,Description,Status\n'], { type: 'text/csv' }));
+    a.href = URL.createObjectURL(new Blob(['Assignment ID,Client,Service,Partner,Manager,Due Date,Fees,Status,Description\n'], { type: 'text/csv' }));
     a.download = 'assignments-template.csv'; a.click();
-    toast('Leave Assignment ID blank for NEW rows; keep it to UPDATE existing ones');
+    toast('Blank Assignment ID = NEW row. Status: To Start / WIP / Complete / Hold / Cancelled');
   }
   function asgCSVe() {
     const d = S.cache.asg || {};
-    const heads = ['Assignment ID','Client','Service','Partner','Manager','Due Date','Fees','Description','Status','Created','Cost'];
-    const key = { 'Assignment ID':'Row ID' };
+    const heads = ['Assignment ID','Created','Client','Service','Partner','Manager','Due Date','Fees','Cost','Rec%','Status','Closed On','Description'];
     const esc = v => '"' + String(v??'').replace(/"/g,'""') + '"';
-    const csv = [heads.join(',')].concat((d.rows||[]).map(r=>heads.map(k=>esc(r[key[k]||k])).join(','))).join('\n');
+    const rows = (d.rows||[]).map(r=>({ ...r, 'Assignment ID': r['Row ID'],
+      'Rec%': (r.Fees!=null && +r.Cost>0) ? Math.round(100*+r.Fees/+r.Cost) : '' }));
+    const csv = [heads.join(',')].concat(rows.map(r=>heads.map(k=>esc(r[k])).join(','))).join('\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
     a.download = 'assignments.csv'; a.click();
-    toast('Edit Due/Fees/Manager/Description/Status in Excel, keep Assignment ID, re-import to update');
+    toast('Edit anything except Assignment ID & Created; Cost/Rec%/Closed On are computed (ignored on import)');
   }
   function parseCSVtext(t) {
     const rows = []; let row = [], cell = '', q = false;
@@ -1644,7 +1653,7 @@ const APP = (() => {
       line: i+2, rowId: g(r,'assignment id'),
       client: g(r,'client'), service: g(r,'service'), partner: g(r,'partner'), manager: g(r,'manager'),
       dueDate: g(r,'due date'), fees: g(r,'fees'), description: g(r,'description'),
-      status: (s=>['Active','Completed','Cancelled'].includes(s)?s:'')(g(r,'status')) }));
+      status: (s=>['To Start','WIP','Complete','Hold','Cancelled'].includes(s)?s:'')(g(r,'status')) }));
     const nUpd = items.filter(x=>x.rowId).length, nNew = items.length - nUpd;
     modal('Import assignments', `<div style="font:500 12.5px Inter;line-height:1.6">${items.length} row(s) parsed → <b>${nUpd} update(s)</b> (rows with an Assignment ID — blank cells are left unchanged) and <b>${nNew} new</b> assignment(s).</div><div style="margin-top:12px"><button class="btn" id="as_imp_go">Apply</button></div><div id="as_imp_st" class="sub" style="margin-top:8px"></div>`);
     $('as_imp_go').onclick = async () => {
@@ -1677,7 +1686,7 @@ const APP = (() => {
   async function signout() { await EMS2.signOut(); location.replace('home.html?next=app'); }
 
   boot();
-  return { show, signout, quickLog, logPlan, tsPopup, actGo, openAppr, selAppr, bulkApprove, rfshAppr, tsortGo: tsort, qGo, fGo, exForm, exMonthGo, rtSort, rtCSV, tsEdit, tsDel, wpForm, wpEnd, wpDel, wpNew, wpTabGo, tpForm, vizGo, vizEmpGo, vizCliGo, lvEdit, lvCancel, coCancel, exCancel, viewBill, exHint, exView, lvView, wpView, rtView, asgView, asgForm, asgClose, asgCSVt, asgCSVe, asgImp, S, RENDER, masters, h, fmt1, toast, $ };
+  return { show, signout, quickLog, logPlan, tsPopup, actGo, openAppr, selAppr, bulkApprove, rfshAppr, tsortGo: tsort, qGo, fGo, exForm, exMonthGo, rtSort, rtCSV, tsEdit, tsDel, wpForm, wpEnd, wpDel, wpNew, wpTabGo, tpForm, vizGo, vizEmpGo, vizCliGo, lvEdit, lvCancel, coCancel, exCancel, viewBill, exHint, exView, lvView, wpView, rtView, asgView, asgForm, asgCSVt, asgCSVe, asgImp, S, RENDER, masters, h, fmt1, toast, $ };
 })();
 </script>
 </body>
