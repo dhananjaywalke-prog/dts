@@ -118,7 +118,7 @@ const APP = (() => {
       S.isAdmin = (d.employee && d.employee['Role']) === 'admin';
       S.isPartner = S.isAdmin || /partner/i.test((d.employee && d.employee['Designation']) || '');
       $('uName').textContent = S.me['Employee Name'] || email;
-      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b21';
+      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b22';
       $('uAv').textContent = (S.me['Employee Name']||email).split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
       buildNav();
       const hv = (location.hash || '').slice(1);
@@ -315,8 +315,9 @@ const APP = (() => {
 
   const BULK = { leave:{}, expense:{}, compoff:{} };
 
-  function openAppr(kind, id) {
+  async function openAppr(kind, id) {
     const d = S.cache.dashboard; if (!d) return;
+    if (kind==='expense' && !S.cache.exp) { try { S.cache.exp = await EMS2.callAPI('initExpense', {}); } catch (e) {} }
     const list = kind==='leave' ? d.approvals.leaves : kind==='compoff' ? d.approvals.compOffs : d.approvals.expenses;
     const it = (list||[]).find(x=>String(x['Row ID'])===String(id)); if (!it) return;
     const F = (l,v)=>`<div style="display:flex;gap:8px;padding:6px 0;border-bottom:1px solid var(--line2)"><span class="sub" style="width:140px;flex:none">${l}</span><span style="font:500 12.5px Inter;min-width:0">${v||'—'}</span></div>`;
@@ -325,11 +326,13 @@ const APP = (() => {
       : kind==='compoff'
       ? F('Employee',h(it['Employee Name']))+F('Worked on',fmtD(it.Date))+F('Day type',h(it['Day Type']))+F('Credit',fmt1(it.Credit)+' day(s)')+F('Client',h(it.Client))+F('Task',h(it.Task))+F('Hours logged that day',fmt1(it['Hours Logged'])+'h')+F('Reason',h(it.Reason))+F('Applied on',h(it['Applied On']))
       : F('Employee',h(it['Employee Name']))+F('Date',fmtD(it.Date))+F('Type',h(it['Expense Type']))+F('Amount','₹'+fmt1(it.Amount))+F('Client',h(it['Client Name']))+F('Reimbursement by',h(it['Reimbursement By']))+F('Receipt ref',h(it['Receipt Reference']))+F('Bill copy', it['Receipt File']?`<a href="#" onclick="APP.viewBill('${h(it['Receipt File'])}');return false" style="font-weight:600">📎 View bill</a>`:'Not attached')+F('Description',h(it.Description))+F('Submitted on',h(it['Submitted On']))+`<div style="display:flex;gap:8px;padding:8px 0 2px;align-items:center"><span class="sub" style="width:140px;flex:none">Approve amount ₹</span><input type="number" id="ap_amt" min="1" step="0.01" max="${it.Amount}" value="${it.Amount}" style="width:140px"><span class="sub">claimed ₹${fmt1(it.Amount)} · lower needs a comment</span></div>`;
+    const exCorr = kind==='expense' ? (()=>{ const cls=((S.cache.exp||{}).clients||[]).map(c=>c['Client Full Name']).filter(Boolean); return `<div style="margin-top:10px;background:var(--goldbg);border:1px solid var(--goldline);border-radius:8px;padding:8px 10px"><div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap"><div><label class="sub">Reimbursement by</label><select id="ap_rb" style="width:170px">${['Client','DRP & Co. LLP'].map(v=>`<option ${(it['Reimbursement By']||'')===v?'selected':''}>${v}</option>`).join('')}</select></div><div style="flex:1;min-width:220px"><label class="sub">Client</label><select id="ap_cli"><option value="">—</option>${cls.map(c=>`<option ${(it['Client Name']||'')===c?'selected':''}>${h(c)}</option>`).join('')}</select></div></div><div class="sub" style="margin-top:4px">correct these if the contract says otherwise — approving with changes requires a comment</div></div>`; })() : '';
     const lvDates = kind==='leave' ? `<div style="display:flex;gap:10px;align-items:end;margin-top:10px;background:var(--goldbg);border:1px solid var(--goldline);border-radius:8px;padding:8px 10px"><div><label class="sub">Approve From</label><input type="date" id="ap_from" value="${it['From Date']}" style="width:150px"></div><div><label class="sub">Approve To</label><input type="date" id="ap_to" value="${it['To Date']}" style="width:150px"></div><span class="sub" style="padding-bottom:8px">change dates to approve a modified period — comment required; days &amp; paid/LOP recompute</span></div>` : '';
-    modal((kind==='leave'?'Leave':kind==='compoff'?'Comp-off claim':'Expense')+' — review', body + lvDates +
-      `<div style="margin-top:12px"><label class="sub">Comments — required to reject (${SANE_HINT})</label><textarea id="ap_cmt" rows="2"></textarea></div>
+    modal((kind==='leave'?'Leave':kind==='compoff'?'Comp-off claim':'Expense')+' — review', body + exCorr + lvDates +
+      `<div style="margin-top:12px"><label class="sub">Comments — required to reject / send back (${SANE_HINT})</label><textarea id="ap_cmt" rows="2"></textarea></div>
       <div style="margin-top:12px;display:flex;gap:10px">
         <button class="btn" style="background:var(--ok)" onclick="APP.actGo('${kind}','approve','${id}')">✓ Approve</button>
+        ${kind!=='compoff'?`<button class="btn2" style="color:#ea580c;border-color:#fed7aa" onclick="APP.actGo('${kind}','sendback','${id}')">↩ Send back</button>`:''}
         <button class="btn" style="background:var(--bad)" onclick="APP.actGo('${kind}','reject','${id}')">✕ Reject</button>
       </div>`);
   }
@@ -337,8 +340,8 @@ const APP = (() => {
   async function actGo(kind, what, id) {
     const cEl = $('ap_cmt');
     const comments = (cEl && cEl.value.trim()) || '';
-    if (what==='reject' && !sane(comments)) return toast('Rejection needs a ' + SANE_HINT, true);
-    let approvedAmount = '';
+    if ((what==='reject'||what==='sendback') && !sane(comments)) return toast((what==='reject'?'Rejection':'Sending back')+' needs a ' + SANE_HINT + ' telling the person what to fix', true);
+    let approvedAmount = '', reimbursementBy = '', clientName = '';
     const amtEl = $('ap_amt');
     if (what==='approve' && kind==='expense' && amtEl) {
       approvedAmount = amtEl.value;
@@ -346,6 +349,16 @@ const APP = (() => {
       if (!(+approvedAmount > 0)) return toast('Enter a valid approved amount', true);
       if (+approvedAmount > claimed) return toast('Approved amount cannot exceed claimed ₹' + fmt1(claimed), true);
       if (+approvedAmount < claimed && !sane(comments)) return toast('Approving less than claimed needs a ' + SANE_HINT + ' so the person knows why', true);
+    }
+    if (what==='approve' && kind==='expense' && $('ap_rb')) {
+      const list2 = (S.cache.dashboard && S.cache.dashboard.approvals.expenses) || [];
+      const orig2 = list2.find(x=>String(x['Row ID'])===String(id)) || {};
+      const rb = $('ap_rb').value, cl = $('ap_cli') ? $('ap_cli').value : '';
+      if (rb !== (orig2['Reimbursement By']||'') || cl !== (orig2['Client Name']||'')) {
+        if (rb==='Client' && !cl) return toast('Client-reimbursed claims need a client — pick one', true);
+        if (!sane(comments)) return toast('Changing reimbursement/client needs a ' + SANE_HINT + ' so the person knows why', true);
+        reimbursementBy = rb; clientName = cl;
+      }
     }
     let fromDate = '', toDate = '';
     const fEl = $('ap_from'), tEl = $('ap_to');
@@ -360,10 +373,11 @@ const APP = (() => {
     }
     closeModal();
     try {
-      await EMS2.callAPI((what==='approve'?'approve':'reject')+(kind==='leave'?'Leave':kind==='compoff'?'CompOff':'Expense'),
-        { rowId: id, approverEmail: S.me['Employee Email'], approverName: S.me['Employee Name'], comments, approvedAmount, fromDate, toDate });
-      toast((what==='approve'?'Approved':'Rejected')+' ✓');
+      await EMS2.callAPI(what==='sendback' ? ('sendBack'+(kind==='leave'?'Leave':'Expense')) : (what==='approve'?'approve':'reject')+(kind==='leave'?'Leave':kind==='compoff'?'CompOff':'Expense'),
+        { rowId: id, approverEmail: S.me['Employee Email'], approverName: S.me['Employee Name'], comments, approvedAmount, fromDate, toDate, reimbursementBy, clientName });
+      toast(what==='approve'?'Approved ✓':what==='sendback'?'Sent back ✓ — they can edit & resubmit':'Rejected ✓');
       delete BULK[kind][id];
+      S.cache.exp = null; S.cache.lv = null;
       await dashData(true); buildNav(); RENDER[S.view]();
     } catch (e) { toast(e.message, true); }
   }
@@ -933,16 +947,16 @@ const APP = (() => {
     const lvCols = [{k:'Leave Type',l:'Type'},{k:'From Date',l:'From'},{k:'To Date',l:'To'},{k:'Total Days',l:'Days',r:1},{k:'Paid Days',l:'Paid',r:1},{k:'LOP Days',l:'LOP',r:1},{k:'Status',l:'Status'},{k:'Reason',l:'Reason'},{k:'Approver Name',l:'Approver'},{l:''}];
     const gtcC = '92px 84px 60px 1fr 150px 56px 92px 1.2fr 88px';
     const coCols = [{k:'Date',l:'Worked On'},{k:'Day Type',l:'Day'},{k:'Credit',l:'Credit',r:1},{k:'Client',l:'Client'},{k:'Task',l:'Task'},{k:'Hours Logged',l:'Hrs',r:1},{k:'Status',l:'Status'},{k:'Reason',l:'Reason'},{l:''}];
-    const stPill = s => `<span class="pill" style="background:${s==='Approved'?'var(--okbg)':s==='Pending'?'var(--goldbg)':'var(--line2)'};color:${s==='Approved'?'var(--ok)':s==='Pending'?'var(--goldd)':'var(--mut)'}">${h(s)}</span>`;
+    const stPill = s => { const m={'Approved':['var(--okbg)','var(--ok)'],'Pending':['var(--goldbg)','var(--goldd)'],'Rejected':['var(--badbg)','var(--bad)'],'Sent Back':['#fff7ed','#ea580c']}; const c=m[s]||['var(--line2)','var(--mut)']; return `<span class="pill" style="background:${c[0]};color:${c[1]}">${h(s)}</span>`; };
     TBODY.lvt = () => {
       let rows = d.leaves || [];
       if (Flv.fstatus) rows = rows.filter(l=>l.Status===Flv.fstatus);
       rows = applySort('lvt', tq('lvt', rows), 'From Date', 'desc');
-      return rows.map(l=>`<div class="xr" style="grid-template-columns:${gtcL};cursor:pointer" onclick="APP.lvView('${l['Row ID']}')">
+      return rows.map(l=>`<div class="xr" style="grid-template-columns:${gtcL};cursor:pointer${l.Status==='Sent Back'?';background:#fff7ed':''}" onclick="APP.lvView('${l['Row ID']}')">
         <div>${h(l['Leave Type'])}</div><div style="color:var(--mut)">${fmtD(l['From Date'])}</div><div style="color:var(--mut)">${fmtD(l['To Date'])}</div>
         <div class="num">${fmt1(l['Total Days'])}</div><div class="num" style="color:var(--ok)">${l['Paid Days']==null?'—':fmt1(l['Paid Days'])}</div><div class="num" style="color:${(+l['LOP Days']||0)>0?'var(--bad)':'var(--mut)'}">${l['LOP Days']==null?'—':fmt1(l['LOP Days'])}</div>
         <div>${stPill(l.Status)}</div><div style="color:#486581" title="${h(l.Reason)}">${h(l.Reason||'')}</div><div style="color:var(--mut)">${h(l['Approver Name']||'—')}</div>
-        <div style="white-space:nowrap" onclick="event.stopPropagation()">${l.Status==='Pending'?`<button class="btn2" style="padding:2px 8px;font-size:11px" onclick='APP.lvEdit(${JSON.stringify(l).replace(/'/g,"&#39;")})'>Edit</button> <button class="btn2" style="padding:2px 8px;font-size:11px;color:var(--bad)" onclick="APP.lvCancel('${l['Row ID']}')">Cancel</button>`:''}</div>
+        <div style="white-space:nowrap" onclick="event.stopPropagation()">${(l.Status==='Pending'||l.Status==='Sent Back')?`<button class="btn2" style="padding:2px 8px;font-size:11px" onclick='APP.lvEdit(${JSON.stringify(l).replace(/'/g,"&#39;")})'>Edit</button> <button class="btn2" style="padding:2px 8px;font-size:11px;color:var(--bad)" onclick="APP.lvCancel('${l['Row ID']}')">Cancel</button>`:''}</div>
       </div>`).join('') || '<div style="padding:24px" class="sub">No applications yet.</div>';
     };
     TBODY.cot = () => {
@@ -992,7 +1006,7 @@ const APP = (() => {
     <div class="card" style="padding:0;overflow:hidden;margin-top:12px">
       <div style="padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span class="h">My leave applications</span>
-        <select style="width:130px;margin-left:12px" onchange="APP.fGo('lvt','fstatus',this.value)"><option value="">Status: All</option>${['Pending','Approved','Rejected','Cancelled'].map(s=>`<option ${s===Flv.fstatus?'selected':''}>${s}</option>`).join('')}</select>
+        <select style="width:130px;margin-left:12px" onchange="APP.fGo('lvt','fstatus',this.value)"><option value="">Status: All</option>${['Pending','Sent Back','Approved','Rejected','Cancelled'].map(s=>`<option ${s===Flv.fstatus?'selected':''}>${s}</option>`).join('')}</select>
         <input id="q_lvt" style="width:170px" placeholder="🔍 Search…" value="${h(Flv.q||'')}" oninput="APP.qGo('lvt', this.value)">
       </div>
       <div class="xt">${thdr('lvt', lvCols, gtcL)}<div id="tb_lvt">${TBODY.lvt()}</div></div>
@@ -1033,6 +1047,7 @@ const APP = (() => {
 
   function lvEdit(l) {
     modal('Edit leave application', `
+      ${l.Status==='Sent Back'?`<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:8px 10px;margin-bottom:10px;font:500 12px Inter;color:#9a3412">↩ Sent back by approver: ${h(l['Approver Comments']||'')}</div>`:''}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div><label class="sub">From</label><input type="date" id="le_from" value="${l['From Date']}"></div>
         <div><label class="sub">To</label><input type="date" id="le_to" value="${l['To Date']}"></div>
@@ -1072,6 +1087,7 @@ const APP = (() => {
     months.sort().reverse();
     const mine = all.filter(x=>String(x.Date||'').startsWith(S.exMonth));
     const sum = st => mine.filter(x=>!st||x.Status===st).reduce((s,x)=>s+(+x.Amount||0),0);
+    const sbn = mine.filter(x=>x.Status==='Sent Back').length;
     const F = TSORT['exp'] = TSORT['exp']||{};
     const gtc = '84px 112px 80px 84px 1.3fr 150px 94px 90px 118px';
     const cols = [{k:'Date',l:'Date'},{k:'Expense Type',l:'Type'},{k:'Amount',l:'Claimed ₹',r:1},{k:'Approved Amount',l:'Appr. ₹',r:1},{k:'Description',l:'Description'},{k:'Client Name',l:'Client'},{k:'Reimbursement By',l:'Reimb.'},{k:'Status',l:'Status'},{l:''}];
@@ -1082,13 +1098,13 @@ const APP = (() => {
       if (F.fstatus) rows = rows.filter(x=>x.Status===F.fstatus);
       rows = applySort('exp', tq('exp', rows), 'Date', 'desc');
       return rows.map(x=>{
-        const p = x.Status==='Pending';
-        return `<div class="xr" style="grid-template-columns:${gtc};cursor:pointer" onclick="APP.exView('${x['Row ID']}')">
+        const p = x.Status==='Pending' || x.Status==='Sent Back';
+        return `<div class="xr" style="grid-template-columns:${gtc};cursor:pointer${x.Status==='Sent Back'?';background:#fff7ed':''}" onclick="APP.exView('${x['Row ID']}')">
           <div style="color:var(--mut)">${fmtD(x.Date)}</div><div>${h(x['Expense Type'])}</div><div class="num">${fmt1(x.Amount)}</div>
           <div class="num" style="color:${x['Approved Amount']!=null&&+x['Approved Amount']<+x.Amount?'var(--goldd)':'var(--ok)'}">${x['Approved Amount']!=null?fmt1(x['Approved Amount']):'—'}</div>
           <div style="color:#486581" title="${h(x.Description)}">${h(x.Description||'')}</div><div style="color:var(--mut)">${h(x['Client Name']||'—')}</div>
           <div style="color:var(--mut)">${h(x['Reimbursement By']||'')}</div>
-          <div><span class="pill" style="background:${x.Status==='Approved'?'var(--okbg)':p?'var(--goldbg)':'var(--line2)'};color:${x.Status==='Approved'?'var(--ok)':p?'var(--goldd)':'var(--mut)'}">${h(x.Status)}</span></div>
+          <div><span class="pill" style="background:${x.Status==='Approved'?'var(--okbg)':x.Status==='Sent Back'?'#fff7ed':x.Status==='Pending'?'var(--goldbg)':'var(--line2)'};color:${x.Status==='Approved'?'var(--ok)':x.Status==='Sent Back'?'#ea580c':x.Status==='Pending'?'var(--goldd)':'var(--mut)'}">${h(x.Status)}</span></div>
           <div style="white-space:nowrap" onclick="event.stopPropagation()">${p?`<button class="btn2" style="padding:2px 8px;font-size:11px" onclick='APP.exForm(${JSON.stringify(x).replace(/'/g,"&#39;")})'>Edit</button> <button class="btn2" style="padding:2px 8px;font-size:11px;color:var(--bad)" onclick="APP.exCancel('${x['Row ID']}')">Cancel</button>`:''}${x['Receipt File']?` <button class="btn2" style="padding:2px 8px;font-size:11px" title="View bill" onclick="APP.viewBill('${x['Receipt File']}')">📎</button>`:''}</div>
         </div>`;}).join('')
         + `<div style="display:flex;gap:16px;padding:10px 16px;background:var(--bg);border-top:1px solid var(--line);font:600 11.5px Inter;color:#486581"><span>Σ ${rows.length} rows · <b style="color:var(--navy)">₹${fmt1(rows.reduce((s,x)=>s+(+x.Amount||0),0))}</b></span></div>`;
@@ -1099,13 +1115,13 @@ const APP = (() => {
       <div class="card"><div style="font:800 22px Inter;color:var(--navy)">₹${fmt1(sum())}</div><div class="sub">Claimed</div></div>
       <div class="card"><div style="font:800 22px Inter;color:var(--ok)">₹${fmt1(sum('Approved'))}</div><div class="sub">Approved</div></div>
       <div class="card"><div style="font:800 22px Inter;color:var(--bad)">₹${fmt1(sum('Rejected'))}</div><div class="sub">Rejected</div></div>
-      <div class="card"><div style="font:800 22px Inter;color:var(--goldd)">₹${fmt1(sum('Pending'))}</div><div class="sub">Pending</div></div>
+      <div class="card"><div style="font:800 22px Inter;color:var(--goldd)">₹${fmt1(sum('Pending'))}</div><div class="sub">Pending${sbn?` · <b style="color:#ea580c">${sbn} sent back</b>`:''}</div></div>
     </div>
     <div class="card" style="padding:0;overflow:hidden;margin-top:12px">
       <div style="padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span class="h">My expenses</span><span class="sub">${fmtM(S.exMonth)}</span>
         <select style="width:150px;margin-left:12px" onchange="APP.fGo('exp','ftype',this.value)"><option value="">Type: All</option>${types.map(t=>`<option ${t===F.ftype?'selected':''}>${h(t)}</option>`).join('')}</select>
-        <select style="width:130px" onchange="APP.fGo('exp','fstatus',this.value)"><option value="">Status: All</option>${['Pending','Approved','Rejected','Cancelled'].map(s=>`<option ${s===F.fstatus?'selected':''}>${s}</option>`).join('')}</select>
+        <select style="width:130px" onchange="APP.fGo('exp','fstatus',this.value)"><option value="">Status: All</option>${['Pending','Sent Back','Approved','Rejected','Cancelled'].map(s=>`<option ${s===F.fstatus?'selected':''}>${s}</option>`).join('')}</select>
         <input id="q_exp" style="width:170px" placeholder="🔍 Search…" value="${h(F.q||'')}" oninput="APP.qGo('exp', this.value)">
         <button class="btn" style="margin-left:auto" onclick="APP.exForm()">+ Submit expense</button>
       </div>
@@ -1123,6 +1139,7 @@ const APP = (() => {
     const types = (d.expenseTypes||[]);
     const clients = (d.clients||[]).map(c=>c['Client Full Name']).filter(Boolean);
     modal(isEdit?'Edit expense':'Submit expense', `
+      ${isEdit&&x.Status==='Sent Back'?`<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:8px 10px;margin-bottom:10px;font:500 12px Inter;color:#9a3412">↩ Sent back by approver: ${h(x['Approver Comments']||'')}</div>`:''}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div><label class="sub">Date (within 7 days)</label><input type="date" id="ex_date" value="${x?x.Date:''}"></div>
         <div><label class="sub">Type</label><select id="ex_type" onchange="APP.exHint()"><option value="">Type…</option>${types.map(t=>`<option ${x&&x['Expense Type']===t['Expense Type']?'selected':''}>${h(t['Expense Type'])}</option>`).join('')}</select></div>
@@ -1172,7 +1189,7 @@ const APP = (() => {
           receiptReference: $('ex_ref').value.trim(), receiptFile };
         if (isEdit) expense.rowId = x['Row ID'];
         await EMS2.callAPI(isEdit?'updateExpense':'submitExpense', { expense });
-        closeModal(); S.cache.exp = null; toast(isEdit?'Updated ✓':'Submitted ✓'); rExpenses();
+        closeModal(); S.cache.exp = null; toast(isEdit?(x.Status==='Sent Back'?'Resubmitted ✓ — back with your approver':'Updated ✓'):'Submitted ✓'); rExpenses();
       } catch (e) { toast(e.message, true); $('ex_save').disabled = false; }
     };
   }
@@ -1198,9 +1215,9 @@ const APP = (() => {
     const x = (d.expenses||[]).find(q=>String(q['Row ID'])===String(rowId)); if (!x) return;
     const F = (l,v)=>`<div style="display:flex;gap:8px;padding:6px 0;border-bottom:1px solid var(--line2)"><span class="sub" style="width:150px;flex:none">${l}</span><span style="font:500 12.5px Inter;min-width:0;overflow-wrap:anywhere">${v||'—'}</span></div>`;
     const trimmed = x['Approved Amount']!=null && +x['Approved Amount'] < +x.Amount;
-    const stCol = x.Status==='Approved'?'var(--ok)':x.Status==='Pending'?'var(--goldd)':x.Status==='Rejected'?'var(--bad)':'var(--mut)';
+    const stCol = x.Status==='Approved'?'var(--ok)':x.Status==='Sent Back'?'#ea580c':x.Status==='Pending'?'var(--goldd)':x.Status==='Rejected'?'var(--bad)':'var(--mut)';
     const body =
-      F('Status', `<span class="pill" style="background:${x.Status==='Approved'?'var(--okbg)':x.Status==='Pending'?'var(--goldbg)':x.Status==='Rejected'?'var(--badbg)':'var(--line2)'};color:${stCol}">${h(x.Status)}</span>`) +
+      F('Status', `<span class="pill" style="background:${x.Status==='Approved'?'var(--okbg)':x.Status==='Sent Back'?'#fff7ed':x.Status==='Pending'?'var(--goldbg)':x.Status==='Rejected'?'var(--badbg)':'var(--line2)'};color:${stCol}">${h(x.Status)}</span>`) +
       F('Date', fmtD(x.Date)) +
       F('Type', h(x['Expense Type'])) +
       F('Claimed ₹', fmt1(x.Amount)) +
@@ -1213,14 +1230,14 @@ const APP = (() => {
       F('Submitted on', h(x['Submitted On'])) +
       (x['Actioned On']?F('Decided on', h(x['Actioned On'])):'') +
       (x['Approver Name']?F('Approver', h(x['Approver Name'])):'') +
-      (x['Approver Comments']?F('Approver comments', `<span style="color:${trimmed||x.Status==='Rejected'?'var(--goldd)':'var(--ink)'}">${h(x['Approver Comments'])}</span>`):'');
-    const acts = x.Status==='Pending'
+      (x['Approver Comments']?F('Approver comments', `<span style="color:${x.Status==='Sent Back'?'#ea580c':(trimmed||x.Status==='Rejected')?'var(--goldd)':'var(--ink)'}">${h(x['Approver Comments'])}</span>`):'');
+    const acts = (x.Status==='Pending'||x.Status==='Sent Back')
       ? `<div style="margin-top:12px;display:flex;gap:10px"><button class="btn" onclick='closeModalAnd(()=>APP.exForm(${JSON.stringify(x).replace(/'/g,"&#39;")}))'>Edit</button><button class="btn2" style="color:var(--bad)" onclick="closeModalAnd(()=>APP.exCancel('${x['Row ID']}'))">Cancel claim</button></div>` : '';
     modal('Expense claim — ' + fmtD(x.Date), body + acts);
   }
 
   const FROW = (l,v)=>`<div style="display:flex;gap:8px;padding:6px 0;border-bottom:1px solid var(--line2)"><span class="sub" style="width:150px;flex:none">${l}</span><span style="font:500 12.5px Inter;min-width:0;overflow-wrap:anywhere">${v||'—'}</span></div>`;
-  const STP = s => `<span class="pill" style="background:${s==='Approved'?'var(--okbg)':s==='Pending'?'var(--goldbg)':s==='Rejected'?'var(--badbg)':'var(--line2)'};color:${s==='Approved'?'var(--ok)':s==='Pending'?'var(--goldd)':s==='Rejected'?'var(--bad)':'var(--mut)'}">${h(s)}</span>`;
+  const STP = s => { const m={'Approved':['var(--okbg)','var(--ok)'],'Pending':['var(--goldbg)','var(--goldd)'],'Rejected':['var(--badbg)','var(--bad)'],'Sent Back':['#fff7ed','#ea580c'],'Active':['var(--okbg)','var(--ok)']}; const c=m[s]||['var(--line2)','var(--mut)']; return `<span class="pill" style="background:${c[0]};color:${c[1]}">${h(s)}</span>`; };
 
   function lvView(rowId) {
     const d = S.cache.lv || {};
@@ -1232,8 +1249,8 @@ const APP = (() => {
       FROW('Reason', h(l.Reason)) + FROW('Applied on', h(l['Applied On'])) +
       (l['Actioned On']?FROW('Decided on', h(l['Actioned On'])):'') +
       (l['Approver Name']?FROW('Approver', h(l['Approver Name'])):'') +
-      (l['Approver Comments']?FROW('Approver comments', `<span style="color:var(--goldd)">${h(l['Approver Comments'])}</span>`):'');
-    const acts = l.Status==='Pending'
+      (l['Approver Comments']?FROW('Approver comments', `<span style="color:${l.Status==='Sent Back'?'#ea580c':'var(--goldd)'}">${h(l['Approver Comments'])}</span>`):'');
+    const acts = (l.Status==='Pending'||l.Status==='Sent Back')
       ? `<div style="margin-top:12px;display:flex;gap:10px"><button class="btn" onclick='closeModalAnd(()=>APP.lvEdit(${JSON.stringify(l).replace(/'/g,"&#39;")}))'>Edit</button><button class="btn2" style="color:var(--bad)" onclick="closeModalAnd(()=>APP.lvCancel('${l['Row ID']}'))">Cancel application</button></div>` : '';
     modal('Leave application — ' + fmtD(l['From Date']), body + acts);
   }
