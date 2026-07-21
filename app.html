@@ -118,7 +118,7 @@ const APP = (() => {
       S.isAdmin = (d.employee && d.employee['Role']) === 'admin';
       S.isPartner = S.isAdmin || /partner/i.test((d.employee && d.employee['Designation']) || '');
       $('uName').textContent = S.me['Employee Name'] || email;
-      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b20';
+      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b21';
       $('uAv').textContent = (S.me['Employee Name']||email).split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
       buildNav();
       const hv = (location.hash || '').slice(1);
@@ -1553,7 +1553,7 @@ const APP = (() => {
         <button class="btn2" onclick="APP.asgCSVt()">⬇ Template</button>
         <button class="btn2" onclick="APP.asgCSVe()">⬇ Excel</button>
         <button class="btn2" onclick="document.getElementById('asg_file').click()">⬆ Import</button>
-        <input type="file" id="asg_file" accept=".csv,text/csv" style="display:none" onchange="APP.asgImp(this)">
+        <input type="file" id="asg_file" accept=".csv,.xlsx" style="display:none" onchange="APP.asgImp(this)">
         <button class="btn" onclick="APP.asgForm()">+ New assignment</button>
       </div>
       <div class="xt">${thdr('asg', cols, gtc)}<div id="tb_asg">${TBODY.asg()}</div></div>
@@ -1610,11 +1610,42 @@ const APP = (() => {
 
   
 
-  function asgCSVt() {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob(['Assignment ID,Client,Service,Partner,Manager,Due Date,Fees,Status,Description\n'], { type: 'text/csv' }));
-    a.download = 'assignments-template.csv'; a.click();
-    toast('Blank Assignment ID = NEW row. Status: To Start / WIP / Complete / Hold / Cancelled');
+  async function xlsxLib() {
+    if (window.ExcelJS) return window.ExcelJS;
+    await new Promise((res, rej) => { const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
+      s.onload = res; s.onerror = () => rej(new Error('Could not load the Excel library — check internet and retry'));
+      document.head.appendChild(s); });
+    return window.ExcelJS;
+  }
+  async function asgCSVt() {
+    try {
+      const d = S.cache.asg || (await asgData());
+      const EX = await xlsxLib();
+      const wb = new EX.Workbook();
+      const ws = wb.addWorksheet('Assignments');
+      const ls = wb.addWorksheet('Lists'); ls.state = 'veryHidden';
+      const ST = ['To Start','WIP','Complete','Hold','Cancelled'];
+      const put = (col, arr) => (arr||[]).forEach((v,i)=>{ ls.getCell(col+(i+1)).value = v; });
+      put('A', d.clients); put('B', d.services); put('C', d.partners); put('D', d.managers); put('E', ST);
+      const heads = ['Client','Service','Assignment ID','Description','Partner','Manager','Due Date','Fees','Status'];
+      ws.addRow(heads); ws.getRow(1).font = { bold: true };
+      [30,24,38,34,20,20,12,10,12].forEach((w,i)=>{ ws.getColumn(i+1).width = w; });
+      const dv = (colL, listCol, n) => { for (let rI = 2; rI <= 400; rI++)
+        ws.getCell(colL+rI).dataValidation = { type: 'list', allowBlank: true, showErrorMessage: true, errorStyle: 'stop',
+          errorTitle: 'Pick from list', error: 'Choose an existing value from the dropdown — new names cannot be created here.',
+          formulae: ['Lists!$'+listCol+'$1:$'+listCol+'$'+Math.max(n,1)] }; };
+      dv('A','A',(d.clients||[]).length); dv('B','B',(d.services||[]).length);
+      dv('E','C',(d.partners||[]).length); dv('F','D',(d.managers||[]).length); dv('I','E',5);
+      for (let rI = 2; rI <= 400; rI++) ws.getCell('G'+rI).numFmt = 'yyyy-mm-dd';
+      ws.getCell('C1').note = 'Leave blank for NEW assignments. Keep the ID to UPDATE an existing one.';
+      ws.getCell('G1').note = 'Format: YYYY-MM-DD';
+      const buf = await wb.xlsx.writeBuffer();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      a.download = 'assignments-template.xlsx'; a.click();
+      toast('Template downloaded — Client/Service/Partner/Manager/Status are dropdown-picked');
+    } catch (e) { toast(e.message, true); }
   }
   function asgCSVe() {
     const d = S.cache.asg || {};
@@ -1641,18 +1672,44 @@ const APP = (() => {
     if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
     return rows;
   }
+  function xlNorm(v) {
+    if (v == null) return '';
+    if (v instanceof Date) { const p = n => String(n).padStart(2,'0'); return v.getUTCFullYear() + '-' + p(v.getUTCMonth()+1) + '-' + p(v.getUTCDate()); }
+    if (typeof v === 'object') return xlNorm(v.result != null ? v.result : (v.text != null ? v.text : (Array.isArray(v.richText) ? v.richText.map(t=>t.text).join('') : '')));
+    return String(v);
+  }
+  function normDate(s) {
+    s = String(s||'').trim();
+    if (!s) return '';
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+    const m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+    if (m) return m[3] + '-' + String(m[2]).padStart(2,'0') + '-' + String(m[1]).padStart(2,'0');
+    return s;
+  }
   async function asgImp(inp) {
     const f = inp.files && inp.files[0]; inp.value = ''; if (!f) return;
-    const rows = parseCSVtext(await f.text());
-    if (rows.length < 2) return toast('CSV has no data rows', true);
-    const hd = rows[0].map(x=>x.trim().toLowerCase());
+    let rows;
+    try {
+      if (/\.xlsx$/i.test(f.name)) {
+        const EX = await xlsxLib();
+        const wb = new EX.Workbook();
+        await wb.xlsx.load(await f.arrayBuffer());
+        const ws = wb.getWorksheet('Assignments') || wb.worksheets.find(w=>w.state==='visible') || wb.worksheets[0];
+        rows = [];
+        ws.eachRow({ includeEmpty: false }, (row) => { rows.push((row.values||[]).slice(1).map(v=>xlNorm(v).trim())); });
+      } else {
+        rows = parseCSVtext(await f.text());
+      }
+    } catch (e) { return toast('Could not read file: ' + e.message, true); }
+    if (!rows || rows.length < 2) return toast('File has no data rows', true);
+    const hd = rows[0].map(x=>String(x||'').trim().toLowerCase());
     const ix = k => hd.indexOf(k);
-    if (ix('client') < 0 && ix('assignment id') < 0) return toast('CSV needs a Client column (new rows) or Assignment ID column (updates)', true);
-    const g = (r,k) => ix(k) >= 0 ? (r[ix(k)]||'').trim() : '';
+    if (ix('client') < 0 && ix('assignment id') < 0) return toast('File needs a Client column (new rows) or Assignment ID column (updates)', true);
+    const g = (r,k) => ix(k) >= 0 ? String(r[ix(k)]||'').trim() : '';
     const items = rows.slice(1).filter(r=>r.join('').trim()).map((r,i)=>({
       line: i+2, rowId: g(r,'assignment id'),
       client: g(r,'client'), service: g(r,'service'), partner: g(r,'partner'), manager: g(r,'manager'),
-      dueDate: g(r,'due date'), fees: g(r,'fees'), description: g(r,'description'),
+      dueDate: normDate(g(r,'due date')), fees: g(r,'fees'), description: g(r,'description'),
       status: (s=>['To Start','WIP','Complete','Hold','Cancelled'].includes(s)?s:'')(g(r,'status')) }));
     const nUpd = items.filter(x=>x.rowId).length, nNew = items.length - nUpd;
     modal('Import assignments', `<div style="font:500 12.5px Inter;line-height:1.6">${items.length} row(s) parsed → <b>${nUpd} update(s)</b> (rows with an Assignment ID — blank cells are left unchanged) and <b>${nNew} new</b> assignment(s).</div><div style="margin-top:12px"><button class="btn" id="as_imp_go">Apply</button></div><div id="as_imp_st" class="sub" style="margin-top:8px"></div>`);
