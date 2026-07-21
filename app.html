@@ -118,7 +118,7 @@ const APP = (() => {
       S.isAdmin = (d.employee && d.employee['Role']) === 'admin';
       S.isPartner = S.isAdmin || /partner/i.test((d.employee && d.employee['Designation']) || '');
       $('uName').textContent = S.me['Employee Name'] || email;
-      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b18';
+      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b19';
       $('uAv').textContent = (S.me['Employee Name']||email).split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
       buildNav();
       const hv = (location.hash || '').slice(1);
@@ -308,7 +308,7 @@ const APP = (() => {
     const ico = kind==='leave' ? '🌴' : kind==='compoff' ? '🔁' : '💳';
     return `<div onclick="APP.openAppr('${kind}','${id}')" style="cursor:pointer;border:1px solid var(--line2);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:10px">
       <span>${ico}</span>
-      <div style="flex:1;min-width:0"><div style="font:600 12px Inter">${title}</div><div class="sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${sub}</div></div>
+      <div style="flex:1;min-width:0"><div style="font:600 12px Inter;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${title}</div><div class="sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${sub}</div></div>
       <span class="btn2" style="pointer-events:none">Open →</span>
     </div>`;
   }
@@ -401,17 +401,17 @@ const APP = (() => {
       <div class="card"><div class="sub">Timesheets missing · yday</div><div style="font:800 24px Inter;color:${k.missingYday>0?'var(--bad)':'var(--ok)'};margin-top:2px">${k.missingYday}</div></div>
       <div class="card"><div class="sub">Plan coverage · next 7d</div><div style="font:800 24px Inter;color:var(--goldd);margin-top:2px">${fmt1(k.planCoverage7d)}%</div></div>
     </div>
-    <div class="grid" style="grid-template-columns:1.3fr 1fr;margin-top:12px">
-      <div class="card">
+    <div class="grid" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr);margin-top:12px">
+      <div class="card" style="min-width:0">
         <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:12px"><span class="h">Plan vs actual — this week</span><span class="sub">planned ▢ · actual ■</span></div>
         <div style="display:flex;flex-direction:column;gap:10px;max-height:340px;overflow:auto">
           ${pa.map(x=>{const r=+x.planned? (+x.actual/+x.planned):1; const col=r>=1?'var(--ok)':r>=0.6?'var(--goldd)':'var(--bad)';
-            return `<div><div style="display:flex;justify-content:space-between;font:500 12px Inter"><span>${h(x.name)}</span><b style="color:${col}">${fmt1(x.actual)} / ${fmt1(x.planned)}h</b></div>
+            return `<div><div style="display:flex;justify-content:space-between;gap:8px;font:500 12px Inter"><span style="min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h(x.name)}</span><b style="color:${col};white-space:nowrap;flex:none">${fmt1(x.actual)} / ${fmt1(x.planned)}h</b></div>
             <div style="height:7px;background:var(--line2);border-radius:99px;margin-top:4px;position:relative"><div style="width:${Math.min(100,100*x.planned/maxpa)}%;height:100%;background:#bcccdc;border-radius:99px"></div><div style="width:${Math.min(100,100*x.actual/maxpa)}%;height:100%;background:var(--navy);border-radius:99px;position:absolute;top:0"></div></div></div>`;}).join('') || '<div class="sub">No plans or entries this week yet.</div>'}
         </div>
         ${d.missingList.length?`<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line2)" class="sub">Missing yesterday: ${d.missingList.map(h).join(' · ')}</div>`:''}
       </div>
-      <div class="card" style="display:flex;flex-direction:column">
+      <div class="card" style="display:flex;flex-direction:column;min-width:0">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span class="h">Approvals inbox</span><span class="pill" style="background:var(--goldbg);color:var(--goldd)">${inbox.length} pending</span></div>
         <div style="display:flex;flex-direction:column;gap:8px;overflow:auto;max-height:340px">${inbox.slice(0,6).map(x=>apprRow(x[0],x[1])).join('') || '<div class="sub">Nothing pending 🎉</div>'}</div>
         ${inbox.length>6?`<button class="btn2" style="margin-top:10px" onclick="APP.show('approvals')">Open all approvals →</button>`:''}
