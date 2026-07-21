@@ -118,7 +118,7 @@ const APP = (() => {
       S.isAdmin = (d.employee && d.employee['Role']) === 'admin';
       S.isPartner = S.isAdmin || /partner/i.test((d.employee && d.employee['Designation']) || '');
       $('uName').textContent = S.me['Employee Name'] || email;
-      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b22';
+      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b23';
       $('uAv').textContent = (S.me['Employee Name']||email).split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
       buildNav();
       const hv = (location.hash || '').slice(1);
@@ -251,6 +251,7 @@ const APP = (() => {
       : `<div style="margin-top:12px;border-top:1px solid var(--line2);padding-top:12px">
         <div class="h" style="font-size:13px;margin-bottom:8px">${isEdit?'Edit entry':'Add entry'}</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          ${isEdit?`<div style="grid-column:1/-1"><label class="sub">Date — change it if you logged on the wrong day (last 7 days only)</label><input type="date" id="tp_date" value="${dateStr}" min="${addDaysIso(todayStr,-7)}" max="${todayStr}"></div>`:''}
           <div><label class="sub">Location</label><select id="tp_loc"><option value="">📍 Location…</option>${['Office','Client Place','WFH','Travelling'].map(l=>`<option ${l===locSel?'selected':''}>${l}</option>`).join('')}</select></div>
           <div><label class="sub">Client</label><select id="tp_client"><option value="">Client…</option>${clientsArr.map(c=>`<option ${pre&&pre.client===c?'selected':''}>${h(c)}</option>`).join('')}</select></div>
           <div><label class="sub">Task</label><select id="tp_task"><option value="">Task…</option></select></div>
@@ -266,20 +267,21 @@ const APP = (() => {
     $('tp_reset').onclick = () => { $('tp_client').value=''; fillTasks(); $('tp_hours').value=''; $('tp_desc').value=''; $('tp_loc').value=lastLoc; };
     $('tp_save').onclick = async () => {
       const desc = $('tp_desc').value.trim();
+      if (isEdit && $('tp_date') && !$('tp_date').value) return toast('Pick the date', true);
       if (!$('tp_loc').value) return toast('Select a location', true);
       if (!$('tp_client').value || !$('tp_task').value) return toast('Select client and task', true);
       if (!(+$('tp_hours').value > 0)) return toast('Enter hours', true);
       if (!sane(desc)) return toast('Description must be a ' + SANE_HINT, true);
-      const payload = { timesheet: { employeeEmail: S.me['Employee Email'], date: dateStr, client: $('tp_client').value, task: $('tp_task').value, hours: $('tp_hours').value, description: desc, location: $('tp_loc').value, expenseType: 'Not Applicable', expenseAmount: '0' } };
+      const payload = { timesheet: { employeeEmail: S.me['Employee Email'], date: (isEdit && $('tp_date')) ? $('tp_date').value : dateStr, client: $('tp_client').value, task: $('tp_task').value, hours: $('tp_hours').value, description: desc, location: $('tp_loc').value, expenseType: 'Not Applicable', expenseAmount: '0' } };
       if (isEdit) payload.timesheet.rowId = pre.rowId;
       $('tp_save').disabled = true;
       try {
         await EMS2.callAPI(isEdit?'updateTimesheet':'addTimesheet', payload);
         localStorage.setItem('ems2_lastloc', payload.timesheet.location);
-        S.masters = null; closeModal(); toast(isEdit?'Updated ✓':'Entry saved ✓');
+        S.masters = null; closeModal(); toast(isEdit?(payload.timesheet.date!==dateStr?'Updated ✓ — moved to '+fmtD(payload.timesheet.date):'Updated ✓'):'Entry saved ✓');
         const newTot = dayRows.reduce((s,e)=> s + ((isEdit && e['Row ID']===pre.rowId) ? 0 : (+e.Hours||0)), 0) + (+payload.timesheet.hours);
-        if (dateStr===todayStr && newTot<6) toast('Day total '+fmt1(newTot)+'h — remember your 6h day');
-        else if (newTot>6) toast('Day total '+fmt1(newTot)+'h — above the standard day');
+        if (payload.timesheet.date===dateStr && dateStr===todayStr && newTot<6) toast('Day total '+fmt1(newTot)+'h — remember your 6h day');
+        else if (payload.timesheet.date===dateStr && newTot>6) toast('Day total '+fmt1(newTot)+'h — above the standard day');
         RENDER[S.view]();
       } catch (e) { toast(e.message, true); $('tp_save').disabled = false; }
     };
