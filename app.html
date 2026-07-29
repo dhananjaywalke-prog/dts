@@ -92,7 +92,7 @@ const APP = (() => {
   function sane(t){ t=String(t||'').trim(); if(t.length<10) return false; const w=t.split(/\s+/); return w.length>=5 && w.filter(x=>/[A-Za-z]{3,}/.test(x)).length>=3; }
   const SANE_HINT = 'meaningful sentence: 10+ characters, 5+ real words';
   const TSORT = {};
-  const VIEW_OF = { exp:'expenses', apl:'approvals', apx:'approvals', tsm:'timesheet', apc:'approvals', lvt:'leave', cot:'leave', wpt:'workplan', tpt:'workplan', asg:'assignments' };
+  const VIEW_OF = { exp:'expenses', apl:'approvals', apx:'approvals', tsm:'timesheet', apc:'approvals', lvt:'leave', cot:'leave', wpt:'workplan', tpt:'workplan', asg:'assignments', inv:'invoicing' };
   const TBODY = {};
   function addDaysIso(iso, n){ const d = new Date(iso+'T00:00:00'); d.setDate(d.getDate()+n); const p=x=>String(x).padStart(2,'0'); return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()); }
   function tsort(view, col){ const s=TSORT[view]=TSORT[view]||{}; if(s.col===col) s.dir=s.dir==='asc'?'desc':'asc'; else { s.col=col; s.dir='asc'; } RENDER[VIEW_OF[view]||view](); }
@@ -118,7 +118,7 @@ const APP = (() => {
       S.isAdmin = (d.employee && d.employee['Role']) === 'admin';
       S.isPartner = S.isAdmin || /partner/i.test((d.employee && d.employee['Designation']) || '');
       $('uName').textContent = S.me['Employee Name'] || email;
-      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b23';
+      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b24';
       $('uAv').textContent = (S.me['Employee Name']||email).split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
       buildNav();
       const hv = (location.hash || '').slice(1);
@@ -134,6 +134,7 @@ const APP = (() => {
     S.isApprover && { id:'approvals', icon:'✅', label:'Approvals', badge:()=>S.cache.dashboard?( (S.cache.dashboard.approvals.leaves.length + S.cache.dashboard.approvals.expenses.length + (S.cache.dashboard.approvals.compOffs||[]).length) || null):null },
     { id:'review', icon:'🔎', label:'Review' },
     S.isPartner && { id:'assignments', icon:'📁', label:'Assignments' },
+    S.isApprover && { id:'invoicing', icon:'🧾', label:'Invoicing' },
     { id:'myday', icon:'☀️', label:'My Day', dot:()=>missingYday() },
     { id:'timesheet', icon:'🗓', label:'Timesheet' },
     { id:'workplan', icon:'📋', label:'Work Plan' },
@@ -155,7 +156,7 @@ const APP = (() => {
     ).join('');
   }
 
-  const TITLES = { myday:'My Day', dashboard:'Dashboard', approvals:'Approvals', review:'Review', assignments:'Assignments', timesheet:'Timesheet', workplan:'Work Plan', leave:'Leave', expenses:'Expenses' };
+  const TITLES = { myday:'My Day', dashboard:'Dashboard', approvals:'Approvals', review:'Review', assignments:'Assignments', invoicing:'Invoicing', timesheet:'Timesheet', workplan:'Work Plan', leave:'Leave', expenses:'Expenses' };
 
   async function show(id) {
     S.view = id; buildNav();
@@ -1757,12 +1758,138 @@ const APP = (() => {
     };
   }
 
-  const RENDER = { myday:rMyday, dashboard:rDashboard, approvals:rApprovals, review:rReview, assignments:rAssignments, timesheet:rTimesheet, workplan:rWorkplan, leave:rLeave, expenses:rExpenses };
+  // ---------------- INVOICING (approvers/admin) ----------------
+  window.INVSEL = {};
+  function invBtnSync() {
+    const n = Object.values(INVSEL).filter(Boolean).length;
+    const b = $('inv_mark'); if (b) { b.textContent = '🧾 Mark invoiced (' + n + ')'; }
+  }
+  async function rInvoicing() {
+    if (!S.isApprover) { $('view').innerHTML = '<div class="card"><b>Approvers/admin only.</b></div>'; return; }
+    const todayStr = S.myday.today.date;
+    const F = TSORT['inv'] = TSORT['inv']||{};
+    F.from = F.from || addDaysIso(todayStr, -90); F.to = F.to || todayStr;
+    let d;
+    try { d = await EMS2.callAPI('invoiceReport', { fromDate: F.from, toDate: F.to }); }
+    catch (e) { $('view').innerHTML = '<div class="card" style="color:var(--bad)">' + h(e.message) + '</div>'; return; }
+    S.invData = d; window.INVSEL = {};
+    const all = d.rows || [];
+    const clis = [...new Set(all.map(r=>r.Client).filter(Boolean))].sort();
+    const gtc = '30px 84px 128px 1fr 118px 1.2fr 76px 76px 62px 122px';
+    const cols = [{l:''},{k:'Date',l:'Date'},{k:'Employee',l:'Employee'},{k:'Client',l:'Client'},{k:'Type',l:'Type'},{k:'Description',l:'Description'},{k:'Claimed',l:'Claimed ₹',r:1},{k:'Approved',l:'Approved ₹',r:1},{k:'Reimb',l:'Reimb'},{k:'Invoice No',l:'Invoice'}];
+    TBODY.inv = () => {
+      let rows = all;
+      if (F.fclient) rows = rows.filter(r=>r.Client===F.fclient);
+      if (F.fst==='Uninvoiced') rows = rows.filter(r=>r.Reimb==='Client' && !r['Invoice No']);
+      else if (F.fst==='Invoiced') rows = rows.filter(r=>!!r['Invoice No']);
+      if (F.frb) rows = rows.filter(r=>r.Reimb===F.frb);
+      rows = applySort('inv', tq('inv', rows), 'Date', 'desc');
+      S.invShown = rows;
+      return rows.map(r=>{
+        const sel = r.Reimb==='Client' && !r['Invoice No'];
+        return `<div class="xr" style="grid-template-columns:${gtc}${r['Invoice No']?';background:#f6fbf8':''}">
+          <div>${sel?`<input type="checkbox" class="inv_cb" value="${r['Row ID']}" ${INVSEL[r['Row ID']]?'checked':''} onchange="APP.invSel(this)" style="width:auto">`:''}</div>
+          <div style="color:var(--mut)">${fmtD(r.Date)}</div><div>${h(r.Employee)}</div><div>${h(r.Client||'—')}</div><div>${h(r.Type)}</div>
+          <div style="color:#486581" title="${h(r.Description)}">${h(r.Description||'')}</div>
+          <div class="num">${fmt1(r.Claimed)}</div><div class="num">${fmt1(r.Approved)}</div>
+          <div>${r.Reimb==='Client'?'<span class="pill" style="background:var(--goldbg);color:var(--goldd)">Client</span>':'<span class="sub">DRP</span>'}</div>
+          <div>${r['Invoice No']?`<b style="color:var(--ok)">${h(r['Invoice No'])}</b> <span class="sub">${fmtD(r['Invoice Date'])}</span>`:'<span class="sub">—</span>'}</div>
+        </div>`;
+      }).join('') || '<div style="padding:24px" class="sub">No approved claims match.</div>';
+    };
+    const base = F.fclient ? all.filter(r=>r.Client===F.fclient) : all;
+    const uninv = base.filter(r=>r.Reimb==='Client' && !r['Invoice No']);
+    const drp = base.filter(r=>r.Reimb!=='Client');
+    const invs = d.invoices || [];
+    const invTot = invs.reduce((s,v)=>s+(+v.Total||0),0);
+    const invRows = invs.map(v=>`<div class="xr" style="grid-template-columns:150px 90px 1fr 70px 110px 96px;cursor:pointer" onclick="APP.invDrill('${h(v['Invoice No'])}')">
+      <div><b>${h(v['Invoice No'])}</b></div><div style="color:var(--mut)">${fmtD(v.Date)}</div><div>${h(v.Client)}</div>
+      <div class="num">${v.Claims}</div><div class="num">${fmt1(v.Total)}</div>
+      <div onclick="event.stopPropagation()"><button class="btn2" style="padding:2px 8px;font-size:11px;color:var(--bad)" onclick="APP.invUnmark('${v.Id}','${h(v['Invoice No'])}')">✕ Remove</button></div>
+    </div>`).join('');
+    $('view').innerHTML = `
+    <div class="grid" style="grid-template-columns:repeat(4,1fr)">
+      <div class="card"><div style="font:800 22px Inter;color:var(--navy)">₹${fmt1(base.reduce((s,r)=>s+(+r.Approved||0),0))}</div><div class="sub">Approved claims in period (${base.length})</div></div>
+      <div class="card"><div style="font:800 22px Inter;color:var(--goldd)">₹${fmt1(uninv.reduce((s,r)=>s+(+r.Approved||0),0))}</div><div class="sub">Client-reimbursable, not yet invoiced (${uninv.length})</div></div>
+      <div class="card"><div style="font:800 22px Inter;color:var(--ok)">₹${fmt1(invTot)}</div><div class="sub">Invoiced in period (${invs.length} invoice${invs.length===1?'':'s'})</div></div>
+      <div class="card"><div style="font:800 22px Inter;color:var(--mut)">₹${fmt1(drp.reduce((s,r)=>s+(+r.Approved||0),0))}</div><div class="sub">DRP-borne in period (${drp.length})</div></div>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden;margin-top:12px">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:end;gap:8px;flex-wrap:wrap">
+        <span class="h" style="align-self:center">Approved expense claims</span>
+        <div><label class="sub">From</label><input type="date" style="width:130px" value="${F.from}" onchange="APP.invGo('from',this.value)"></div>
+        <div><label class="sub">To</label><input type="date" style="width:130px" value="${F.to}" onchange="APP.invGo('to',this.value)"></div>
+        <select style="width:170px" onchange="APP.invGo('fclient',this.value)"><option value="">Client: All</option>${clis.map(c=>`<option ${c===F.fclient?'selected':''}>${h(c)}</option>`).join('')}</select>
+        <select style="width:130px" onchange="APP.invGo('fst',this.value)">${['All','Uninvoiced','Invoiced'].map(s=>`<option value="${s==='All'?'':s}" ${(F.fst||'')===(s==='All'?'':s)?'selected':''}>${s==='All'?'Invoiced: All':s}</option>`).join('')}</select>
+        <select style="width:120px" onchange="APP.invGo('frb',this.value)"><option value="">Reimb: All</option>${['Client','DRP & Co. LLP'].map(v=>`<option ${v===F.frb?'selected':''}>${v}</option>`).join('')}</select>
+        <input id="q_inv" style="width:150px" placeholder="🔍 Search…" value="${h(F.q||'')}" oninput="APP.qGo('inv', this.value)">
+        <span style="flex:1"></span>
+        <label style="display:flex;gap:5px;align-items:center;font:500 11.5px Inter;color:var(--mut)"><input type="checkbox" onchange="APP.invAll(this.checked)" style="width:auto"> all shown</label>
+        <button class="btn2" onclick="APP.invCSV()">⬇ Excel</button>
+        <button class="btn" id="inv_mark" onclick="APP.invMark()">🧾 Mark invoiced (0)</button>
+      </div>
+      <div class="xt">${thdr('inv', cols, gtc)}<div id="tb_inv">${TBODY.inv()}</div></div>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden;margin-top:12px">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center"><span class="h">Invoices raised in period</span><span class="sub">click a row to see its claims · Remove releases the claims for re-invoicing</span></div>
+      <div class="xt"><div class="xh" style="grid-template-columns:150px 90px 1fr 70px 110px 96px;top:0"><div>Invoice No</div><div>Date</div><div>Client</div><div style="text-align:right">Claims</div><div style="text-align:right">Total ₹</div><div></div></div>
+      ${invRows || '<div style="padding:24px" class="sub">No invoices recorded in this period yet.</div>'}</div>
+    </div>`;
+  }
+  function invGo(k, v) { TSORT['inv'][k] = v; rInvoicing(); }
+  function invSel(el) { INVSEL[el.value] = el.checked; invBtnSync(); }
+  function invAll(chk) { document.querySelectorAll('.inv_cb').forEach(c=>{ c.checked = chk; INVSEL[c.value] = chk; }); invBtnSync(); }
+  function invDrill(no) { const F = TSORT['inv']; F.fst = 'Invoiced'; F.q = no; rInvoicing(); }
+  function invMark() {
+    const ids = Object.keys(INVSEL).filter(k=>INVSEL[k]);
+    if (!ids.length) return toast('Tick at least one claim first', true);
+    const sel = ((S.invData||{}).rows||[]).filter(r=>ids.includes(String(r['Row ID'])));
+    const cs = [...new Set(sel.map(r=>r.Client))];
+    if (cs.length !== 1 || !cs[0]) return toast('Select claims of ONE client at a time', true);
+    const tot = sel.reduce((s,r)=>s+(+r.Approved||0),0);
+    modal('Mark as invoiced — ' + h(cs[0]), `
+      <div style="font:500 12.5px Inter;line-height:1.6">${sel.length} claim(s) · approved total <b>₹${fmt1(tot)}</b> — will be linked to this invoice and locked.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+        <div><label class="sub">Invoice number</label><input id="iv_no" maxlength="40" placeholder="e.g. DRP/2026-27/041"></div>
+        <div><label class="sub">Invoice date</label><input type="date" id="iv_dt" value="${S.myday.today.date}" max="${S.myday.today.date}"></div>
+      </div>
+      <div style="margin-top:14px"><button class="btn" id="iv_save">Save & link ${sel.length} claim(s)</button></div>`);
+    $('iv_save').onclick = async () => {
+      const no = $('iv_no').value.trim(), dt = $('iv_dt').value;
+      if (!no) return toast('Enter the invoice number', true);
+      if (!dt) return toast('Pick the invoice date', true);
+      $('iv_save').disabled = true;
+      try {
+        const r = await EMS2.callAPI('markInvoiced', { expenseIds: ids, clientName: cs[0], invoiceNumber: no, invoiceDate: dt });
+        closeModal(); toast('Invoiced ' + r.invoiced + ' claim(s) ✓'); rInvoicing();
+      } catch (e) { toast(e.message, true); $('iv_save').disabled = false; }
+    };
+  }
+  async function invUnmark(id, no) {
+    if (!confirm('Remove invoice ' + no + '? Its claims become available for invoicing again.')) return;
+    try { const r = await EMS2.callAPI('unmarkInvoiced', { invoiceId: id }); toast('Removed — ' + r.released + ' claim(s) released ✓'); rInvoicing(); }
+    catch (e) { toast(e.message, true); }
+  }
+  function invCSV() {
+    const rows = S.invShown || [];
+    if (!rows.length) return toast('Nothing to export — adjust the filters', true);
+    const F = TSORT['inv'] || {};
+    const heads = ['Date','Employee','Client','Expense Type','Description','Claimed','Approved','Reimbursement By','Submitted On','Invoice No','Invoice Date'];
+    const key = { 'Expense Type':'Type', 'Reimbursement By':'Reimb' };
+    const esc = v => '"' + String(v??'').replace(/"/g,'""') + '"';
+    const csv = [heads.join(',')].concat(rows.map(r=>heads.map(k=>esc(r[key[k]||k])).join(','))).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = 'expenses_' + F.from + '_to_' + F.to + (F.fclient ? '_' + F.fclient.replace(/[^\w-]+/g,'_') : '') + '.csv';
+    a.click();
+  }
+
+  const RENDER = { myday:rMyday, dashboard:rDashboard, approvals:rApprovals, review:rReview, assignments:rAssignments, invoicing:rInvoicing, timesheet:rTimesheet, workplan:rWorkplan, leave:rLeave, expenses:rExpenses };
 
   async function signout() { await EMS2.signOut(); location.replace('home.html?next=app'); }
 
   boot();
-  return { show, signout, quickLog, logPlan, tsPopup, actGo, openAppr, selAppr, bulkApprove, rfshAppr, tsortGo: tsort, qGo, fGo, exForm, exMonthGo, rtSort, rtCSV, tsEdit, tsDel, wpForm, wpEnd, wpDel, wpNew, wpTabGo, tpForm, vizGo, vizEmpGo, vizCliGo, lvEdit, lvCancel, coCancel, exCancel, viewBill, exHint, exView, lvView, wpView, rtView, asgView, asgForm, asgCSVt, asgCSVe, asgImp, S, RENDER, masters, h, fmt1, toast, $ };
+  return { show, signout, invGo, invSel, invAll, invMark, invUnmark, invCSV, invDrill, quickLog, logPlan, tsPopup, actGo, openAppr, selAppr, bulkApprove, rfshAppr, tsortGo: tsort, qGo, fGo, exForm, exMonthGo, rtSort, rtCSV, tsEdit, tsDel, wpForm, wpEnd, wpDel, wpNew, wpTabGo, tpForm, vizGo, vizEmpGo, vizCliGo, lvEdit, lvCancel, coCancel, exCancel, viewBill, exHint, exView, lvView, wpView, rtView, asgView, asgForm, asgCSVt, asgCSVe, asgImp, S, RENDER, masters, h, fmt1, toast, $ };
 })();
 </script>
 </body>
