@@ -118,7 +118,7 @@ const APP = (() => {
       S.isAdmin = (d.employee && d.employee['Role']) === 'admin';
       S.isPartner = S.isAdmin || /partner/i.test((d.employee && d.employee['Designation']) || '');
       $('uName').textContent = S.me['Employee Name'] || email;
-      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b26';
+      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b27';
       $('uAv').textContent = (S.me['Employee Name']||email).split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
       buildNav();
       const hv = (location.hash || '').slice(1);
@@ -855,20 +855,24 @@ const APP = (() => {
     wpForm(pre, null);
   }
 
-  function tpForm() {
+  async function tpForm(preset) {
+    if (!S.cache.wp) { try { S.cache.wp = await EMS2.callAPI('initWorkPlan', {}); } catch (e) { return toast(e.message, true); } }
+    if (!S.cache.tpRaw) { try { await tpRawGet(true); } catch (e) { return toast(e.message, true); } }
     const d = S.cache.wp || {};
     const raw = S.cache.tpRaw || {};
     const PR = d.pairs || [];
     const tpClients = [...new Set(PR.map(p=>p.c))].sort();
+    if (preset && preset.client && !tpClients.includes(preset.client)) tpClients.push(preset.client);
     const emps = (raw.employees||[]);
-    modal('Team plan — multiple staff', `
+    modal('Team plan — multiple staff' + (preset?': ' + h(preset.client):''), `
+      ${preset?`<div style="background:var(--goldbg);border:1px solid var(--goldline);border-radius:8px;padding:7px 10px;margin-bottom:10px;font:500 12px Inter">Planning for <b>${h(preset.client)} — ${h(preset.service)}</b> (from the assignment)</div>`:''}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div style="grid-column:1/-1"><label class="sub">Staff (tick everyone this plan applies to)</label>
           <div style="max-height:150px;overflow:auto;border:1px solid var(--line2);border-radius:8px;padding:8px;display:grid;grid-template-columns:1fr 1fr;gap:4px">
             ${emps.map(e=>`<label style="display:flex;gap:6px;align-items:center;font:500 12px Inter"><input type="checkbox" class="tp_emp" value="${h(e.email)}" style="width:auto"> ${h(e.name)}</label>`).join('')}
           </div></div>
-        <div style="grid-column:1/-1"><label class="sub">Client (active assignments only)</label><select id="tp2_client"><option value="">Client…</option>${tpClients.map(c=>`<option>${h(c)}</option>`).join('')}</select></div>
-        <div style="grid-column:1/-1"><label class="sub">Service</label><select id="tp2_task"><option value="">Service…</option></select></div>
+        <div style="grid-column:1/-1"><label class="sub">Client (active assignments only)</label><select id="tp2_client" ${preset?'disabled':''}><option value="">Client…</option>${tpClients.map(c=>`<option ${preset&&preset.client===c?'selected':''}>${h(c)}</option>`).join('')}</select></div>
+        <div style="grid-column:1/-1"><label class="sub">Service</label><select id="tp2_task" ${preset?'disabled':''}><option value="">Service…</option></select></div>
         <div><label class="sub">From</label><input type="date" id="tp2_from"></div>
         <div><label class="sub">To</label><input type="date" id="tp2_to"></div>
         <div><label class="sub">Hours/day (≤6)</label><input type="number" id="tp2_hrs" step="0.5" min="0.5" max="6" value="6"></div>
@@ -877,8 +881,8 @@ const APP = (() => {
         <label style="grid-column:1/-1;display:flex;gap:8px;align-items:center;font:500 12px Inter"><input type="checkbox" id="tp2_off" style="width:auto"> Include Sundays &amp; holidays on purpose</label>
       </div>
       <div style="margin-top:14px"><button class="btn" id="tp2_save">Plan for selected staff</button></div>`);
-    const fillT = () => { const c=$('tp2_client').value; const ts=[...new Set(PR.filter(p=>p.c===c).map(p=>p.k))].sort(); $('tp2_task').innerHTML = '<option value="">Service…</option>' + ts.map(t=>`<option>${h(t)}</option>`).join(''); };
-    $('tp2_client').onchange = fillT;
+    const fillT = () => { const c=$('tp2_client').value; const ts=[...new Set(PR.filter(p=>p.c===c).map(p=>p.k))].sort(); if (preset && preset.client===c && !ts.includes(preset.service)) ts.push(preset.service); $('tp2_task').innerHTML = '<option value="">Service…</option>' + ts.map(t=>`<option ${preset&&preset.service===t?'selected':''}>${h(t)}</option>`).join(''); };
+    if (preset) fillT(); else $('tp2_client').onchange = fillT;
     $('tp2_save').onclick = async () => {
       const emails = [...document.querySelectorAll('.tp_emp:checked')].map(x=>x.value);
       if (!emails.length) return toast('Tick at least one staff member', true);
@@ -890,7 +894,8 @@ const APP = (() => {
       $('tp2_save').disabled = true;
       try {
         const r = await EMS2.callAPI('addTeamPlan', { entry, employees: emails });
-        closeModal(); S.cache.tpRaw = null; toast('Planned for ' + r.created + ' staff ✓'); rWorkplan();
+        closeModal(); S.cache.tpRaw = null; toast('Planned for ' + r.created + ' staff ✓');
+        RENDER[S.view]();
       } catch (e) { toast(e.message, true); $('tp2_save').disabled = false; }
     };
   }
@@ -1310,6 +1315,7 @@ const APP = (() => {
         S.cache.vizC = d;
         mount.innerHTML = vizClientHtml(d, opts);
         const sc2 = $('stk_scroll'); if (sc2) sc2.scrollLeft = sc2.scrollWidth;
+        if (S.isPartner) vizRlRender(opts.client || '');
       }
     } catch (e) { mount.innerHTML = '<div class="sub" style="padding:12px">' + h(e.message) + '</div>'; }
   }
@@ -1490,7 +1496,8 @@ const APP = (() => {
       ${card('Months — billable hours &amp; task cost', vStack6(d.monthly||[], {line:'cost'}))}
       ${card('Task cost working', tcTable)}
 
-    </div>`;
+    </div>
+    ${S.isPartner?'<div id="rl_mount"></div>':''}`;
   }
 
   function vizEmpGo(name) {
@@ -1503,6 +1510,33 @@ const APP = (() => {
     const d = S.cache.vizC || {};
     if (v && !(d.clients||[]).includes(v)) { toast('Pick a client from the list', true); return; }
     vizGo('c', { client: v || '' });
+  }
+
+  async function vizRlRender(client) {
+    const mount = $('rl_mount'); if (!mount) return;
+    mount.innerHTML = '<div class="card" style="margin-top:12px"><span class="sub">Loading realisation…</span></div>';
+    let rl;
+    try { rl = S.cache.rl || (S.cache.rl = await EMS2.callAPI('realisation', {})); }
+    catch (e) { mount.innerHTML = ''; return; }
+    let rows = (rl || []).slice().sort((a,b)=>(+b.Fees||0)-(+a.Fees||0));
+    if (client) rows = rows.filter(x=>String(x.Client).toLowerCase()===client.toLowerCase());
+    const top = client ? rows : rows.slice(0, 12);
+    const mx = Math.max(1, ...top.map(x=>Math.max(+x.Fees||0, +x.Cost||0)));
+    const bars = top.map(x=>`<div style="display:grid;grid-template-columns:180px 1fr 92px 92px 56px;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line2)">
+      <span style="font:600 11.5px Inter;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${h(x.Client)} · ${x.Assignments} assignment(s)">${h(x.Client)}</span>
+      <span><span style="display:block;height:8px;border-radius:4px;background:var(--navy);width:${Math.max(2,Math.round(100*(+x.Fees||0)/mx))}%"></span><span style="display:block;height:8px;border-radius:4px;background:var(--gold);width:${Math.max(2,Math.round(100*(+x.Cost||0)/mx))}%;margin-top:2px"></span></span>
+      <span class="num" style="font:600 11.5px Inter;color:var(--navy)">₹${fmt0(x.Fees)}</span>
+      <span class="num" style="font:600 11.5px Inter;color:var(--goldd)">₹${fmt0(x.Cost)}</span>
+      <span class="num" style="font:700 11.5px Inter;color:${x.Recovery==null?'var(--fog)':x.Recovery>=100?'var(--ok)':'var(--bad)'}">${x.Recovery==null?'—':x.Recovery+'%'}</span></div>`).join('');
+    const fT = top.reduce((s,x)=>s+(+x.Fees||0),0), cT = top.reduce((s,x)=>s+(+x.Cost||0),0);
+    mount.innerHTML = `<div class="card" style="margin-top:12px">
+      <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:8px">
+        <span class="h">Fees vs cost — realisation${client?'':' · top clients by fees'}</span>
+        <span class="sub"><span style="color:var(--navy)">■</span> fees · <span style="color:var(--goldd)">■</span> cost · fee'd assignments only · partners only</span>
+        <span class="sub" style="margin-left:auto">Σ fees ₹${fmt0(fT)} · cost ₹${fmt0(cT)} · recovery <b style="color:${cT&&fT/cT>=1?'var(--ok)':'var(--bad)'}">${cT?Math.round(100*fT/cT)+'%':'—'}</b></span>
+      </div>
+      <div style="display:grid;grid-template-columns:180px 1fr 92px 92px 56px;gap:10px;font:700 10px Inter;color:#486581;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--line);padding-bottom:4px"><span>Client</span><span>Fees / Cost</span><span style="text-align:right">Fees ₹</span><span style="text-align:right">Cost ₹</span><span style="text-align:right">Rec%</span></div>
+      ${bars || '<div style="padding:16px" class="sub">Add fees to assignments to see realisation' + (client?' for this client':'') + '.</div>'}</div>`;
   }
 
   // ---------------- ASSIGNMENTS (partners/admin) ----------------
@@ -1518,30 +1552,49 @@ const APP = (() => {
     const c = m[s] || ['var(--line2)','var(--mut)'];
     return `<span class="pill" style="background:${c[0]};color:${c[1]}">${h(s)}</span>`;
   }
-  const ASG_OPEN = ['To Start','WIP','Hold'];
+  const ASG_OPEN = ['To Start','WIP'];
 
   async function rAssignments() {
     if (!S.isPartner) { $('view').innerHTML = '<div class="card"><b>Partners/admin only.</b></div>'; return; }
     const d = await asgData(true);
-    const rl = await EMS2.callAPI('realisation', {});
     const F = TSORT['asg'] = TSORT['asg']||{};
+    if (F.fstatus === undefined) F.fstatus = 'Open';
     const t = new Date();
     const todayStr = t.getFullYear() + '-' + String(t.getMonth()+1).padStart(2,'0') + '-' + String(t.getDate()).padStart(2,'0');
-    const rows0 = (d.rows || []).map(r=>({ ...r,
-      Rec: (r.Fees!=null && +r.Cost>0) ? Math.round(100*+r.Fees/+r.Cost) : null,
-      'Due Sort': r['Due Date'] || '9999-12-31' }));
-    const partners = [...new Set(rows0.map(r=>r.Partner).filter(Boolean))].sort();
-    const open = rows0.filter(r=>ASG_OPEN.includes(r.Status));
-    const overdue = open.filter(r=>r['Due Date'] && r['Due Date'] < todayStr).length;
-    const feesTot = rows0.reduce((s,r)=>s+(+r.Fees||0),0);
-    const costTot = rows0.filter(r=>r.Fees!=null).reduce((s,r)=>s+(+r.Cost||0),0);
-    const gtc = '78px 1.2fr 120px 105px 105px 80px 76px 76px 52px 88px 58px';
-    const cols = [{k:'Created',l:'Created'},{k:'Client',l:'Client'},{k:'Service',l:'Service'},{k:'Partner',l:'Partner'},{k:'Manager',l:'Manager'},{k:'Due Sort',l:'Due'},{k:'Fees',l:'Fees ₹',r:1},{k:'Cost',l:'Cost ₹',r:1},{k:'Rec',l:'Rec%',r:1},{k:'Status',l:'Status'},{l:''}];
-    TBODY.asg = () => {
+    const rows0 = (d.rows || []).map(r=>({ ...r, 'Due Sort': r['Due Date'] || '9999-12-31' }));
+    const optsOf = k => [...new Set(rows0.map(r=>r[k]).filter(Boolean))].sort();
+    const asgFilt = () => {
       let rows = rows0;
-      if (F.fstatus) rows = rows.filter(r=>r.Status===F.fstatus);
+      if (F.fstatus === 'Open') rows = rows.filter(r=>ASG_OPEN.includes(r.Status));
+      else if (F.fstatus && F.fstatus !== 'All') rows = rows.filter(r=>r.Status===F.fstatus);
+      if (F.fclient) rows = rows.filter(r=>r.Client===F.fclient);
+      if (F.fservice) rows = rows.filter(r=>r.Service===F.fservice);
       if (F.fpartner) rows = rows.filter(r=>r.Partner===F.fpartner);
-      rows = applySort('asg', tq('asg', rows), 'Due Sort', 'asc');
+      if (F.fmanager) rows = rows.filter(r=>r.Manager===F.fmanager);
+      return tq('asg', rows);
+    };
+    const calc = rows => {
+      const open = rows.filter(r=>ASG_OPEN.includes(r.Status));
+      const od = open.filter(r=>r['Due Date'] && r['Due Date'] < todayStr).length;
+      const fees = rows.reduce((s,r)=>s+(+r.Fees||0),0);
+      const cost = rows.filter(r=>r.Fees!=null).reduce((s,r)=>s+(+r.Cost||0),0);
+      return { n: rows.length, od, fees, cost, rec: cost ? Math.round(100*fees/cost) : null };
+    };
+    const updTiles = v => {
+      if (!$('asg_k1')) return;
+      $('asg_k1').textContent = v.n;
+      $('asg_s1').innerHTML = 'Assignments shown' + (v.od?` · <span style="color:var(--bad);font-weight:700">${v.od} overdue</span>`:'');
+      $('asg_k2').textContent = '₹' + fmt0(v.fees);
+      $('asg_k3').textContent = '₹' + fmt0(v.cost);
+      $('asg_k4').textContent = v.rec==null ? '—' : v.rec + '%';
+      $('asg_k4').style.color = v.rec==null ? 'var(--fog)' : v.rec>=100 ? 'var(--ok)' : 'var(--bad)';
+    };
+    const gtc = '80px 1.3fr 130px 108px 108px 84px 82px 82px 92px 56px';
+    const cols = [{k:'Created',l:'Created'},{k:'Client',l:'Client'},{k:'Service',l:'Service'},{k:'Partner',l:'Partner'},{k:'Manager',l:'Manager'},{k:'Due Sort',l:'Due'},{k:'Fees',l:'Fees ₹',r:1},{k:'Cost',l:'Cost ₹',r:1},{k:'Status',l:'Status'},{l:''}];
+    TBODY.asg = () => {
+      let rows = asgFilt();
+      updTiles(calc(rows));
+      rows = applySort('asg', rows, 'Due Sort', 'asc');
       return rows.map(r=>{
         const od = r['Due Date'] && r['Due Date'] < todayStr && ASG_OPEN.includes(r.Status);
         return `<div class="xr" style="grid-template-columns:${gtc};cursor:pointer${ASG_OPEN.includes(r.Status)?'':';background:#fbfcfe;color:var(--mut)'}" onclick="APP.asgView('${r['Row ID']}')">
@@ -1549,28 +1602,30 @@ const APP = (() => {
           <div>${h(r.Client)}</div><div>${h(r.Service)}</div><div>${h(r.Partner||'—')}</div><div>${h(r.Manager||'—')}</div>
           <div style="${od?'color:var(--bad);font-weight:700;background:var(--badbg);border-radius:4px;padding:0 4px;':'color:var(--mut)'}">${r['Due Date']?fmtD(r['Due Date']):'—'}</div>
           <div class="num">${r.Fees!=null?fmt0(r.Fees):'—'}</div><div class="num">${fmt0(r.Cost)}</div>
-          <div class="num" style="color:${r.Rec==null?'var(--fog)':r.Rec>=100?'var(--ok)':'var(--bad)'}">${r.Rec==null?'—':r.Rec}</div>
           <div>${asgPill(r.Status)}</div>
           <div onclick="event.stopPropagation()"><button class="btn2" style="padding:2px 8px;font-size:11px" onclick='APP.asgForm(${JSON.stringify(r).replace(/'/g,"&#39;")})'>Edit</button></div>
-        </div>`;}).join('') || '<div style="padding:24px" class="sub">No assignments match.</div>';
+        </div>`;}).join('') || '<div style="padding:24px" class="sub">No assignments match — note the default view hides Complete / Hold / Cancelled (Status filter).</div>';
     };
-    const rlRows = (rl||[]).map(x=>`<div class="xr" style="grid-template-columns:1.4fr 90px 110px 110px 80px">
-      <div>${h(x.Client)}</div><div class="num">${x.Assignments}</div><div class="num">${fmt0(x.Fees)}</div><div class="num">${fmt0(x.Cost)}</div>
-      <div class="num" style="color:${x.Recovery==null?'var(--fog)':x.Recovery>=100?'var(--ok)':'var(--bad)'}">${x.Recovery==null?'—':x.Recovery+'%'}</div></div>`).join('');
+    const selStyle = 'width:118px';
     $('view').innerHTML = `
     <div class="grid" style="grid-template-columns:repeat(4,1fr)">
-      <div class="card"><div style="font:800 22px Inter;color:var(--navy)">${open.length}</div><div class="sub">Open assignments${overdue?` · <span style="color:var(--bad);font-weight:700">${overdue} overdue</span>`:''}</div></div>
-      <div class="card"><div style="font:800 22px Inter;color:var(--ok)">₹${fmt0(feesTot)}</div><div class="sub">Fees booked</div></div>
-      <div class="card"><div style="font:800 22px Inter;color:var(--goldd)">₹${fmt0(costTot)}</div><div class="sub">Cost on fee'd assignments</div></div>
-      <div class="card"><div style="font:800 22px Inter;color:${costTot&&feesTot/costTot>=1?'var(--ok)':'var(--bad)'}">${costTot?Math.round(100*feesTot/costTot)+'%':'—'}</div><div class="sub">Overall recovery</div></div>
+      <div class="card"><div style="font:800 22px Inter;color:var(--navy)" id="asg_k1">—</div><div class="sub" id="asg_s1">Assignments shown</div></div>
+      <div class="card"><div style="font:800 22px Inter;color:var(--ok)" id="asg_k2">—</div><div class="sub">Fees booked · filtered view</div></div>
+      <div class="card"><div style="font:800 22px Inter;color:var(--goldd)" id="asg_k3">—</div><div class="sub">Cost on fee'd · filtered view</div></div>
+      <div class="card"><div style="font:800 22px Inter" id="asg_k4">—</div><div class="sub">Recovery · filtered view</div></div>
     </div>
     <div class="card" style="padding:0;overflow:hidden;margin-top:12px">
-      <div style="padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span class="h">Assignment register</span><span class="sub">sorted by due date · red = overdue · fees visible to partners only</span>
-        <select style="width:130px;margin-left:12px" onchange="APP.fGo('asg','fstatus',this.value)"><option value="">Status: All</option>${['To Start','WIP','Complete','Hold','Cancelled'].map(s=>`<option ${s===F.fstatus?'selected':''}>${s}</option>`).join('')}</select>
-        <select style="width:150px" onchange="APP.fGo('asg','fpartner',this.value)"><option value="">Partner: All</option>${partners.map(x=>`<option ${x===F.fpartner?'selected':''}>${h(x)}</option>`).join('')}</select>
-        <input id="q_asg" style="width:170px" placeholder="🔍 Search…" value="${h(F.q||'')}" oninput="APP.qGo('asg', this.value)">
-        <span style="flex:1"></span>
+      <div style="padding:12px 16px;border-bottom:1px solid var(--line2);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span class="h">Assignment register</span><span class="sub">due-date order · red = overdue</span>
+        <select style="width:150px;margin-left:8px" onchange="APP.fGo('asg','fclient',this.value)"><option value="">Client: All</option>${optsOf('Client').map(x=>`<option ${x===F.fclient?'selected':''}>${h(x)}</option>`).join('')}</select>
+        <select style="${selStyle}" onchange="APP.fGo('asg','fservice',this.value)"><option value="">Service: All</option>${optsOf('Service').map(x=>`<option ${x===F.fservice?'selected':''}>${h(x)}</option>`).join('')}</select>
+        <select style="${selStyle}" onchange="APP.fGo('asg','fpartner',this.value)"><option value="">Partner: All</option>${optsOf('Partner').map(x=>`<option ${x===F.fpartner?'selected':''}>${h(x)}</option>`).join('')}</select>
+        <select style="${selStyle}" onchange="APP.fGo('asg','fmanager',this.value)"><option value="">Manager: All</option>${optsOf('Manager').map(x=>`<option ${x===F.fmanager?'selected':''}>${h(x)}</option>`).join('')}</select>
+        <select style="${selStyle}" title="Open = To Start + WIP" onchange="APP.fGo('asg','fstatus',this.value)">${['Open','To Start','WIP','Complete','Hold','Cancelled','All'].map(s=>`<option ${s===F.fstatus?'selected':''}>${s==='Open'?'Status: Open':s}</option>`).join('')}</select>
+        <input id="q_asg" style="width:140px" placeholder="🔍 Search…" value="${h(F.q||'')}" oninput="APP.qGo('asg', this.value)">
+      </div>
+      <div style="padding:8px 16px;border-bottom:1px solid var(--line);background:#fbfcfe;display:flex;gap:8px;justify-content:flex-end;align-items:center">
+        <span class="sub" style="margin-right:auto">fees visible to partners only · default view hides Complete / Hold / Cancelled</span>
         <button class="btn2" onclick="APP.asgCSVt()">⬇ Template</button>
         <button class="btn2" onclick="APP.asgCSVe()">⬇ Excel</button>
         <button class="btn2" onclick="document.getElementById('asg_file').click()">⬆ Import</button>
@@ -1578,12 +1633,8 @@ const APP = (() => {
         <button class="btn" onclick="APP.asgForm()">+ New assignment</button>
       </div>
       <div class="xt">${thdr('asg', cols, gtc)}<div id="tb_asg">${TBODY.asg()}</div></div>
-    </div>
-    <div class="card" style="padding:0;overflow:hidden;margin-top:12px">
-      <div style="padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px"><span class="h">Realisation by client</span><span class="sub">fee'd assignments only · Recovery = Fees ÷ Cost</span></div>
-      <div class="xt"><div class="xh" style="grid-template-columns:1.4fr 90px 110px 110px 80px;top:0"><div>Client</div><div style="text-align:right">Asgs</div><div style="text-align:right">Fees ₹</div><div style="text-align:right">Cost ₹</div><div style="text-align:right">Rec%</div></div>
-      ${rlRows || '<div style="padding:24px" class="sub">Add fees to assignments to see realisation.</div>'}</div>
     </div>`;
+    updTiles(calc(asgFilt()));
   }
 
   function asgView(rowId) {
@@ -1598,7 +1649,7 @@ const APP = (() => {
       FROW('Fees ₹', r.Fees!=null?fmt0(r.Fees):'— not set') + FROW('Cost to date ₹', fmt0(r.Cost)) + FROW('Recovery', rec) +
       FROW('Description', h(r.Description)) +
       FROW('Assignment ID', `<span style="font:500 10.5px ui-monospace,monospace;color:var(--fog)">${h(r['Row ID'])}</span>`);
-    const acts = `<div style="margin-top:12px"><button class="btn" onclick='closeModalAnd(()=>APP.asgForm(${JSON.stringify(r).replace(/'/g,"&#39;")}))'>Edit</button></div>`;
+    const acts = `<div style="margin-top:12px;display:flex;gap:10px"><button class="btn" onclick='closeModalAnd(()=>APP.asgForm(${JSON.stringify(r).replace(/'/g,"&#39;")}))'>Edit</button>${['Complete','Cancelled'].includes(r.Status)?'':`<button class="btn2" onclick='closeModalAnd(()=>APP.tpForm(${JSON.stringify({client:r.Client,service:r.Service}).replace(/'/g,"&#39;")}))'>📅 Team plan</button>`}</div>`;
     modal('Assignment — ' + h(r.Client), body + acts);
   }
 
@@ -1624,7 +1675,7 @@ const APP = (() => {
       if (!isEdit && !pl.manager) return toast('Pick the assignment manager', true);
       if (isEdit) { pl.rowId = r['Row ID']; pl.status = $('as_status').value; }
       $('as_save').disabled = true;
-      try { await EMS2.callAPI(isEdit?'updateAssignment':'createAssignment', pl); closeModal(); S.masters = null; toast(isEdit?'Updated ✓':'Assignment created ✓'); rAssignments(); }
+      try { await EMS2.callAPI(isEdit?'updateAssignment':'createAssignment', pl); closeModal(); S.masters = null; S.cache.rl = null; toast(isEdit?'Updated ✓':'Assignment created ✓'); rAssignments(); }
       catch (e) { toast(e.message, true); $('as_save').disabled = false; }
     };
   }
@@ -1752,7 +1803,7 @@ const APP = (() => {
           ok++;
         } catch (e) { errs.push('Row ' + it.line + ': ' + e.message); }
       }
-      closeModal(); S.masters = null;
+      closeModal(); S.masters = null; S.cache.rl = null;
       toast('Applied ' + ok + ' of ' + items.length + (errs.length ? ' — ' + errs.length + ' failed' : ' ✓'), errs.length > 0);
       if (errs.length) alert('Import issues:\n' + errs.slice(0, 12).join('\n'));
       rAssignments();
