@@ -118,7 +118,7 @@ const APP = (() => {
       S.isAdmin = (d.employee && d.employee['Role']) === 'admin';
       S.isPartner = S.isAdmin || /partner/i.test((d.employee && d.employee['Designation']) || '');
       $('uName').textContent = S.me['Employee Name'] || email;
-      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b27';
+      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b28';
       $('uAv').textContent = (S.me['Employee Name']||email).split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
       buildNav();
       const hv = (location.hash || '').slice(1);
@@ -1589,8 +1589,8 @@ const APP = (() => {
       $('asg_k4').textContent = v.rec==null ? '—' : v.rec + '%';
       $('asg_k4').style.color = v.rec==null ? 'var(--fog)' : v.rec>=100 ? 'var(--ok)' : 'var(--bad)';
     };
-    const gtc = '80px 1.3fr 130px 108px 108px 84px 82px 82px 92px 56px';
-    const cols = [{k:'Created',l:'Created'},{k:'Client',l:'Client'},{k:'Service',l:'Service'},{k:'Partner',l:'Partner'},{k:'Manager',l:'Manager'},{k:'Due Sort',l:'Due'},{k:'Fees',l:'Fees ₹',r:1},{k:'Cost',l:'Cost ₹',r:1},{k:'Status',l:'Status'},{l:''}];
+    const gtc = '78px 1.25fr 118px 100px 100px 82px 74px 74px 72px 86px 52px';
+    const cols = [{k:'Created',l:'Created'},{k:'Client',l:'Client'},{k:'Service',l:'Service'},{k:'Partner',l:'Partner'},{k:'Manager',l:'Manager'},{k:'Due Sort',l:'Due'},{k:'Fees',l:'Fees ₹',r:1},{k:'Cost',l:'Cost ₹',r:1},{k:'Planned',l:'Plan h',r:1},{k:'Status',l:'Status'},{l:''}];
     TBODY.asg = () => {
       let rows = asgFilt();
       updTiles(calc(rows));
@@ -1602,6 +1602,7 @@ const APP = (() => {
           <div>${h(r.Client)}</div><div>${h(r.Service)}</div><div>${h(r.Partner||'—')}</div><div>${h(r.Manager||'—')}</div>
           <div style="${od?'color:var(--bad);font-weight:700;background:var(--badbg);border-radius:4px;padding:0 4px;':'color:var(--mut)'}">${r['Due Date']?fmtD(r['Due Date']):'—'}</div>
           <div class="num">${r.Fees!=null?fmt0(r.Fees):'—'}</div><div class="num">${fmt0(r.Cost)}</div>
+          <div class="num" title="planned hours from today onward" style="${+r.Planned>0?'color:var(--ok);font-weight:600':'color:var(--fog)'}">${+r.Planned>0?fmt1(r.Planned):'—'}</div>
           <div>${asgPill(r.Status)}</div>
           <div onclick="event.stopPropagation()"><button class="btn2" style="padding:2px 8px;font-size:11px" onclick='APP.asgForm(${JSON.stringify(r).replace(/'/g,"&#39;")})'>Edit</button></div>
         </div>`;}).join('') || '<div style="padding:24px" class="sub">No assignments match — note the default view hides Complete / Hold / Cancelled (Status filter).</div>';
@@ -1647,6 +1648,7 @@ const APP = (() => {
       FROW('Due date', r['Due Date']?fmtD(r['Due Date']):'—') + FROW('Created', fmtD(r.Created)) +
       (r['Closed On']?FROW('Closed on', fmtD(r['Closed On'])):'') +
       FROW('Fees ₹', r.Fees!=null?fmt0(r.Fees):'— not set') + FROW('Cost to date ₹', fmt0(r.Cost)) + FROW('Recovery', rec) +
+      FROW('Planned hours (future)', +r.Planned>0?`<b style="color:var(--ok)">${fmt1(r.Planned)}h</b> from today onward`:'<span style="color:var(--goldd)">none — use Team plan below</span>') +
       FROW('Description', h(r.Description)) +
       FROW('Assignment ID', `<span style="font:500 10.5px ui-monospace,monospace;color:var(--fog)">${h(r['Row ID'])}</span>`);
     const acts = `<div style="margin-top:12px;display:flex;gap:10px"><button class="btn" onclick='closeModalAnd(()=>APP.asgForm(${JSON.stringify(r).replace(/'/g,"&#39;")}))'>Edit</button>${['Complete','Cancelled'].includes(r.Status)?'':`<button class="btn2" onclick='closeModalAnd(()=>APP.tpForm(${JSON.stringify({client:r.Client,service:r.Service}).replace(/'/g,"&#39;")}))'>📅 Team plan</button>`}</div>`;
@@ -1721,7 +1723,7 @@ const APP = (() => {
   }
   function asgCSVe() {
     const d = S.cache.asg || {};
-    const heads = ['Assignment ID','Created','Client','Service','Partner','Manager','Due Date','Fees','Cost','Rec%','Status','Closed On','Description'];
+    const heads = ['Assignment ID','Created','Client','Service','Partner','Manager','Due Date','Fees','Cost','Planned','Rec%','Status','Closed On','Description'];
     const esc = v => '"' + String(v??'').replace(/"/g,'""') + '"';
     const rows = (d.rows||[]).map(r=>({ ...r, 'Assignment ID': r['Row ID'],
       'Rec%': (r.Fees!=null && +r.Cost>0) ? Math.round(100*+r.Fees/+r.Cost) : '' }));
