@@ -118,7 +118,7 @@ const APP = (() => {
       S.isAdmin = (d.employee && d.employee['Role']) === 'admin';
       S.isPartner = S.isAdmin || /partner/i.test((d.employee && d.employee['Designation']) || '');
       $('uName').textContent = S.me['Employee Name'] || email;
-      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b28';
+      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b29';
       $('uAv').textContent = (S.me['Employee Name']||email).split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
       buildNav();
       const hv = (location.hash || '').slice(1);
@@ -864,7 +864,25 @@ const APP = (() => {
     const tpClients = [...new Set(PR.map(p=>p.c))].sort();
     if (preset && preset.client && !tpClients.includes(preset.client)) tpClients.push(preset.client);
     const emps = (raw.employees||[]);
+    const todayStr2 = S.myday.today.date;
+    let exList = '';
+    if (preset) {
+      const cur = (raw.teamRows||[]).filter(w=>w.Client===preset.client && w.Task===preset.service && w['To Date']>=todayStr2);
+      if (cur.length) exList = `<div style="border:1px solid var(--goldline);border-radius:8px;margin-bottom:10px;overflow:hidden">
+        <div style="background:var(--goldbg);padding:6px 10px;font:700 10.5px Inter;text-transform:uppercase;letter-spacing:.05em;color:var(--goldd)">Already planned — edit these instead of duplicating</div>
+        ${cur.map(w=>{ const fut = w['From Date'] >= todayStr2;
+          return `<div style="display:flex;gap:10px;align-items:center;padding:6px 10px;border-top:1px solid var(--line2);font:500 12px Inter">
+            <b style="width:150px;flex:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h(w['Employee Name'])}</b>
+            <span style="color:var(--mut)">${fmtD(w['From Date'])} → ${fmtD(w['To Date'])}</span>
+            <span>${fmt1(w['Daily Hours'])}h/d</span>
+            <span class="sub">by ${h(w['Planned By']||'Self')}</span>
+            <span style="flex:1"></span>
+            <button class="btn2" style="padding:2px 8px;font-size:11px" onclick='closeModalAnd(()=>APP.wpForm(${JSON.stringify(w).replace(/'/g,"&#39;")}${fut?'':',"revise"'}))'>${fut?'Edit':'Revise'}</button>
+            <button class="btn2" style="padding:2px 8px;font-size:11px;color:${fut?'var(--bad)':'var(--goldd)'}" onclick="closeModalAnd(()=>APP.${fut?'wpDel':'wpEnd'}('${w['Row ID']}'))">${fut?'Del':'End'}</button>
+          </div>`; }).join('')}</div>`;
+    }
     modal('Team plan — multiple staff' + (preset?': ' + h(preset.client):''), `
+      ${exList}
       ${preset?`<div style="background:var(--goldbg);border:1px solid var(--goldline);border-radius:8px;padding:7px 10px;margin-bottom:10px;font:500 12px Inter">Planning for <b>${h(preset.client)} — ${h(preset.service)}</b> (from the assignment)</div>`:''}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div style="grid-column:1/-1"><label class="sub">Staff (tick everyone this plan applies to)</label>
@@ -900,7 +918,8 @@ const APP = (() => {
     };
   }
 
-  function wpForm(w, mode) {
+  async function wpForm(w, mode) {
+    if (!S.cache.wp) { try { S.cache.wp = await EMS2.callAPI('initWorkPlan', {}); } catch (e) { return toast(e.message, true); } }
     const d = S.cache.wp; const isEdit = !!(w && w['Row ID']);
     const PR = (d && d.pairs) || [];
     const wpClients = [...new Set(PR.map(p=>p.c))].sort();
@@ -927,19 +946,19 @@ const APP = (() => {
       if (isEdit) entry.rowId = w['Row ID'];
       const action = mode==='revise' ? 'reviseWorkPlanEntry' : isEdit ? 'updateWorkPlanEntry' : 'addWorkPlanEntry';
       $('wp_save').disabled = true;
-      try { await EMS2.callAPI(action, { entry }); closeModal(); S.cache.tpRaw = null; toast('Plan saved ✓'); rWorkplan(); }
+      try { await EMS2.callAPI(action, { entry }); closeModal(); S.cache.tpRaw = null; toast('Plan saved ✓'); RENDER[S.view](); }
       catch (e) { toast(e.message, true); $('wp_save').disabled = false; }
     };
   }
 
   async function wpEnd(rowId) {
     if (!confirm('End this plan as of yesterday?')) return;
-    try { await EMS2.callAPI('endWorkPlanEntry', { rowId, email: S.me['Employee Email'] }); S.cache.tpRaw = null; toast('Ended ✓'); rWorkplan(); }
+    try { await EMS2.callAPI('endWorkPlanEntry', { rowId, email: S.me['Employee Email'] }); S.cache.tpRaw = null; toast('Ended ✓'); RENDER[S.view](); }
     catch (e) { toast(e.message, true); }
   }
   async function wpDel(rowId) {
     if (!confirm('Delete this future plan?')) return;
-    try { await EMS2.callAPI('deleteWorkPlanEntry', { rowId, email: S.me['Employee Email'] }); S.cache.tpRaw = null; toast('Deleted ✓'); rWorkplan(); }
+    try { await EMS2.callAPI('deleteWorkPlanEntry', { rowId, email: S.me['Employee Email'] }); S.cache.tpRaw = null; toast('Deleted ✓'); RENDER[S.view](); }
     catch (e) { toast(e.message, true); }
   }
 
