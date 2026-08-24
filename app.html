@@ -53,7 +53,12 @@
   /* excel-style table */
   .xt { font:500 12.5px Inter; }
   .xt .xh { display:grid; background:#f0f4f8; border-bottom:1px solid #d9e2ec; font:600 11px Inter; color:#486581; text-transform:uppercase; letter-spacing:.04em; position:sticky; top:56px; z-index:30; }
-  .xt .xh > div { padding:8px 10px; cursor:pointer; user-select:none; white-space:nowrap; }
+  .xt .xh > div { padding:8px 10px; cursor:pointer; user-select:none; white-space:nowrap; position:relative; overflow:hidden; text-overflow:ellipsis; }
+  .xt .rsz { position:absolute; top:0; right:-4px; width:9px; height:100%; cursor:col-resize; z-index:6; }
+  .xt .rsz:hover { background:linear-gradient(90deg,transparent 3px,var(--gold) 3px,var(--gold) 6px,transparent 6px); }
+  .xt.wide { overflow-x:auto; }
+  .xt.wide .xh { position:static; min-width:max-content; }
+  .xt.wide .xr { min-width:max-content; }
   .xt .xh > div:hover { color:var(--navy); }
   .xt .xr { display:grid; border-bottom:1px solid var(--line2); height:32px; align-items:center; }
   .xt .xr:nth-child(even) { background:#fbfcfe; }
@@ -100,7 +105,45 @@ const APP = (() => {
   let _qdeb; function qGo(view, val){ const s=(TSORT[view]=TSORT[view]||{}); s.q=val.trim(); clearTimeout(_qdeb); _qdeb=setTimeout(()=>{ const tb=document.getElementById('tb_'+view); if (tb && TBODY[view]) tb.innerHTML = TBODY[view](); },200); }
   function tq(view, rows){ const q=(TSORT[view]&&TSORT[view].q||'').toLowerCase(); return q ? rows.filter(r=>JSON.stringify(r).toLowerCase().includes(q)) : rows; }
   function applySort(view, rows, defCol, defDir){ const s=TSORT[view]||{}; const col=s.col||defCol, dir=s.col?s.dir:(defDir||'asc'); const isD=v=>/^\d{4}-\d{2}/.test(String(v)); return rows.slice().sort((a,b)=>{ let x=a[col], y=b[col]; const nx=parseFloat(x), ny=parseFloat(y); if(isD(x)&&isD(y)){ x=String(x); y=String(y); } else if(!isNaN(nx)&&!isNaN(ny)&&String(x).trim()!==''&&String(y).trim()!==''){ x=nx; y=ny; } else { x=String(x??'').toLowerCase(); y=String(y??'').toLowerCase(); } return (x<y?-1:x>y?1:0)*(dir==='asc'?1:-1); }); }
-  function thdr(view, cols, gtc, top){ const s=TSORT[view]||{}; return `<div class="xh" style="grid-template-columns:${gtc};top:${top||0}">` + cols.map(c=>`<div ${c.k?`onclick=\"APP.tsortGo('${view}','${c.k}')\"`:''} style="${c.r?'text-align:right;':''}${s.col===c.k?'color:var(--navy);':''}">${c.l}${c.k?(s.col===c.k?(s.dir==='asc'?' ▲':' ▼'):' ↕'):''}</div>`).join('') + '</div>'; }
+  function thdr(view, cols, gtc, top){ const s=TSORT[view]||{}; setTimeout(()=>colwFit(view), 60);
+    return `<div class="xh" data-cw="${view}" style="grid-template-columns:${gtc};top:${top||0}">` + cols.map((c,ci)=>`<div ${c.k?`onclick=\"APP.tsortGo('${view}','${c.k}')\"`:''} title="${c.l?'drag the right edge to resize · double-click it to reset':''}" style="${c.r?'text-align:right;':''}${s.col===c.k?'color:var(--navy);':''}">${c.l}${c.k?(s.col===c.k?(s.dir==='asc'?' ▲':' ▼'):' ↕'):''}<span class="rsz" data-cw="${view}" data-i="${ci}"></span></div>`).join('') + '</div>'; }
+
+  // ---- resizable columns (per-table widths remembered in this browser) ----
+  const COLW = (()=>{ try { return JSON.parse(localStorage.getItem('ems2_colw_v1')||'{}'); } catch(e){ return {}; } })();
+  function colwSave(){ try { localStorage.setItem('ems2_colw_v1', JSON.stringify(COLW)); } catch(e){} }
+  function colwCss(){
+    let st = document.getElementById('colw_style');
+    if (!st) { st = document.createElement('style'); st.id = 'colw_style'; document.head.appendChild(st); }
+    st.textContent = Object.keys(COLW).map(v=>`[data-cw="${v}"], #tb_${v} > .xr { grid-template-columns:${COLW[v].map(x=>x+'px').join(' ')} !important; }`).join('\n');
+  }
+  function colwFit(view){
+    const hdr = document.querySelector(`[data-cw="${view}"]`); if (!hdr) return;
+    const xt = hdr.closest('.xt'); if (!xt) return;
+    const w = (COLW[view]||[]).reduce((a,b)=>a+b,0);
+    if (w && w > xt.clientWidth + 2) xt.classList.add('wide'); else xt.classList.remove('wide');
+  }
+  document.addEventListener('click', e=>{ if (e.target && e.target.classList && e.target.classList.contains('rsz')) { e.stopPropagation(); e.preventDefault(); } }, true);
+  document.addEventListener('mousedown', e=>{
+    const hn = e.target; if (!hn || !hn.classList || !hn.classList.contains('rsz')) return;
+    e.preventDefault(); e.stopPropagation();
+    const view = hn.dataset.cw, i = +hn.dataset.i;
+    const hdr = hn.closest('[data-cw]'); if (!hdr) return;
+    const start = [...hdr.children].map(c=>Math.round(c.getBoundingClientRect().width));
+    const x0 = e.clientX;
+    const move = ev => { const arr = start.slice(); arr[i] = Math.max(44, start[i] + (ev.clientX - x0)); COLW[view] = arr; colwCss(); };
+    const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); document.body.style.cursor = ''; colwSave(); colwFit(view); };
+    document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+    document.body.style.cursor = 'col-resize';
+  });
+  document.addEventListener('dblclick', e=>{
+    const hn = e.target; if (!hn || !hn.classList || !hn.classList.contains('rsz')) return;
+    e.preventDefault(); e.stopPropagation();
+    delete COLW[hn.dataset.cw]; colwSave(); colwCss();
+    const xt = hn.closest('.xt'); if (xt) xt.classList.remove('wide');
+    toast('Column widths reset for this table');
+  });
+  window.addEventListener('resize', ()=>{ document.querySelectorAll('[data-cw]').forEach(h=>colwFit(h.dataset.cw)); });
+  colwCss();
 
   function toast(msg, err) {
     const t = document.createElement('div');
@@ -118,7 +161,7 @@ const APP = (() => {
       S.isAdmin = (d.employee && d.employee['Role']) === 'admin';
       S.isPartner = S.isAdmin || /partner/i.test((d.employee && d.employee['Designation']) || '');
       $('uName').textContent = S.me['Employee Name'] || email;
-      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b29';
+      $('uRole').textContent = (S.me['Designation']||'') + (S.isAdmin?' · Admin':S.isApprover?' · Approver':'') + ' · b30';
       $('uAv').textContent = (S.me['Employee Name']||email).split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
       buildNav();
       const hv = (location.hash || '').slice(1);
