@@ -208,7 +208,7 @@ const APP = (() => {
     { id:'review', icon:'🔎', label:'Review' },
     S.isPartner && { id:'assignments', icon:'📁', label:'Assignments' },
     S.isApprover && { id:'invoicing', icon:'🧾', label:'Invoicing' },
-    S.isPartner && { id:'udin', icon:'🔏', label:'UDIN' },
+    S.isApprover && { id:'udin', icon:'🔏', label:'UDIN' },
     { id:'myday', icon:'☀️', label:'My Day', dot:()=>missingYday() },
     { id:'timesheet', icon:'🗓', label:'Timesheet' },
     { id:'workplan', icon:'📋', label:'Work Plan' },
@@ -2037,7 +2037,7 @@ const APP = (() => {
     const b = $('udn_mark'); if (b) b.textContent = '🧾 Mark invoiced (' + n + ')';
   }
   async function rUdin() {
-    if (!S.isPartner) { $('view').innerHTML = '<div class="card"><b>Partners/admin only.</b></div>'; return; }
+    if (!S.isApprover) { $('view').innerHTML = '<div class="card"><b>Approvers/admin only.</b></div>'; return; }
     const todayStr = S.myday.today.date;
     const F = TSORT['udn'] = TSORT['udn']||{};
     F.from = F.from || addDaysIso(todayStr, -365); F.to = F.to || todayStr;
