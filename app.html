@@ -911,7 +911,10 @@ const APP = (() => {
         <select style="width:130px" onchange="APP.fGo('tpt','floc',this.value)"><option value="">Location: All</option>${['Office','Client Place','WFH','Travelling'].map(l=>`<option ${l===F.floc?'selected':''}>${l}</option>`).join('')}</select>
         <select style="width:150px" onchange="APP.fGo('tpt','fby',this.value)"><option value="">Planned by: All</option>${bys.map(x=>`<option ${x===F.fby?'selected':''}>${h(x)}</option>`).join('')}</select>
         <input id="q_tpt" style="width:150px" placeholder="🔍 Search…" value="${h(F.q||'')}" oninput="APP.qGo('tpt', this.value)">
-        <button class="btn" style="margin-left:auto" onclick="APP.tpForm()">+ Team plan</button>
+        <button class="btn2" style="margin-left:auto" onclick="APP.tpTpl()" title="Excel template with dropdowns">⬇ Template</button>
+        <button class="btn2" onclick="document.getElementById('tp_file').click()" title="Bulk upload team plans from Excel">⬆ Upload Excel</button>
+        <input type="file" id="tp_file" accept=".xlsx" style="display:none" onchange="APP.tpImp(this)">
+        <button class="btn" onclick="APP.tpForm()">+ Team plan</button>
       </div>
       <div style="overflow-x:auto;border:1px solid var(--line2);border-radius:8px">${gridHead}${gridRows||'<div style="padding:20px" class="sub">No plans in the next 30 days.</div>'}</div>
       <div class="sub" style="margin-top:8px">Cell = planned hours · green ≥6h · amber &lt;6h · grey off-day · 🏖 leave · hover for detail</div>
@@ -988,6 +991,126 @@ const APP = (() => {
         closeModal(); S.cache.tpRaw = null; toast('Planned for ' + r.created + ' staff ✓');
         RENDER[S.view]();
       } catch (e) { toast(e.message, true); $('tp2_save').disabled = false; }
+    };
+  }
+
+  // ---- Team plan: bulk Excel upload (api_bulkteamplan — validate all, save all-or-nothing) ----
+  const TP_HEADS = ['Employee','Client','Service','From Date','To Date','Hours/Day','Location','Description','Include Off Days'];
+  const TP_LOCS = ['Office','Client Place','WFH','Travelling'];
+  async function tpTpl() {
+    try {
+      if (!S.cache.wp) S.cache.wp = await EMS2.callAPI('initWorkPlan', {});
+      const raw = await tpRawGet(false);
+      const PR = (S.cache.wp && S.cache.wp.pairs) || [];
+      const clients = [...new Set(PR.map(p=>p.c))].sort();
+      const services = [...new Set(PR.map(p=>p.k))].sort();
+      const emps = (raw.employees||[]).map(e=>e.name);
+      const EX = await xlsxLib();
+      const wb = new EX.Workbook();
+      const ws = wb.addWorksheet('Team Plan');
+      const vp = wb.addWorksheet('Valid Client-Service');
+      const ls = wb.addWorksheet('Lists'); ls.state = 'veryHidden';
+      const put = (col, arr) => arr.forEach((v,i)=>{ ls.getCell(col+(i+1)).value = v; });
+      put('A', emps); put('B', clients); put('C', services); put('D', TP_LOCS); put('E', ['No','Yes']);
+      ws.addRow(TP_HEADS); ws.getRow(1).font = { bold: true };
+      [24,32,26,12,12,10,13,40,14].forEach((w,i)=>{ ws.getColumn(i+1).width = w; });
+      const dv = (colL, listCol, n) => { for (let rI = 2; rI <= 500; rI++)
+        ws.getCell(colL+rI).dataValidation = { type: 'list', allowBlank: true, showErrorMessage: true, errorStyle: 'stop',
+          errorTitle: 'Pick from list', error: 'Choose a value from the dropdown.',
+          formulae: ['Lists!$'+listCol+'$1:$'+listCol+'$'+Math.max(n,1)] }; };
+      dv('A','A',emps.length); dv('B','B',clients.length); dv('C','C',services.length); dv('G','D',TP_LOCS.length); dv('I','E',2);
+      for (let rI = 2; rI <= 500; rI++) { ws.getCell('D'+rI).numFmt = 'yyyy-mm-dd'; ws.getCell('E'+rI).numFmt = 'yyyy-mm-dd'; }
+      ws.getCell('C1').note = 'Must be a live assignment for the chosen client — see sheet "Valid Client-Service".';
+      ws.getCell('D1').note = 'Today or later (YYYY-MM-DD)';
+      ws.getCell('E1').note = 'Max 30 days ahead of today';
+      ws.getCell('F1').note = '0.5 to 6 hours per day';
+      ws.getCell('H1').note = '2-100 characters';
+      ws.getCell('I1').note = 'Yes = also plan Sundays & holidays. Blank = No';
+      ws.views = [{ state: 'frozen', ySplit: 1 }];
+      vp.addRow(['Client','Service']); vp.getRow(1).font = { bold: true };
+      vp.getColumn(1).width = 44; vp.getColumn(2).width = 30;
+      PR.slice().sort((a,b)=>(a.c+'|'+a.k).localeCompare(b.c+'|'+b.k)).forEach(p=>vp.addRow([p.c, p.k]));
+      const buf = await wb.xlsx.writeBuffer();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      a.download = 'team-plan-template.xlsx'; a.click();
+      toast('Template downloaded — one row per person per client/service');
+    } catch (e) { toast(e.message, true); }
+  }
+  async function tpImp(inp) {
+    const f = inp.files && inp.files[0]; inp.value = ''; if (!f) return;
+    let rows, raw;
+    try {
+      if (!S.cache.wp) S.cache.wp = await EMS2.callAPI('initWorkPlan', {});
+      raw = await tpRawGet(true);
+      const EX = await xlsxLib();
+      const wb = new EX.Workbook();
+      await wb.xlsx.load(await f.arrayBuffer());
+      const ws = wb.getWorksheet('Team Plan') || wb.worksheets.find(w=>w.state==='visible') || wb.worksheets[0];
+      rows = [];
+      ws.eachRow({ includeEmpty: false }, (row, rn) => { const v = Array.from((row.values||[]).slice(1), v=>xlNorm(v).trim()); v.rn = rn; rows.push(v); });
+    } catch (e) { return toast('Could not read file: ' + e.message, true); }
+    if (!rows || rows.length < 2) return toast('File has no data rows', true);
+    const hd = rows[0].map(x=>String(x||'').trim().toLowerCase());
+    const ix = k => hd.indexOf(k.toLowerCase());
+    const miss = TP_HEADS.filter(k=>k!=='Include Off Days' && ix(k) < 0);
+    if (miss.length) return toast('Missing column(s): ' + miss.join(', ') + ' — use ⬇ Template', true);
+    const g = (r,k) => ix(k) >= 0 ? String(r[ix(k)]||'').trim() : '';
+    // case-insensitive match to the exact names the server expects
+    const PR = (S.cache.wp && S.cache.wp.pairs) || [];
+    const canon = list => { const m = {}; list.forEach(x=>{ m[String(x).toLowerCase()] = x; }); return v => m[String(v).toLowerCase()] || v; };
+    const cCli = canon(PR.map(p=>p.c)), cSvc = canon(PR.map(p=>p.k)), cLoc = canon(TP_LOCS);
+    const empBy = {}; (raw.employees||[]).forEach(e=>{ empBy[String(e.name).toLowerCase()] = e; empBy[String(e.email).toLowerCase()] = e; });
+    const items = rows.slice(1).map(r=>({ r, line: r.rn })).filter(x=>x.r.join('').trim()).map(({r,line})=>({
+      line, employee: g(r,'Employee'), client: cCli(g(r,'Client')), task: cSvc(g(r,'Service')),
+      fromDate: normDate(g(r,'From Date')), toDate: normDate(g(r,'To Date')),
+      dailyHours: g(r,'Hours/Day'), location: cLoc(g(r,'Location')), description: g(r,'Description'),
+      includeOffDays: /^y/i.test(g(r,'Include Off Days')) ? 'Yes' : 'No' }));
+    if (!items.length) return toast('File has no data rows', true);
+    if (items.length > 500) return toast('Max 500 rows per upload — split the file', true);
+    let res;
+    try { res = await EMS2.callAPI('bulkTeamPlan', { rows: items, dryRun: true }); }
+    catch (e) { return toast(e.message, true); }
+    const errBy = {}; (res.errors||[]).forEach(x=>{ errBy[x.line] = x.error; });
+    // over-allocation warning: existing team plans + this file, per person per day (> 6h)
+    const offDay = iso => new Date(iso+'T00:00:00').getDay() === 0;
+    const load = {};
+    const add = (email, w) => { if (!w.fromDate || !w.toDate) return;
+      for (let d = w.fromDate; d <= w.toDate; d = addDaysIso(d, 1)) {
+        if (offDay(d) && w.includeOffDays !== 'Yes') continue;
+        const k = email + '|' + d; load[k] = (load[k]||0) + (+w.dailyHours||0); } };
+    (raw.teamRows||[]).forEach(w=>add(String(w['Employee Email']||'').toLowerCase(),
+      { fromDate: w['From Date'] < raw.today ? raw.today : w['From Date'], toDate: w['To Date'], dailyHours: w['Daily Hours'], includeOffDays: w['Include Off Days'] }));
+    items.filter(it=>!errBy[it.line]).forEach(it=>{ const e = empBy[it.employee.toLowerCase()]; if (e) add(String(e.email).toLowerCase(), it); });
+    const over = {};
+    Object.keys(load).forEach(k=>{ if (load[k] > 6) { const [em, d] = k.split('|'); const nm = (empBy[em]||{}).name || em;
+      if (!over[nm] || load[k] > over[nm].h) over[nm] = { h: load[k], d, n: (over[nm]||{}).n||0 }; over[nm].n++; } });
+    const overL = Object.keys(over).sort();
+    const nErr = Object.keys(errBy).length;
+    modal('Upload team plan — preview', `
+      <div style="font:500 12.5px Inter;line-height:1.6;margin-bottom:10px">${items.length} row(s) read · <b style="color:var(--ok)">${items.length-nErr} valid</b>${nErr?` · <b style="color:var(--bad)">${nErr} with errors</b>`:''}</div>
+      <div style="border:1px solid var(--line2);border-radius:8px;max-height:300px;overflow:auto">
+        ${items.map(it=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 10px;border-top:1px solid var(--line2);font:500 11.5px Inter;${errBy[it.line]?'background:var(--badbg)':''}">
+          <span style="width:22px;flex:none">${errBy[it.line]?'✗':'✓'}</span>
+          <span style="width:38px;flex:none;color:var(--mut)">Row ${it.line}</span>
+          <span style="flex:1"><b>${h(it.employee||'—')}</b> · ${h(it.client)} — ${h(it.task)}<br>
+            <span class="sub">${fmtD(it.fromDate)||h(it.fromDate)} → ${fmtD(it.toDate)||h(it.toDate)} · ${h(it.dailyHours)}h/d · ${h(it.location)}${it.includeOffDays==='Yes'?' · incl. off-days':''}</span>
+            ${errBy[it.line]?`<br><span style="color:var(--bad);font-weight:600">${h(errBy[it.line])}</span>`:''}</span></div>`).join('')}
+      </div>
+      ${overL.length?`<div style="margin-top:10px;background:var(--goldbg);border:1px solid var(--goldline);border-radius:8px;padding:8px 10px;font:500 12px Inter">
+        <b style="color:var(--goldd)">⚠ Over 6h/day after this upload</b> (existing plans + this file — allowed, but check):<br>
+        ${overL.map(nm=>`${h(nm)}: up to ${fmt1(over[nm].h)}h on ${fmtD(over[nm].d)} (${over[nm].n} day${over[nm].n>1?'s':''})`).join('<br>')}</div>`:''}
+      <div style="margin-top:14px">${nErr
+        ? `<div style="font:600 12.5px Inter;color:var(--bad)">Nothing has been saved. Fix the rows marked ✗ in the file and upload again.</div>`
+        : `<button class="btn" id="tp_imp_go">Create ${items.length} plan${items.length>1?'s':''}</button>`}</div>`);
+    if (!nErr) $('tp_imp_go').onclick = async () => {
+      $('tp_imp_go').disabled = true; $('tp_imp_go').textContent = 'Saving…';
+      try {
+        const r = await EMS2.callAPI('bulkTeamPlan', { rows: items, dryRun: false });
+        if ((r.errors||[]).length) throw new Error('Row ' + r.errors[0].line + ': ' + r.errors[0].error + ' — nothing saved');
+        closeModal(); S.cache.tpRaw = null; toast('Created ' + r.created + ' team plan' + (r.created>1?'s':'') + ' ✓');
+        RENDER[S.view]();
+      } catch (e) { toast(e.message, true); $('tp_imp_go').disabled = false; $('tp_imp_go').textContent = 'Retry'; }
     };
   }
 
@@ -2275,7 +2398,7 @@ const APP = (() => {
   async function signout() { await EMS2.signOut(); location.replace('home.html?next=app'); }
 
   boot();
-  return { show, signout, invGo, invSel, invAll, invMark, invUnmark, invCSV, invDrill, udnGo, udnSel, udnAll, udnMark, udnUnmark, udnCSV, udnDrill, udnView, udnClient, udnUpload, quickLog, logPlan, tsPopup, actGo, openAppr, selAppr, bulkApprove, rfshAppr, tsortGo: tsort, qGo, fGo, exForm, exMonthGo, rtSort, rtCSV, tsEdit, tsDel, wpForm, wpEnd, wpDel, wpNew, wpTabGo, tpForm, vizGo, vizEmpGo, vizCliGo, lvEdit, lvCancel, coCancel, exCancel, viewBill, exHint, exView, lvView, wpView, rtView, asgView, asgForm, asgCSVt, asgCSVe, asgImp, S, RENDER, masters, h, fmt1, toast, $ };
+  return { show, signout, invGo, invSel, invAll, invMark, invUnmark, invCSV, invDrill, udnGo, udnSel, udnAll, udnMark, udnUnmark, udnCSV, udnDrill, udnView, udnClient, udnUpload, quickLog, logPlan, tsPopup, actGo, openAppr, selAppr, bulkApprove, rfshAppr, tsortGo: tsort, qGo, fGo, exForm, exMonthGo, rtSort, rtCSV, tsEdit, tsDel, wpForm, wpEnd, wpDel, wpNew, wpTabGo, tpForm, tpTpl, tpImp, vizGo, vizEmpGo, vizCliGo, lvEdit, lvCancel, coCancel, exCancel, viewBill, exHint, exView, lvView, wpView, rtView, asgView, asgForm, asgCSVt, asgCSVe, asgImp, S, RENDER, masters, h, fmt1, toast, $ };
 })();
 </script>
 </body>
