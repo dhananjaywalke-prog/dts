@@ -49,7 +49,7 @@
 <script>
 (async function () {
     const $ = id => document.getElementById(id);
-    const h = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    const h = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     const fmt1 = n => (Math.round((+n||0)*100)/100).toLocaleString('en-IN');
     function toast(msg, err) { const t=document.createElement('div'); t.className='toast'+(err?' err':''); t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(), err?5000:2600); }
     function modal(title, inner, wide) {
@@ -333,6 +333,13 @@
         const obj = collectForm();
         const err = validate(obj);
         if (err) return toast(err, true);
+        if (id && current==='employees') {
+            const old = rows.find(x=>x.id===id) || {};
+            const chg = [];
+            if (obj.role !== undefined && String(obj.role||'') !== String(old.role||'')) chg.push('Role: ' + (old.role||'—') + ' → ' + obj.role);
+            if (obj.email !== undefined && String(obj.email||'').toLowerCase() !== String(old.email||'').toLowerCase()) chg.push('Login email: ' + (old.email||'—') + ' → ' + obj.email + '\n   (they must sign in with the NEW email from now on)');
+            if (chg.length && !confirm('Confirm change for ' + (old.name||'this employee') + ':\n\n' + chg.join('\n') + '\n\nProceed?')) return;
+        }
         const r = id ? await sb.from(spec().table).update(obj).eq('id', id) : await sb.from(spec().table).insert([obj]);
         if (r.error) return toast('Save failed: '+r.error.message, true);
         closeModal(); toast('Saved ✓'); await load(); render();
@@ -393,7 +400,7 @@
         if (!known.some(k=>k&&k!=='id')) return toast('No recognizable columns — start from ⬇ Template or ⬇ Excel', true);
         const byId = {}; rows.forEach(r=>byId[r.id]=r);
         const uniqIx = {}; (spec().uniq||[]).forEach(u=>{ rows.forEach(r=>{ const key=String(r[u]??'').toLowerCase(); if(key) (uniqIx[u]=uniqIx[u]||{})[u==='holiday_date'?key+'|'+String(r.raw_email??'').toLowerCase():key]=r; }); });
-        const ops = [], errs = [];
+        const ops = [], errs = []; let unchanged = 0;
         for (let i=1;i<grid.length;i++) {
             const rowArr = grid[i]; const patch = {}; let idv = '';
             known.forEach((k,ci)=>{ if(!k) return; const raw = rowArr[ci]??'';
@@ -409,11 +416,24 @@
             }
             if (idv && !byId[idv]) { errs.push('Row '+(i+1)+': id not found'); continue; }
             if (Object.keys(patch).length===0) { errs.push('Row '+(i+1)+': nothing to apply'); continue; }
-            if (target) ops.push({a:'update', id:target.id, patch, n:i+1});
-            else {
+            // option lists (role, tone …) must match exactly
+            const badOpt = spec().cols.find(c => c.t==='select' && patch[c.k]!==undefined && !(c.opts||[]).includes(patch[c.k]));
+            if (badOpt) { errs.push('Row '+(i+1)+': '+badOpt.l+' must be one of '+badOpt.opts.join(' / ')); continue; }
+            if (target) {
+                // keep only fields that actually change; validate the record as it would end up
+                const diff = {};
+                Object.keys(patch).forEach(k => { if (String(patch[k]??'') !== String(target[k]??'')) diff[k] = patch[k]; });
+                if (!Object.keys(diff).length) { unchanged++; continue; }
+                const verr = validate(Object.assign({}, target, diff));
+                if (verr) { errs.push('Row '+(i+1)+': '+verr); continue; }
+                ops.push({a:'update', id:target.id, patch:diff, n:i+1, label: target.name || target.message || target.holiday_date || target.id,
+                          before: Object.fromEntries(Object.keys(diff).map(k => [k, target[k]]))});
+            } else {
                 const missing = spec().cols.filter(c=>c.req&&c.t!=='status'&&patch[c.k]==null);
                 if (missing.length) { errs.push('Row '+(i+1)+': missing '+missing.map(c=>c.l).join(', ')); continue; }
-                ops.push({a:'create', patch, n:i+1});
+                const verr = validate(patch);
+                if (verr) { errs.push('Row '+(i+1)+': '+verr); continue; }
+                ops.push({a:'create', patch, n:i+1, label: patch.name || patch.message || patch.holiday_date || '(new)'});
             }
         }
         _ops = ops;
@@ -424,22 +444,27 @@
             <span class="pill" style="background:var(--goldbg);color:var(--goldd);cursor:default">${cr} new</span>
             <span class="pill" style="background:${errs.length?'var(--badbg)':'var(--line2)'};color:${errs.length?'var(--bad)':'var(--mut)'};cursor:default">${errs.length} skipped</span>
           </div>
-          <div class="sub" style="margin-bottom:8px">Blank cells never overwrite existing values. All changes are audit-logged.</div>
+          <div class="sub" style="margin-bottom:8px">Blank cells never overwrite existing values · ${unchanged} unchanged row(s) ignored · saved all-or-nothing · audit-logged.</div>
+          ${ops.length ? `<div style="max-height:260px;overflow:auto;border:1px solid var(--line2);border-radius:8px;margin-bottom:10px;font:500 11.5px Inter">
+            ${ops.slice(0,200).map(o => {
+              const crit = o.a==='update' && ('role' in o.patch || 'email' in o.patch);
+              const body = o.a==='create' ? '<span style="color:var(--goldd)">new</span> · ' + h(Object.entries(o.patch).map(([k,v])=>k+': '+v).join(' · '))
+                : Object.keys(o.patch).map(k => '<b>'+h(k)+'</b>: '+h(o.before[k]??'—')+' → '+h(o.patch[k]??'—')).join(' · ');
+              return '<div style="padding:6px 10px;border-top:1px solid var(--line2);'+(crit?'background:var(--badbg)':'')+'">Row '+o.n+' · <b>'+h(o.label)+'</b><br>'+body+'</div>';
+            }).join('')}${ops.length>200?'<div style="padding:6px 10px">… '+(ops.length-200)+' more</div>':''}</div>` : ''}
+          ${ops.some(o=>o.a==='update' && ('role' in o.patch || 'email' in o.patch)) ? `<label style="display:flex;gap:8px;align-items:center;font:600 12px Inter;color:var(--bad);margin-bottom:10px"><input type="checkbox" id="imp_crit" style="width:auto"> I confirm the highlighted role / login-email changes</label>` : ''}
           ${errs.length?`<div style="background:var(--badbg);border-radius:8px;padding:10px;font:500 11.5px Inter;color:var(--bad);margin-bottom:10px">${errs.slice(0,10).map(h).join('<br>')}${errs.length>10?'<br>…':''}</div>`:''}
           <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn2" onclick="document.getElementById('modal').remove()">Cancel</button><button class="btn" ${ops.length?'':'disabled'} onclick="ADM.impGo()">Apply ${ops.length} change${ops.length===1?'':'s'}</button></div>`, true);
     }
     async function impGo() {
-        closeModal();
-        const ops = _ops||[]; _ops = null;
-        let ok=0, fail=0;
+        const ops = _ops||[];
+        const crit = document.getElementById('imp_crit');
+        if (crit && !crit.checked) return toast('Tick the confirmation for the highlighted role / login-email changes', true);
+        closeModal(); _ops = null;
         toast('Applying '+ops.length+' changes…');
-        for (let i=0;i<ops.length;i+=15) {
-            const batch = ops.slice(i,i+15).map(o =>
-                (o.a==='update' ? sb.from(spec().table).update(o.patch).eq('id',o.id) : sb.from(spec().table).insert([o.patch]))
-                .then(r=>{ if(r.error){fail++; console.warn('row',o.n,r.error.message);} else ok++; }));
-            await Promise.all(batch);
-        }
-        toast(fail? ('Done: '+ok+' applied, '+fail+' failed (see console)') : ('Done: '+ok+' applied ✓'), !!fail);
+        const r = await sb.rpc('api_admin_import', { p: { table: spec().table, ops: ops.map(o => ({ a:o.a, id:o.id, n:o.n, patch:o.patch })) } });
+        if (r.error) { toast(r.error.message, true); return; }
+        toast('Done: ' + (r.data.updated||0) + ' updated, ' + (r.data.created||0) + ' created ✓');
         await load(); render();
     }
 

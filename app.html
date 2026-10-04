@@ -66,6 +66,7 @@
   .xt .xr > div { padding:0 10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .num { text-align:right; font-weight:600; }
   @media (max-width: 900px) { #side{width:64px} #side .brand b,#side .brand .bar,#side .foot div,#nav .lbl{display:none} #view{padding:12px} }
+  @media (max-width: 700px) { #view .grid{grid-template-columns:1fr !important} #view{padding:8px} .xt{overflow-x:auto} #modal .card{max-height:92vh;padding:14px} #top{flex-wrap:wrap;gap:6px} }
 </style>
 </head>
 <body>
@@ -263,7 +264,7 @@ const APP = (() => {
   function buildNav() {
     $('nav').innerHTML = VIEWS().map(v => v.href
       ? `<a class="nitem" style="text-decoration:none" href="${v.href}"><span>${v.icon}</span><span class="lbl">${v.label}</span></a>`
-      : `<button class="nitem${S.view===v.id?' on':''}" onclick="APP.show('${v.id}')"><span>${v.icon}</span><span class="lbl">${v.label}</span>${v.badge&&v.badge()?`<span class="bdg">${v.badge()}</span>`:''}${v.dot&&v.dot()?'<span class="dot"></span>':''}</button>`
+      : `<button class="nitem${S.view===v.id?' on':''}" aria-label="${h(v.label)}" title="${h(v.label)}" onclick="APP.show('${v.id}')"><span>${v.icon}</span><span class="lbl">${v.label}</span>${v.badge&&v.badge()?`<span class="bdg">${v.badge()}</span>`:''}${v.dot&&v.dot()?'<span class="dot"></span>':''}</button>`
     ).join('');
   }
 
@@ -706,11 +707,28 @@ const APP = (() => {
     const w = document.createElement('div');
     w.id = 'modal';
     w.setAttribute('style','position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;background:rgba(16,42,67,.55);padding:16px');
-    w.innerHTML = `<div class="card" style="width:100%;max-width:560px;max-height:85vh;overflow:auto"><div style="display:flex;align-items:center;margin-bottom:12px"><span class="h" style="font-size:15px">${title}</span><button class="btn2" style="margin-left:auto" onclick="document.getElementById('modal').remove()">✕</button></div>${inner}</div>`;
+    w.innerHTML = `<div class="card" style="width:100%;max-width:560px;max-height:85vh;overflow:auto"><div style="display:flex;align-items:center;margin-bottom:12px"><span class="h" style="font-size:15px">${title}</span><button class="btn2" style="margin-left:auto" aria-label="Close (Esc)" title="Close (Esc)" onclick="document.getElementById('modal').remove()">✕</button></div>${inner}</div>`;
+    w.setAttribute('role', 'dialog'); w.setAttribute('aria-modal', 'true'); w.setAttribute('aria-label', String(title).replace(/<[^>]*>/g, ''));
     document.body.appendChild(w);
+    dateLimits(w);
+    setTimeout(() => { const f = w.querySelector('input:not([type=hidden]):not([disabled]),select:not([disabled]),textarea'); if (f) f.focus(); }, 30);
     return w;
   }
   const closeModal = () => { const m = $('modal'); if (m) m.remove(); };
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('modal')) closeModal(); });
+  // Date pickers only offer dates the server will accept (server still enforces the rules).
+  function dateLimits(root) {
+    const t = todayIST(), plus = d => addDaysIso(t, d);
+    const sixMonths = (() => { const d = new Date(t + 'T00:00:00'); d.setMonth(d.getMonth() + (CONFIG.MAX_FUTURE_MONTHS_LEAVE || 6)); const z = x => String(x).padStart(2, '0'); return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate()); })();
+    const R = {
+      tp_date: [plus(-(CONFIG.MAX_PAST_DAYS_TIMESHEET || 7)), t], ex_date: [plus(-(CONFIG.MAX_PAST_DAYS_EXPENSE || 7)), t],
+      lv_from: [plus(-(CONFIG.MAX_PAST_DAYS_LEAVE || 7)), sixMonths], lv_to: [plus(-(CONFIG.MAX_PAST_DAYS_LEAVE || 7)), sixMonths],
+      le_from: [plus(-(CONFIG.MAX_PAST_DAYS_LEAVE || 7)), sixMonths], le_to: [plus(-(CONFIG.MAX_PAST_DAYS_LEAVE || 7)), sixMonths],
+      co_date: [null, t], tp2_from: [t, plus(30)], tp2_to: [t, plus(30)], wp_from: [null, plus(30)], wp_to: [null, plus(30)],
+      iv_dt: [null, t], un_dt: [null, t], as_due: [t, null]
+    };
+    for (const id in R) { const el = root.querySelector('#' + id); if (!el) continue; if (R[id][0]) el.min = R[id][0]; if (R[id][1]) el.max = R[id][1]; }
+  }
   window.closeModalAnd = (fn) => { closeModal(); setTimeout(fn, 30); };
 
   // ---------------- TIMESHEET ----------------
