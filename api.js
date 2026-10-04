@@ -196,7 +196,7 @@
     try {
       if (CONFIG.IS_TEST_PORTAL) {
         var bar = document.createElement('div');
-        bar.setAttribute('style', 'position:sticky;top:0;z-index:99998;background:#d4a853;color:#102a43;text-align:center;font:600 12px Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;padding:6px 10px;');
+        bar.setAttribute('style', 'position:relative;z-index:50;background:#d4a853;color:#102a43;text-align:center;font:600 12px Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;padding:6px 10px;');
         bar.textContent = 'TEST PORTAL — new screens on trial · uses the LIVE database: anything you save, approve or delete here is REAL';
         document.body.prepend(bar);
       }
@@ -207,7 +207,7 @@
         r.data.forEach(function (a) {
           var el = document.createElement('div');
           var imp = a.severity === 'important';
-          el.setAttribute('style', 'position:sticky;top:0;z-index:99997;text-align:center;font:500 13px Inter,sans-serif;padding:8px 12px;' +
+          el.setAttribute('style', 'position:relative;z-index:50;text-align:center;font:500 13px Inter,sans-serif;padding:8px 12px;' +
             (imp ? 'background:#7a2e1d;color:#fff;' : 'background:#f0f4f8;color:#102a43;border-bottom:1px solid #d9e2ec;'));
           el.textContent = a.message;
           document.body.prepend(el);
