@@ -102,8 +102,28 @@ const APP = (() => {
   const VIEW_OF = { exp:'expenses', apl:'approvals', apx:'approvals', tsm:'timesheet', apc:'approvals', lvt:'leave', cot:'leave', wpt:'workplan', tpt:'workplan', asg:'assignments', inv:'invoicing', udn:'udin' };
   const TBODY = {};
   function addDaysIso(iso, n){ const d = new Date(iso+'T00:00:00'); d.setDate(d.getDate()+n); const p=x=>String(x).padStart(2,'0'); return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()); }
-  function tsort(view, col){ const s=TSORT[view]=TSORT[view]||{}; if(s.col===col) s.dir=s.dir==='asc'?'desc':'asc'; else { s.col=col; s.dir='asc'; } RENDER[VIEW_OF[view]||view](); }
-  function fGo(view, key, val){ (TSORT[view]=TSORT[view]||{})[key]=val; RENDER[VIEW_OF[view]||view](); }
+  // ---- read cache: sort / filter re-renders reuse the last server response instead of re-fetching.
+  //      Any write (non-read action) clears it; normal navigation (show) always fetches fresh.
+  const RC = {}; let REUSE = false;
+  const READ_RX = /^(init|dashboard$|myday$|invoiceReport$|udinReport$|review_table$|viz_|realisation$)/;
+  (function () {
+    const raw = EMS2.callAPI.bind(EMS2);
+    EMS2.callAPI = async (action, params) => {
+      if (READ_RX.test(action)) {
+        const k = action + '|' + JSON.stringify(params || {});
+        if (REUSE && RC[k]) return RC[k];
+        return (RC[k] = await raw(action, params));
+      }
+      for (const k in RC) delete RC[k];
+      return raw(action, params);
+    };
+  })();
+  async function rerenderLocal(view) {
+    REUSE = true;
+    try { await RENDER[VIEW_OF[view]||view](); } catch (e) { toast(e.message, true); } finally { REUSE = false; }
+  }
+  function tsort(view, col){ const s=TSORT[view]=TSORT[view]||{}; if(s.col===col) s.dir=s.dir==='asc'?'desc':'asc'; else { s.col=col; s.dir='asc'; } return rerenderLocal(view); }
+  function fGo(view, key, val){ (TSORT[view]=TSORT[view]||{})[key]=val; return rerenderLocal(view); }
   let _qdeb; function qGo(view, val){ const s=(TSORT[view]=TSORT[view]||{}); s.q=val.trim(); clearTimeout(_qdeb); _qdeb=setTimeout(()=>{ const tb=document.getElementById('tb_'+view); if (tb && TBODY[view]) tb.innerHTML = TBODY[view](); },200); }
   function tq(view, rows){ const q=(TSORT[view]&&TSORT[view].q||'').toLowerCase(); return q ? rows.filter(r=>JSON.stringify(r).toLowerCase().includes(q)) : rows; }
   function applySort(view, rows, defCol, defDir){ const s=TSORT[view]||{}; const col=s.col||defCol, dir=s.col?s.dir:(defDir||'asc'); const isD=v=>/^\d{4}-\d{2}/.test(String(v)); return rows.slice().sort((a,b)=>{ let x=a[col], y=b[col]; const nx=parseFloat(x), ny=parseFloat(y); if(isD(x)&&isD(y)){ x=String(x); y=String(y); } else if(!isNaN(nx)&&!isNaN(ny)&&String(x).trim()!==''&&String(y).trim()!==''){ x=nx; y=ny; } else { x=String(x??'').toLowerCase(); y=String(y??'').toLowerCase(); } return (x<y?-1:x>y?1:0)*(dir==='asc'?1:-1); }); }
@@ -847,7 +867,7 @@ const APP = (() => {
   }
 
   async function rTeamPlan(tabBtns) {
-    const raw = await tpRawGet(true);
+    const raw = await tpRawGet(!REUSE);
     const todayStr = raw.today;
     const F = TSORT['tpt'] = TSORT['tpt']||{};
     let rows = raw.teamRows || [];
@@ -1773,7 +1793,7 @@ const APP = (() => {
 
   async function rAssignments() {
     if (!S.isPartner) { $('view').innerHTML = '<div class="card"><b>Partners/admin only.</b></div>'; return; }
-    const d = await asgData(true);
+    const d = await asgData(!REUSE);
     const F = TSORT['asg'] = TSORT['asg']||{};
     if (F.fstatus === undefined) F.fstatus = 'Open';
     const t = new Date();
@@ -2043,7 +2063,8 @@ const APP = (() => {
     let d;
     try { d = await EMS2.callAPI('invoiceReport', { fromDate: F.from, toDate: F.to }); }
     catch (e) { $('view').innerHTML = '<div class="card" style="color:var(--bad)">' + h(e.message) + '</div>'; return; }
-    S.invData = d; window.INVSEL = {};
+    if (S.invData !== d) window.INVSEL = {};   // keep ticks when only sorting/filtering
+    S.invData = d;
     const all = d.rows || [];
     const clis = [...new Set(all.map(r=>r.Client).filter(Boolean))].sort();
     const gtc = '30px 84px 128px 1fr 118px 1.2fr 76px 76px 62px 122px';
@@ -2169,7 +2190,8 @@ const APP = (() => {
     let d;
     try { d = await EMS2.callAPI('udinReport', { fromDate: F.from, toDate: F.to }); }
     catch (e) { $('view').innerHTML = '<div class="card" style="color:var(--bad)">' + h(e.message) + '</div>'; return; }
-    S.cache.udn = d; window.UDNSEL = {};
+    if (S.cache.udn !== d) window.UDNSEL = {};   // keep ticks when only sorting/filtering
+    S.cache.udn = d;
     const all = d.rows || [];
     const partners = [...new Set(all.map(r=>r.Partner).filter(Boolean))].sort();
     const cliUsed = [...new Set(all.map(r=>r.Client).filter(Boolean))].sort();
