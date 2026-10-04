@@ -152,7 +152,7 @@
                 setTimeout(() => { var ci = document.getElementById('codeInput'); if (ci) ci.focus(); }, 50);
             } catch (error) {
                 btn.disabled = false; btn.innerHTML = 'Send Code';
-                statusDiv.innerHTML = '<p class="text-red-600 text-sm mt-2">❌ ' + error.message + '</p>';
+                statusDiv.innerHTML = '<p class="text-red-600 text-sm mt-2"></p>'; statusDiv.firstChild.textContent = '❌ ' + error.message;
             }
         }
 
@@ -167,6 +167,8 @@
             btn.disabled = true; btn.innerHTML = 'Verifying...';
             try {
                 await EMS2.verifyOtp(employeeEmail, code);
+                window.location.replace('app.html');   // the old module grid is retired — everything lives in app.html
+                return;
                 const initData = await callAPI('initHome', { email: employeeEmail });
                 employeeData = initData.employee;
                 isApprover = initData.isApprover;
@@ -179,7 +181,7 @@
                 render();
             } catch (error) {
                 btn.disabled = false; btn.innerHTML = 'Verify & Sign In';
-                statusDiv.innerHTML = '<p class="text-red-600 text-sm mt-2">❌ ' + error.message + '</p>';
+                statusDiv.innerHTML = '<p class="text-red-600 text-sm mt-2"></p>'; statusDiv.firstChild.textContent = '❌ ' + error.message;
             }
         }
 
@@ -353,6 +355,14 @@
         // INITIALIZE
         // ============================================
         async function init() {
+            // Already signed in -> straight to the app; otherwise show the login form (old module grid retired).
+            try {
+                const em = window.EMS2 ? await EMS2.getAuthedEmail() : null;
+                if (em) { window.location.replace('app.html'); return; }
+            } catch (e) {}
+            localStorage.removeItem('timewise_session');
+            render();
+            return;
             const session = loadSession();
             if (session && session.employeeEmail && session.employeeData) {
                 showLoading('Restoring session...');
