@@ -12,7 +12,10 @@
   var _client = null;
   var _ready = new Promise(function (resolve, reject) {
     var s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+    // pinned exact version + Subresource Integrity: the browser refuses any file that doesn't match this hash
+    s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js';
+    s.integrity = 'sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok';
+    s.crossOrigin = 'anonymous';
     s.onload = function () {
       try {
         _client = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
