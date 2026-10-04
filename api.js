@@ -197,7 +197,7 @@
       if (CONFIG.IS_TEST_PORTAL) {
         var bar = document.createElement('div');
         bar.setAttribute('style', 'position:sticky;top:0;z-index:99998;background:#d4a853;color:#102a43;text-align:center;font:600 12px Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;padding:6px 10px;');
-        bar.textContent = 'TEST PORTAL — ems2 · entries here are NOT real · live portal: ems.drpca.com';
+        bar.textContent = 'TEST PORTAL — new screens on trial · uses the LIVE database: anything you save, approve or delete here is REAL';
         document.body.prepend(bar);
       }
       _ready.then(function (c) {
